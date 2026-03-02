@@ -18,15 +18,19 @@ Guidelines:
 
 
 class AIAnalyzer:
+    FLASH_MODEL = "gemini-3-flash-preview"
+    PRO_MODEL = "gemini-3.1-pro-preview"
+
     def __init__(self):
         self.api_key = os.environ.get("GEMINI_API_KEY", "")
-        self.model_name = os.environ.get("GEMINI_MODEL", "gemini-1.5-pro")
+        self.flash_model = os.environ.get("GEMINI_FLASH_MODEL", self.FLASH_MODEL)
+        self.pro_model = os.environ.get("GEMINI_PRO_MODEL", self.PRO_MODEL)
 
-    def _get_model(self):
+    def _get_model(self, model_name: str):
         import google.generativeai as genai
         genai.configure(api_key=self.api_key)
         return genai.GenerativeModel(
-            self.model_name,
+            model_name,
             system_instruction=SYSTEM_PROMPT,
         )
 
@@ -52,7 +56,7 @@ Provide:
 4. Key trends or changes from recent performance
 5. One actionable recommendation for tomorrow"""
 
-        return self._generate(prompt)
+        return self._generate(prompt, model=self.flash_model)
 
     def budget_optimization(self, campaign_data: dict) -> str:
         """Suggest budget reallocation based on ROAS and CPI data."""
@@ -72,7 +76,7 @@ Provide:
 4. Estimated impact of these changes on overall ROAS
 5. Any caveats or things to monitor after reallocation"""
 
-        return self._generate(prompt)
+        return self._generate(prompt, model=self.pro_model)
 
     def creative_recommendations(self, campaign_data: dict) -> str:
         """Identify creative fatigue and suggest refreshes."""
@@ -92,7 +96,7 @@ Provide:
 4. Suggestions for creative testing strategy
 5. Priority actions ranked by urgency"""
 
-        return self._generate(prompt)
+        return self._generate(prompt, model=self.pro_model)
 
     def anomaly_explanation(self, alert_data: dict, campaign_data: dict) -> str:
         """Provide context and explanation when an alert fires."""
@@ -116,7 +120,7 @@ Provide:
 3. Immediate actions to take
 4. Whether this is likely temporary or requires structural changes"""
 
-        return self._generate(prompt)
+        return self._generate(prompt, model=self.flash_model)
 
     def generate_creative_copy(self, campaign_data: dict, campaign_name: str = "", objective: str = "conversions") -> list[dict]:
         """Generate ad copy variations for creatives based on campaign context."""
@@ -139,7 +143,7 @@ Return ONLY valid JSON:
 
 Rules: 30-125 characters ideal for primary text; hooks can be longer. Match tone to performance (urgency if underperforming, confidence if strong).
 """
-        raw = self._generate(prompt)
+        raw = self._generate(prompt, model=self.flash_model)
         return self._parse_creative_copy_json(raw)
 
     def generate_recommendations(self, recommendation_context: dict, *, max_items: int = 16) -> list[dict]:
@@ -193,7 +197,7 @@ Rules:
 Data:
 {compact_context}
 """
-        raw = self._generate(prompt)
+        raw = self._generate(prompt, model=self.pro_model)
         return self._parse_recommendation_json(raw, max_items=max_items)
 
     @staticmethod
@@ -238,14 +242,15 @@ Data:
 
         return "\n".join(lines)
 
-    def _generate(self, prompt: str) -> str:
+    def _generate(self, prompt: str, model: str | None = None) -> str:
         """Call Gemini API and return the response text."""
         if not self.api_key:
             return "_AI analysis unavailable: Gemini API key not configured._"
 
+        model_name = model or self.pro_model
         try:
-            model = self._get_model()
-            response = model.generate_content(
+            gemini_model = self._get_model(model_name)
+            response = gemini_model.generate_content(
                 prompt,
                 generation_config={
                     "max_output_tokens": 2000,
