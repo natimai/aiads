@@ -56,5 +56,8 @@ jobs:
           venv/bin/pip install --upgrade pip
           venv/bin/pip install -r requirements.txt
 
+      - name: Write functions environment variables
+        run: echo "FRONTEND_URL=${{ secrets.FRONTEND_URL }}" > functions/.env
+
       - name: Deploy Cloud Functions
         run: npx firebase-tools deploy --only functions --project aiads-f0675 --non-interactive --force
