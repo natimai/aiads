@@ -1,6 +1,6 @@
 # Meta Campaign Manager
 
-Full-stack campaign management and monitoring system for Meta (Facebook/Instagram) advertising, fully hosted on Firebase.
+Full-stack campaign management and monitoring system for Meta (Facebook/Instagram) advertising, **fully hosted בענן** — Firebase, Cloud Run, GitHub Actions. אין תלות במחשב המקומי.
 
 ## Tech Stack
 
@@ -32,17 +32,9 @@ firebase use --add  # select your project
 
 ### 2. Environment Variables
 
-Copy `.env.example` to `.env` and fill in your credentials.
+**הכל בענן — ללא תלות במחשב המקומי**
 
-For production, use Firebase Secret Manager:
-
-```bash
-firebase functions:secrets:set META_APP_ID
-firebase functions:secrets:set META_APP_SECRET
-firebase functions:secrets:set GEMINI_API_KEY
-firebase functions:secrets:set TELEGRAM_BOT_TOKEN
-firebase functions:secrets:set TOKEN_ENCRYPTION_KEY
-```
+Production משתמש ב-GitHub Secrets בלבד. ה-deploy מריץ אוטומטית מ-GitHub Actions — אין צורך ב-`.env` מקומי.
 
 ### 3. Frontend
 
@@ -72,6 +64,13 @@ firebase emulators:start
 
 ## Deployment
 
+### פריסה מלמעלה לאמצע (Cloud-Only)
+
+1. העתק את הפרויקט ל-GitHub
+2. הוסף את כל ה-Secrets לטבלה למעלה ב-GitHub → Settings → Secrets and variables → Actions
+3. דחוף ל-`main` — ה-deploy ירוץ אוטומטית
+4. האתר יהיה זמין ב-`https://[project-id].web.app`
+
 ### ידני (Manual)
 ```bash
 # Build frontend
@@ -86,22 +85,37 @@ firebase deploy --only functions
 firebase deploy --only firestore:rules
 ```
 
-### GitHub Actions (CI/CD)
-ה-workflow ב-`.github/workflows/deploy.yml` מריץ deploy אוטומטי בכל push ל-`main`.
+### GitHub Actions (CI/CD) — כל השירותים בענן
 
-**חשוב:** השתמש ב-**Firebase Hosting** (לא App Hosting). App Hosting מיועד לאפליקציות עם שרת (Next.js). הפרויקט הוא SPA סטטי.
+ה-workflow ב-`.github/workflows/deploy.yml` מריץ deploy אוטומטי בכל push ל-`main`. אין תלות במחשב המקומי — הכל רץ על שרתי GitHub ו-Google Cloud.
 
-**אם חיברת את GitHub ל-Firebase App Hosting (וטעית):**
-1. עבור ל-[Developer Connect](https://console.cloud.google.com/developer-connect/connections) (בחר את הפרויקט aiads-f0675)
-2. מחק את החיבור `firebase-app-hosting-github-oauth` או חיבורים שמתחילים ב-`apphosting-github-conn-`
+**חשוב:** השתמש ב-**Firebase Hosting** (לא App Hosting).
 
-**Secrets נדרשים ב-GitHub** (Settings → Secrets and variables → Actions):
-| Secret | תיאור |
-|--------|-------|
-| `FIREBASE_SERVICE_ACCOUNT` | JSON של Service Account (הרץ `firebase init hosting:github`) |
-| `FIREBASE_PROJECT_ID` | `aiads-f0675` |
-| `FIREBASE_TOKEN` | `firebase login:ci` |
-| `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, וכו' | משתני Vite לבנייה |
+**Secrets נדרשים ב-GitHub** (Settings → Secrets and variables → Actions → New repository secret):
+
+| Secret | חובה | תיאור |
+|--------|------|-------|
+| `FIREBASE_SERVICE_ACCOUNT` | ✅ | JSON מלא של Service Account (Firebase Console → Project Settings → Service accounts) |
+| **Frontend (בניית Vite):** | | |
+| `VITE_FIREBASE_API_KEY` | ✅ | Firebase API key |
+| `VITE_FIREBASE_AUTH_DOMAIN` | ✅ | `*.firebaseapp.com` |
+| `VITE_FIREBASE_PROJECT_ID` | ✅ | `aiads-f0675` |
+| `VITE_FIREBASE_STORAGE_BUCKET` | ✅ | `*.appspot.com` |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | ✅ | Firebase messaging sender ID |
+| `VITE_FIREBASE_APP_ID` | ✅ | Firebase app ID |
+| **Backend (Cloud Run):** | | |
+| `FRONTEND_URL` | ✅ | כתובת האתר (למשל `https://aiads-f0675.web.app`) |
+| `META_APP_ID` | ✅ | Meta App ID |
+| `META_APP_SECRET` | ✅ | Meta App Secret |
+| `TOKEN_ENCRYPTION_KEY` | ✅ | מפתח הצפנה (הרץ: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`) |
+| `GEMINI_API_KEY` | ✅ | מפתח Google AI Studio (Gemini) |
+| `TELEGRAM_BOT_TOKEN` | | לטלגרם |
+| `TELEGRAM_CHAT_ID` | | לטלגרם |
+| `SENDGRID_API_KEY` | | לאימייל |
+| `ALERT_EMAIL_FROM` | | לאימייל |
+| `ALERT_EMAIL_TO` | | לאימייל |
+
+אחרי הוספת כל ה-Secrets — דחוף ל-`main` או הרץ **Actions → Deploy to Firebase → Run workflow**.
 
 ## Keyboard Shortcuts
 

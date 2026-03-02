@@ -7,11 +7,14 @@ os.environ["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
 
 env_path = Path(__file__).parent / ".env"
 if env_path.exists():
-    for line in env_path.read_text().strip().splitlines():
+    for line in env_path.read_text(encoding="utf-8").strip().splitlines():
         line = line.strip()
         if line and not line.startswith("#") and "=" in line:
             key, _, value = line.partition("=")
-            os.environ.setdefault(key.strip(), value.strip())
+            k, v = key.strip(), value.strip()
+            if v.startswith('"') and v.endswith('"'):
+                v = v[1:-1]
+            os.environ[k] = v
 
 import firebase_admin
 from firebase_functions import https_fn, scheduler_fn, options
