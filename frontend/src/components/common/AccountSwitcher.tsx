@@ -25,36 +25,37 @@ export function AccountSwitcher() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 rounded-lg border border-slate-700 bg-navy-800 px-4 py-2 text-sm font-medium text-slate-200 transition-colors hover:border-slate-600 hover:bg-navy-700 dark:border-slate-700 dark:bg-navy-800"
+        className="flex items-center gap-2 rounded border border-slate-700/60 bg-navy-800/60 px-3 py-1.5 text-[13px] font-medium text-slate-200 transition-colors hover:border-slate-600 hover:bg-navy-700/80"
       >
         {selectedAccountId ? (
-          <Building2 className="h-4 w-4 text-accent-blue" />
+          <Building2 className="h-3.5 w-3.5 text-accent-blue shrink-0" />
         ) : (
-          <Globe className="h-4 w-4 text-accent-green" />
+          <Globe className="h-3.5 w-3.5 text-accent-green shrink-0" />
         )}
-        <span className="max-w-[180px] truncate">{displayName}</span>
-        <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
+        <span className="max-w-[160px] truncate">{displayName}</span>
+        <ChevronDown className={`h-3.5 w-3.5 text-slate-500 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-lg border border-slate-700 bg-navy-900 py-1 shadow-xl dark:border-slate-700 dark:bg-navy-900">
+        <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-slate-700 bg-navy-900 py-1 shadow-2xl">
           <button
             onClick={() => {
               setSelectedAccountId(null);
               setOpen(false);
             }}
-            className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors hover:bg-slate-800 ${
-              selectedAccountId === null ? "bg-accent-blue/10 text-accent-blue" : "text-slate-300"
+            className={`flex w-full items-center gap-3 px-3 py-2 text-left text-[13px] transition-colors hover:bg-slate-800/80 ${
+              selectedAccountId === null ? "text-accent-blue" : "text-slate-300"
             }`}
           >
-            <Globe className="h-4 w-4 shrink-0" />
+            <Globe className="h-3.5 w-3.5 shrink-0" />
             <div>
               <div className="font-medium">All Accounts</div>
-              <div className="text-xs text-slate-500">{accounts.length} accounts</div>
+              <div className="text-[11px] text-slate-500">{accounts.length} connected</div>
             </div>
+            {selectedAccountId === null && <div className="ml-auto h-1.5 w-1.5 rounded-full bg-accent-blue" />}
           </button>
 
-          <div className="mx-3 my-1 border-t border-slate-700/50" />
+          {accounts.length > 0 && <div className="mx-3 my-0.5 border-t border-slate-800" />}
 
           {accounts.map((account) => (
             <button
@@ -63,25 +64,26 @@ export function AccountSwitcher() {
                 setSelectedAccountId(account.id);
                 setOpen(false);
               }}
-              className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors hover:bg-slate-800 ${
-                selectedAccountId === account.id
-                  ? "bg-accent-blue/10 text-accent-blue"
-                  : "text-slate-300"
+              className={`flex w-full items-center gap-3 px-3 py-2 text-left text-[13px] transition-colors hover:bg-slate-800/80 ${
+                selectedAccountId === account.id ? "text-accent-blue" : "text-slate-300"
               }`}
             >
-              <Building2 className="h-4 w-4 shrink-0" />
+              <Building2 className="h-3.5 w-3.5 shrink-0" />
               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium">{account.accountName}</div>
-                <div className="text-xs text-slate-500">
+                <div className="text-[11px] text-slate-500">
                   {account.currency}
                   {account.businessName ? ` · ${account.businessName}` : ""}
                 </div>
               </div>
-              {!account.isActive && (
-                <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-xs text-red-400">
-                  Inactive
-                </span>
-              )}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {!account.isActive && (
+                  <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] text-red-400">
+                    Inactive
+                  </span>
+                )}
+                {selectedAccountId === account.id && <div className="h-1.5 w-1.5 rounded-full bg-accent-blue" />}
+              </div>
             </button>
           ))}
         </div>

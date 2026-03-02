@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { TrendingUp, TrendingDown } from "lucide-react";
 import type { ReactNode } from "react";
 
 interface MetricCardProps {
@@ -14,43 +14,46 @@ interface MetricCardProps {
 export function MetricCard({ title, value, delta, invertDelta, icon, tooltip, loading }: MetricCardProps) {
   if (loading) {
     return (
-      <div className="rounded-xl border border-slate-800 bg-navy-900 p-4 dark:border-slate-800 dark:bg-navy-900">
-        <div className="mb-3 h-4 w-20 rounded bg-slate-800 skeleton" />
-        <div className="mb-2 h-7 w-28 rounded bg-slate-800 skeleton" />
-        <div className="h-4 w-16 rounded bg-slate-800 skeleton" />
+      <div className="rounded-lg border border-slate-800 bg-navy-900 p-3">
+        <div className="mb-2.5 h-3 w-16 rounded bg-slate-800 skeleton" />
+        <div className="mb-2 h-6 w-24 rounded bg-slate-800 skeleton" />
+        <div className="h-3 w-12 rounded bg-slate-800 skeleton" />
       </div>
     );
   }
 
-  const deltaColor = delta
-    ? (() => {
-        const isPositiveGood = !invertDelta;
-        if (delta.direction === "up") return isPositiveGood ? "text-accent-green" : "text-accent-red";
-        if (delta.direction === "down") return isPositiveGood ? "text-accent-red" : "text-accent-green";
-        return "text-slate-400";
-      })()
-    : "";
+  const isGoodDirection = (() => {
+    if (!delta || delta.direction === "flat") return null;
+    const isPositiveGood = !invertDelta;
+    return delta.direction === "up" ? isPositiveGood : !isPositiveGood;
+  })();
 
-  const DeltaIcon =
-    delta?.direction === "up"
-      ? TrendingUp
-      : delta?.direction === "down"
-        ? TrendingDown
-        : Minus;
+  const deltaColor =
+    isGoodDirection === null
+      ? "text-slate-500"
+      : isGoodDirection
+        ? "text-accent-green"
+        : "text-accent-red";
 
   return (
-    <div className="group relative rounded-xl border border-slate-800 bg-navy-900 p-4 transition-colors hover:border-slate-700 dark:border-slate-800 dark:bg-navy-900" title={tooltip}>
-      <div className="mb-1 flex items-center gap-2">
-        {icon && <span className="text-slate-400">{icon}</span>}
-        <span className="text-xs font-medium uppercase tracking-wider text-slate-400">{title}</span>
+    <div
+      className="rounded-lg border border-slate-800 bg-navy-900 p-3 transition-colors hover:border-slate-700 hover:bg-navy-900/80"
+      title={tooltip}
+    >
+      <div className="mb-1.5 flex items-center gap-1.5">
+        {icon && <span className="text-slate-500 [&_svg]:h-3.5 [&_svg]:w-3.5">{icon}</span>}
+        <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">{title}</span>
       </div>
-      <div className="text-2xl font-bold text-white dark:text-white">{value}</div>
-      {delta && (
-        <div className={`mt-1 flex items-center gap-1 text-xs font-medium ${deltaColor}`}>
-          <DeltaIcon className="h-3 w-3" />
+      <div className="text-xl font-bold tabular-nums text-white leading-tight">{value}</div>
+      {delta ? (
+        <div className={`mt-1 flex items-center gap-0.5 text-[11px] font-medium ${deltaColor}`}>
+          {delta.direction === "up" && <TrendingUp className="h-3 w-3 shrink-0" />}
+          {delta.direction === "down" && <TrendingDown className="h-3 w-3 shrink-0" />}
           <span>{delta.text}</span>
-          <span className="text-slate-500">vs prev</span>
+          <span className="ml-0.5 text-slate-600">vs prev</span>
         </div>
+      ) : (
+        <div className="mt-1 h-4" />
       )}
     </div>
   );

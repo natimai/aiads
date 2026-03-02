@@ -7,7 +7,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from "recharts";
 import type { InsightData } from "../../types";
 
@@ -74,27 +73,29 @@ export function PerformanceChart({ data, loading }: PerformanceChartProps) {
       cpm: v.impressions > 0 ? Number(((v.spend / v.impressions) * 1000).toFixed(2)) : 0,
     }));
 
+  const hasLeftAxis = METRICS.filter((m) => activeMetrics.has(m.key) && m.yAxisId === "left").length > 0;
+  const hasRightAxis = METRICS.filter((m) => activeMetrics.has(m.key) && m.yAxisId === "right").length > 0;
+
   return (
     <div className="rounded-xl border border-slate-800 bg-navy-900 p-6">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-white">Performance Over Time</h3>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {METRICS.map((m) => (
             <button
               key={m.key}
               onClick={() => toggleMetric(m.key)}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+              className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-[11px] font-medium transition-colors border ${
                 activeMetrics.has(m.key)
-                  ? "text-white"
-                  : "text-slate-500 hover:text-slate-300"
+                  ? "text-white border-transparent"
+                  : "text-slate-500 border-transparent hover:text-slate-300"
               }`}
               style={{
-                backgroundColor: activeMetrics.has(m.key) ? `${m.color}20` : "transparent",
-                borderColor: activeMetrics.has(m.key) ? `${m.color}40` : "transparent",
-                borderWidth: 1,
+                backgroundColor: activeMetrics.has(m.key) ? `${m.color}18` : "transparent",
+                borderColor: activeMetrics.has(m.key) ? `${m.color}35` : "transparent",
               }}
             >
-              <span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: m.color }} />
+              <span className="inline-block h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: m.color }} />
               {m.label}
             </button>
           ))}
@@ -103,17 +104,55 @@ export function PerformanceChart({ data, loading }: PerformanceChartProps) {
 
       {chartData.length > 0 ? (
         <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-            <XAxis dataKey="date" tick={{ fill: "#94a3b8", fontSize: 12 }} stroke="#334155" />
-            <YAxis yAxisId="left" tick={{ fill: "#94a3b8", fontSize: 12 }} stroke="#334155" />
-            <YAxis yAxisId="right" orientation="right" tick={{ fill: "#94a3b8", fontSize: 12 }} stroke="#334155" />
-            <Tooltip
-              contentStyle={{ backgroundColor: "#1e293b", border: "1px solid #334155", borderRadius: 8 }}
-              labelStyle={{ color: "#e2e8f0" }}
-              itemStyle={{ color: "#e2e8f0" }}
+          <LineChart data={chartData} margin={{ top: 5, right: hasRightAxis ? 10 : 4, left: hasLeftAxis ? 0 : 4, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="2 4" stroke="#1e293b" vertical={false} />
+            <XAxis
+              dataKey="date"
+              tick={{ fill: "#64748b", fontSize: 11 }}
+              stroke="transparent"
+              axisLine={false}
+              tickLine={false}
             />
-            <Legend />
+            {hasLeftAxis && (
+              <YAxis
+                yAxisId="left"
+                tick={{ fill: "#64748b", fontSize: 11 }}
+                stroke="transparent"
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => `$${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
+              />
+            )}
+            {hasRightAxis && (
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                tick={{ fill: "#64748b", fontSize: 11 }}
+                stroke="transparent"
+                axisLine={false}
+                tickLine={false}
+              />
+            )}
+            <Tooltip
+              cursor={{ stroke: "#334155", strokeWidth: 1 }}
+              contentStyle={{
+                backgroundColor: "#0f172a",
+                border: "1px solid #334155",
+                borderRadius: 6,
+                padding: "8px 12px",
+                fontSize: 12,
+              }}
+              labelStyle={{ color: "#e2e8f0", fontWeight: 600, marginBottom: 4 }}
+              itemStyle={{ color: "#94a3b8", padding: "1px 0" }}
+              formatter={(value: number, name: string) => {
+                const metric = METRICS.find((m) => m.label === name);
+                if (!metric) return [value, name];
+                if (metric.key === "spend" || metric.key === "cpi" || metric.key === "cpm")
+                  return [`$${value.toLocaleString()}`, name];
+                if (metric.key === "ctr") return [`${value}%`, name];
+                return [value, name];
+              }}
+            />
             {METRICS.filter((m) => activeMetrics.has(m.key)).map((m) => (
               <Line
                 key={m.key}
@@ -121,9 +160,9 @@ export function PerformanceChart({ data, loading }: PerformanceChartProps) {
                 type="monotone"
                 dataKey={m.key}
                 stroke={m.color}
-                strokeWidth={2}
-                dot={{ r: 3 }}
-                activeDot={{ r: 5 }}
+                strokeWidth={1.5}
+                dot={false}
+                activeDot={{ r: 4, strokeWidth: 0 }}
                 name={m.label}
               />
             ))}

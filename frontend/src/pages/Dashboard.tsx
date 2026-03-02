@@ -99,12 +99,14 @@ export default function Dashboard() {
   if (accounts.length === 0 && !isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-24">
-        <Database className="mb-4 h-16 w-16 text-slate-600" />
-        <h2 className="text-lg font-semibold text-white">No accounts connected</h2>
-        <p className="mt-2 text-sm text-slate-400">Connect a Meta Ad Account to see your data</p>
+        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl border border-slate-700 bg-navy-900">
+          <Database className="h-6 w-6 text-slate-500" />
+        </div>
+        <h2 className="text-base font-semibold text-white">No accounts connected</h2>
+        <p className="mt-1.5 text-sm text-slate-500">Connect a Meta Ad Account to start tracking your campaigns</p>
         <Link
           to="/settings/accounts"
-          className="mt-6 rounded-lg bg-accent-blue px-6 py-2.5 text-sm font-medium text-white hover:bg-blue-600"
+          className="mt-5 rounded-lg bg-accent-blue px-5 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
         >
           Connect Account
         </Link>
@@ -112,48 +114,64 @@ export default function Dashboard() {
     );
   }
 
+  const priorityBadge = {
+    high: "bg-red-500/15 text-red-400 border-red-500/20",
+    medium: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20",
+    low: "bg-slate-500/15 text-slate-400 border-slate-500/20",
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-white">Dashboard</h2>
-          <p className="text-sm text-slate-400">
+          <p className="text-[11px] text-slate-500 uppercase tracking-wider">
             {dateRange.label} · {formatDateDisplay(dateRange.from)}
             {dateRange.from !== dateRange.to && ` – ${formatDateDisplay(dateRange.to)}`}
           </p>
         </div>
-        <button
-          onClick={handleSync}
-          disabled={syncing}
-          className="flex items-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:border-accent-blue hover:text-accent-blue disabled:opacity-50"
-        >
-          {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          {syncing ? "Syncing..." : "Sync Data"}
-        </button>
+        <div className="flex items-center gap-2">
+          {syncMsg && (
+            <span className={`text-[11px] ${syncMsg.startsWith("Error") ? "text-red-400" : "text-accent-green"}`}>
+              {syncMsg}
+            </span>
+          )}
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="flex items-center gap-1.5 rounded border border-slate-700/60 px-3 py-1.5 text-[12px] font-medium text-slate-400 transition-colors hover:border-slate-600 hover:text-slate-200 disabled:opacity-40"
+          >
+            {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            {syncing ? "Syncing..." : "Sync"}
+          </button>
+        </div>
       </div>
 
-      {syncMsg && (
-        <div className={`rounded-lg px-4 py-2 text-sm ${syncMsg.startsWith("Error") ? "bg-red-500/10 text-red-400" : "bg-green-500/10 text-green-400"}`}>
-          {syncMsg}
-        </div>
-      )}
-
       {topRecommendations.length > 0 && (
-        <div className="rounded-xl border border-slate-800 bg-navy-900 p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-white">Top AI Recommendations</h3>
-            <Link to="/ai-insights" className="text-xs text-accent-blue hover:underline">
-              Open Recommendation Center
+        <div className="rounded-lg border border-slate-800 bg-navy-900">
+          <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              <h3 className="text-[12px] font-semibold text-white">AI Recommendations</h3>
+              <span className="rounded bg-accent-blue/15 px-1.5 py-0.5 text-[10px] font-medium text-accent-blue">
+                {topRecommendations.length} pending
+              </span>
+            </div>
+            <Link to="/ai-insights" className="text-[11px] text-slate-400 hover:text-slate-200 transition-colors">
+              View all →
             </Link>
           </div>
-          <div className="space-y-2">
+          <div className="divide-y divide-slate-800/60">
             {topRecommendations.map((rec) => (
-              <div key={rec.id} className="rounded-lg border border-slate-700/70 bg-slate-900/50 p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-white">{rec.title}</span>
-                  <span className="text-xs text-slate-400">{Math.round(rec.confidence * 100)}%</span>
+              <div key={rec.id} className="flex items-start gap-3 px-4 py-3 hover:bg-slate-800/20 transition-colors">
+                <span className={`mt-0.5 shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${priorityBadge[rec.priority]}`}>
+                  {rec.priority}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-medium text-slate-100 leading-snug">{rec.title}</p>
+                  <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-500">{rec.why || rec.reasoning}</p>
                 </div>
-                <p className="mt-1 line-clamp-2 text-xs text-slate-300">{rec.why || rec.reasoning}</p>
+                <span className="shrink-0 text-[11px] text-slate-500 tabular-nums">
+                  {Math.round(rec.confidence * 100)}%
+                </span>
               </div>
             ))}
           </div>
@@ -161,10 +179,10 @@ export default function Dashboard() {
       )}
 
       {noData && (
-        <div className="flex flex-col items-center rounded-xl border border-slate-800 bg-navy-900 py-12">
-          <Database className="mb-3 h-10 w-10 text-slate-600" />
-          <p className="text-sm text-slate-400">No campaign data yet</p>
-          <p className="mt-1 text-xs text-slate-500">Click "Sync Data" to fetch campaigns from Meta</p>
+        <div className="flex flex-col items-center rounded-lg border border-slate-800 bg-navy-900 py-16">
+          <Database className="mb-3 h-8 w-8 text-slate-700" />
+          <p className="text-sm font-medium text-slate-400">No campaign data</p>
+          <p className="mt-1 text-[12px] text-slate-600">Click "Sync" to fetch your campaigns from Meta</p>
         </div>
       )}
 
@@ -172,12 +190,12 @@ export default function Dashboard() {
 
       <PerformanceChart data={insights ?? []} loading={insightsLoading} />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <SpendDistribution campaigns={campaigns ?? []} currency={currency} loading={isLoading} />
         <TopBottomPerformers campaigns={campaigns ?? []} loading={isLoading} />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <HourlyHeatmap data={insights ?? []} loading={insightsLoading} />
         <CreativeMatrix campaigns={campaigns ?? []} currency={currency} loading={isLoading} />
       </div>

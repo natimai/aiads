@@ -72,18 +72,36 @@ firebase emulators:start
 
 ## Deployment
 
-**מדריך מלא:** [DEPLOY.md](./DEPLOY.md)
-
-### Deploy מהיר
+### ידני (Manual)
 ```bash
-npm run deploy
+# Build frontend
+cd frontend && npm run build
+
+# Deploy everything
+firebase deploy
+
+# Or deploy individually
+firebase deploy --only hosting
+firebase deploy --only functions
+firebase deploy --only firestore:rules
 ```
 
 ### GitHub Actions (CI/CD)
-**Secret יחיד:** הוסף `FIREBASE_TOKEN` (מריצת `firebase login:ci`).  
-כל push ל-`main` מפעיל deploy אוטומטי.
+ה-workflow ב-`.github/workflows/deploy.yml` מריץ deploy אוטומטי בכל push ל-`main`.
 
-**חשוב:** מחק את App Hosting backend אם קיים – ראה [DEPLOY.md](./DEPLOY.md#שלב-1-מחיקת-app-hosting-חד-פעמי)
+**חשוב:** השתמש ב-**Firebase Hosting** (לא App Hosting). App Hosting מיועד לאפליקציות עם שרת (Next.js). הפרויקט הוא SPA סטטי.
+
+**אם חיברת את GitHub ל-Firebase App Hosting (וטעית):**
+1. עבור ל-[Developer Connect](https://console.cloud.google.com/developer-connect/connections) (בחר את הפרויקט aiads-f0675)
+2. מחק את החיבור `firebase-app-hosting-github-oauth` או חיבורים שמתחילים ב-`apphosting-github-conn-`
+
+**Secrets נדרשים ב-GitHub** (Settings → Secrets and variables → Actions):
+| Secret | תיאור |
+|--------|-------|
+| `FIREBASE_SERVICE_ACCOUNT` | JSON של Service Account (הרץ `firebase init hosting:github`) |
+| `FIREBASE_PROJECT_ID` | `aiads-f0675` |
+| `FIREBASE_TOKEN` | `firebase login:ci` |
+| `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, וכו' | משתני Vite לבנייה |
 
 ## Keyboard Shortcuts
 

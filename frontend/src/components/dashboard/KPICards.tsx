@@ -13,7 +13,7 @@ interface KPICardsProps {
 export function KPICards({ current, previous, currency = "USD", loading }: KPICardsProps) {
   if (loading || !current) {
     return (
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8">
         {Array.from({ length: 8 }).map((_, i) => (
           <MetricCard key={i} title="" value="" loading />
         ))}
@@ -102,8 +102,15 @@ export function KPICards({ current, previous, currency = "USD", loading }: KPICa
     },
   ];
 
+  const count = metrics.length;
+  const gridCols =
+    count <= 4 ? "grid-cols-2 sm:grid-cols-4" :
+    count <= 6 ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6" :
+    count <= 8 ? "grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8" :
+    "grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-10";
+
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8">
+    <div className={`grid gap-3 ${gridCols}`}>
       {metrics.map((m) => (
         <MetricCard key={m.title} {...m} />
       ))}
