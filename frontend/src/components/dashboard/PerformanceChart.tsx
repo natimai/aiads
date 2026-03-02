@@ -42,9 +42,9 @@ export function PerformanceChart({ data, loading }: PerformanceChartProps) {
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-slate-800 bg-navy-900 p-6">
-        <div className="mb-4 h-5 w-40 rounded bg-slate-800 skeleton" />
-        <div className="h-64 rounded bg-slate-800 skeleton" />
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 h-5 w-40 rounded bg-slate-100 skeleton" />
+        <div className="h-64 rounded bg-slate-100 skeleton" />
       </div>
     );
   }
@@ -77,22 +77,22 @@ export function PerformanceChart({ data, loading }: PerformanceChartProps) {
   const hasRightAxis = METRICS.filter((m) => activeMetrics.has(m.key) && m.yAxisId === "right").length > 0;
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-navy-900 p-6">
+    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-white">Performance Over Time</h3>
+        <h3 className="text-sm font-semibold text-slate-800">Performance Over Time</h3>
         <div className="flex flex-wrap gap-1.5">
           {METRICS.map((m) => (
             <button
               key={m.key}
               onClick={() => toggleMetric(m.key)}
-              className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-[11px] font-medium transition-colors border ${
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors border ${
                 activeMetrics.has(m.key)
-                  ? "text-white border-transparent"
-                  : "text-slate-500 border-transparent hover:text-slate-300"
+                  ? "text-slate-800"
+                  : "text-slate-400 border-transparent hover:text-slate-600"
               }`}
               style={{
-                backgroundColor: activeMetrics.has(m.key) ? `${m.color}18` : "transparent",
-                borderColor: activeMetrics.has(m.key) ? `${m.color}35` : "transparent",
+                backgroundColor: activeMetrics.has(m.key) ? `${m.color}15` : "transparent",
+                borderColor: activeMetrics.has(m.key) ? `${m.color}30` : "transparent",
               }}
             >
               <span className="inline-block h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: m.color }} />
@@ -105,10 +105,10 @@ export function PerformanceChart({ data, loading }: PerformanceChartProps) {
       {chartData.length > 0 ? (
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={chartData} margin={{ top: 5, right: hasRightAxis ? 10 : 4, left: hasLeftAxis ? 0 : 4, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="2 4" stroke="#1e293b" vertical={false} />
+            <CartesianGrid strokeDasharray="2 4" stroke="#f1f5f9" vertical={false} />
             <XAxis
               dataKey="date"
-              tick={{ fill: "#64748b", fontSize: 11 }}
+              tick={{ fill: "#94a3b8", fontSize: 11 }}
               stroke="transparent"
               axisLine={false}
               tickLine={false}
@@ -116,7 +116,7 @@ export function PerformanceChart({ data, loading }: PerformanceChartProps) {
             {hasLeftAxis && (
               <YAxis
                 yAxisId="left"
-                tick={{ fill: "#64748b", fontSize: 11 }}
+                tick={{ fill: "#94a3b8", fontSize: 11 }}
                 stroke="transparent"
                 axisLine={false}
                 tickLine={false}
@@ -127,23 +127,24 @@ export function PerformanceChart({ data, loading }: PerformanceChartProps) {
               <YAxis
                 yAxisId="right"
                 orientation="right"
-                tick={{ fill: "#64748b", fontSize: 11 }}
+                tick={{ fill: "#94a3b8", fontSize: 11 }}
                 stroke="transparent"
                 axisLine={false}
                 tickLine={false}
               />
             )}
             <Tooltip
-              cursor={{ stroke: "#334155", strokeWidth: 1 }}
+              cursor={{ stroke: "#e2e8f0", strokeWidth: 1 }}
               contentStyle={{
-                backgroundColor: "#0f172a",
-                border: "1px solid #334155",
-                borderRadius: 6,
+                backgroundColor: "#ffffff",
+                border: "1px solid #e2e8f0",
+                borderRadius: 8,
                 padding: "8px 12px",
                 fontSize: 12,
+                boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
               }}
-              labelStyle={{ color: "#e2e8f0", fontWeight: 600, marginBottom: 4 }}
-              itemStyle={{ color: "#94a3b8", padding: "1px 0" }}
+              labelStyle={{ color: "#1e293b", fontWeight: 600, marginBottom: 4 }}
+              itemStyle={{ color: "#64748b", padding: "1px 0" }}
               formatter={(value: number, name: string) => {
                 const metric = METRICS.find((m) => m.label === name);
                 if (!metric) return [value, name];
@@ -160,7 +161,7 @@ export function PerformanceChart({ data, loading }: PerformanceChartProps) {
                 type="monotone"
                 dataKey={m.key}
                 stroke={m.color}
-                strokeWidth={1.5}
+                strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4, strokeWidth: 0 }}
                 name={m.label}
@@ -169,7 +170,7 @@ export function PerformanceChart({ data, loading }: PerformanceChartProps) {
           </LineChart>
         </ResponsiveContainer>
       ) : (
-        <div className="flex h-64 items-center justify-center text-sm text-slate-500">
+        <div className="flex h-64 items-center justify-center text-sm text-slate-400">
           No data available for the selected period
         </div>
       )}

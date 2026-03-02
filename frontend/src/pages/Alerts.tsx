@@ -5,15 +5,15 @@ import { useAlerts, useAcknowledgeAlert } from "../hooks/useAlerts";
 import type { AlertSeverity, AlertType } from "../types";
 
 const SEVERITY_STYLES: Record<AlertSeverity, string> = {
-  critical: "bg-red-500/20 text-red-400 border-red-500/30",
-  warning: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-  info: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+  critical: "bg-rose-50 text-rose-800 border-rose-200",
+  warning: "bg-amber-50 text-amber-800 border-amber-200",
+  info: "bg-blue-50 text-blue-800 border-blue-200",
 };
 
 const SEVERITY_DOT: Record<AlertSeverity, string> = {
-  critical: "bg-red-400",
-  warning: "bg-yellow-400",
-  info: "bg-blue-400",
+  critical: "bg-rose-500",
+  warning: "bg-amber-500",
+  info: "bg-blue-500",
 };
 
 const TYPE_LABELS: Record<AlertType, string> = {
@@ -38,12 +38,12 @@ export default function Alerts() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-white">Alerts</h2>
-          <p className="text-sm text-slate-400">Monitor and manage campaign alerts</p>
+          <h2 className="text-xl font-bold text-slate-900">Alerts</h2>
+          <p className="text-sm text-slate-500">Monitor and manage campaign alerts</p>
         </div>
         <Link
           to="/alerts/config"
-          className="flex items-center gap-2 rounded-lg bg-accent-blue px-4 py-2 text-sm font-medium text-white hover:bg-blue-600"
+          className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
         >
           <Settings2 className="h-4 w-4" />
           Configure Alerts
@@ -55,7 +55,7 @@ export default function Alerts() {
         <select
           value={severityFilter}
           onChange={(e) => setSeverityFilter(e.target.value as AlertSeverity | "")}
-          className="rounded-lg border border-slate-700 bg-navy-800 px-3 py-1.5 text-sm text-slate-200 outline-none"
+          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700 outline-none"
         >
           <option value="">All Severities</option>
           <option value="critical">Critical</option>
@@ -65,7 +65,7 @@ export default function Alerts() {
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value as AlertType | "")}
-          className="rounded-lg border border-slate-700 bg-navy-800 px-3 py-1.5 text-sm text-slate-200 outline-none"
+          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700 outline-none"
         >
           <option value="">All Types</option>
           <option value="roas_drop">ROAS Drop</option>
@@ -79,7 +79,7 @@ export default function Alerts() {
       {isLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-24 rounded-xl bg-navy-900 skeleton" />
+            <div key={i} className="h-24 rounded-xl bg-white skeleton" />
           ))}
         </div>
       ) : alerts && alerts.length > 0 ? (
@@ -89,7 +89,7 @@ export default function Alerts() {
               key={`${alert.accountId}-${alert.id}`}
               className={`rounded-xl border p-4 transition-colors ${
                 alert.acknowledged
-                  ? "border-slate-800 bg-navy-900/50 opacity-60"
+                  ? "border-slate-200 bg-white/50 opacity-60"
                   : SEVERITY_STYLES[alert.severity]
               }`}
             >
@@ -98,14 +98,14 @@ export default function Alerts() {
                   <div className={`mt-1 h-2.5 w-2.5 rounded-full ${SEVERITY_DOT[alert.severity]}`} />
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-white">
+                      <span className="text-sm font-semibold text-slate-800">
                         {TYPE_LABELS[alert.type] ?? alert.type}
                       </span>
-                      <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-xs text-slate-400">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
                         {alert.severity}
                       </span>
                     </div>
-                    <p className="mt-1 text-sm text-slate-300">{alert.message}</p>
+                    <p className="mt-1 text-sm text-slate-600">{alert.message}</p>
                     <div className="mt-2 flex items-center gap-4 text-xs text-slate-500">
                       {alert.campaignName && <span>Campaign: {alert.campaignName}</span>}
                       {alert.accountName && <span>Account: {alert.accountName}</span>}
@@ -117,7 +117,7 @@ export default function Alerts() {
                 {!alert.acknowledged && (
                   <button
                     onClick={() => acknowledge.mutate({ accountId: alert.accountId, alertId: alert.id })}
-                    className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-800"
+                    className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50"
                   >
                     <Check className="h-3.5 w-3.5" />
                     Acknowledge
@@ -128,7 +128,7 @@ export default function Alerts() {
           ))}
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-slate-800 bg-navy-900 py-16">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-white py-16">
           <Bell className="mb-4 h-12 w-12 text-slate-600" />
           <p className="text-sm text-slate-400">No alerts found</p>
           <p className="text-xs text-slate-500">Alerts will appear here when triggered</p>

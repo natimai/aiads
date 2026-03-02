@@ -38,8 +38,8 @@ export default function App() {
 
   if (user === undefined) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-navy-950">
-        <div className="h-10 w-10 animate-spin rounded-full border-2 border-slate-700 border-t-accent-blue" />
+      <div className="flex min-h-screen items-center justify-center bg-slate-100">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-slate-200 border-t-accent-blue" />
       </div>
     );
   }
@@ -74,10 +74,10 @@ function AuthenticatedApp() {
   };
 
   return (
-    <div className="flex min-h-screen bg-navy-950">
+    <div className="flex min-h-screen bg-slate-100">
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -85,11 +85,11 @@ function AuthenticatedApp() {
       <Sidebar mobileOpen={sidebarOpen} onMobileClose={() => setSidebarOpen(false)} />
 
       <main className="lg:ml-64 flex-1 min-w-0">
-        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-slate-800 bg-navy-950/90 px-4 backdrop-blur-sm">
+        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-slate-200 bg-white/95 px-4 shadow-sm backdrop-blur-sm">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="lg:hidden rounded border border-slate-700/60 p-1.5 text-slate-500 hover:text-slate-300 transition-colors"
+              className="lg:hidden rounded border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors"
             >
               <Menu className="h-4 w-4" />
             </button>
@@ -99,14 +99,14 @@ function AuthenticatedApp() {
             <DateRangePicker />
             <button
               onClick={() => setShowHelp(true)}
-              className="rounded border border-slate-700/60 px-2 py-1.5 text-slate-500 transition-colors hover:border-slate-600 hover:text-slate-300"
+              className="rounded border border-slate-200 px-2 py-1.5 text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
               title="Keyboard shortcuts (?)"
             >
               <Keyboard className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={handleRefresh}
-              className="rounded border border-slate-700/60 px-2 py-1.5 text-slate-500 transition-colors hover:border-slate-600 hover:text-slate-300"
+              className="rounded border border-slate-200 px-2 py-1.5 text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
               title="Refresh all data (R)"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
@@ -133,13 +133,13 @@ function AuthenticatedApp() {
       </main>
 
       {showHelp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowHelp(false)}>
-          <div className="w-80 rounded-lg border border-slate-700 bg-navy-900 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-              <h3 className="text-sm font-semibold text-white">Keyboard Shortcuts</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowHelp(false)}>
+          <div className="w-80 rounded-xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+              <h3 className="text-sm font-semibold text-slate-900">Keyboard Shortcuts</h3>
               <button
                 onClick={() => setShowHelp(false)}
-                className="rounded p-0.5 text-slate-500 hover:text-slate-200"
+                className="rounded p-0.5 text-slate-400 hover:text-slate-600"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -147,8 +147,8 @@ function AuthenticatedApp() {
             <div className="p-4 space-y-1.5">
               {SHORTCUTS.map((s) => (
                 <div key={s.key} className="flex items-center justify-between">
-                  <span className="text-[13px] text-slate-400">{s.description}</span>
-                  <kbd className="rounded border border-slate-700 bg-navy-800 px-2 py-0.5 text-[11px] font-mono text-slate-300">
+                  <span className="text-[13px] text-slate-600">{s.description}</span>
+                  <kbd className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-mono text-slate-700">
                     {s.key}
                   </kbd>
                 </div>

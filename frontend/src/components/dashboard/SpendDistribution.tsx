@@ -13,7 +13,7 @@ const COLORS = ["#3b82f6", "#22c55e", "#eab308", "#ef4444", "#a855f7", "#06b6d4"
 export function SpendDistribution({ campaigns, currency = "USD", loading }: SpendDistributionProps) {
   if (loading) {
     return (
-      <div className="rounded-lg border border-slate-800 bg-navy-900 p-5">
+      <div className="rounded-lg border border-slate-200 bg-white p-5">
         <div className="mb-4 h-4 w-36 rounded bg-slate-800 skeleton" />
         <div className="mx-auto h-44 w-44 rounded-full bg-slate-800 skeleton" />
       </div>
@@ -32,8 +32,8 @@ export function SpendDistribution({ campaigns, currency = "USD", loading }: Spen
   const totalSpend = data.reduce((s, d) => s + d.value, 0);
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-navy-900 p-5">
-      <h3 className="mb-4 text-sm font-semibold text-white">Spend Distribution</h3>
+    <div className="rounded-lg border border-slate-200 bg-white p-5">
+      <h3 className="mb-4 text-sm font-semibold text-slate-900">Spend Distribution</h3>
 
       {data.length > 0 ? (
         <div className="flex items-center gap-5">

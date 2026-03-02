@@ -18,8 +18,8 @@ export default function Campaigns() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-white">Campaigns</h2>
-        <p className="text-sm text-slate-400">
+        <h2 className="text-xl font-bold text-slate-900">Campaigns</h2>
+        <p className="text-sm text-slate-500">
           {selectedAccount ? selectedAccount.accountName : "All Accounts"} · Detailed campaign view with drill-down
         </p>
       </div>

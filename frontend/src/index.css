@@ -1,20 +1,29 @@
 @import "tailwindcss";
 
 @theme {
-  --color-navy-950: #0a0f1e;
-  --color-navy-900: #0f172a;
-  --color-navy-800: #1e293b;
-  --color-navy-700: #334155;
-  --color-navy-600: #475569;
-  --color-accent-green: #22c55e;
-  --color-accent-red: #ef4444;
-  --color-accent-yellow: #eab308;
-  --color-accent-blue: #3b82f6;
+  /* Light theme — page and card backgrounds */
+  --color-navy-950: #f1f5f9;   /* page bg: slate-100 */
+  --color-navy-900: #ffffff;   /* card bg: white */
+  --color-navy-800: #f8fafc;   /* subtle surface: slate-50 */
+  --color-navy-700: #e2e8f0;   /* border default: slate-200 */
+  --color-navy-600: #94a3b8;   /* muted text: slate-400 */
+
+  /* Sidebar keeps explicit dark values (not via these vars) */
+  --color-sidebar-bg: #0f172a;
+  --color-sidebar-border: #1e293b;
+
+  /* Brand accent colors */
+  --color-accent-green: #059669;   /* emerald-600 */
+  --color-accent-red: #e11d48;     /* rose-600 */
+  --color-accent-yellow: #d97706;  /* amber-600 */
+  --color-accent-blue: #4f46e5;    /* indigo-600 */
 }
 
 :root {
   font-family: "Inter", system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  background-color: #f1f5f9;
+  color: #0f172a;
 }
 
 /* Scrollbar styling */
@@ -25,13 +34,12 @@
 ::-webkit-scrollbar-track {
   background: transparent;
 }
-.dark ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 3px;
-}
-.light ::-webkit-scrollbar-thumb {
+::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 /* Skeleton pulse animation */

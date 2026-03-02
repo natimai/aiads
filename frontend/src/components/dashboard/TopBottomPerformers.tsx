@@ -19,7 +19,7 @@ interface TopBottomPerformersProps {
 export function TopBottomPerformers({ campaigns, loading }: TopBottomPerformersProps) {
   if (loading) {
     return (
-      <div className="rounded-xl border border-slate-800 bg-navy-900 p-6">
+      <div className="rounded-xl border border-slate-200 bg-white p-6">
         <div className="mb-4 h-5 w-40 rounded bg-slate-800 skeleton" />
         <div className="h-64 rounded bg-slate-800 skeleton" />
       </div>
@@ -39,8 +39,8 @@ export function TopBottomPerformers({ campaigns, loading }: TopBottomPerformersP
   const data = [...top5, ...bottom5.filter((b) => !top5.some((t) => t.name === b.name))];
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-navy-900 p-5">
-      <h3 className="mb-4 text-sm font-semibold text-white">Top / Bottom Performers</h3>
+    <div className="rounded-lg border border-slate-200 bg-white p-5">
+      <h3 className="mb-4 text-sm font-semibold text-slate-900">Top / Bottom Performers</h3>
 
       {data.length > 0 ? (
         <ResponsiveContainer width="100%" height={260}>

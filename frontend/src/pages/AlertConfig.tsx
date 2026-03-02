@@ -55,21 +55,21 @@ export default function AlertConfig() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link to="/alerts" className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-200">
+        <Link to="/alerts" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h2 className="text-xl font-bold text-white">Alert Configuration</h2>
-          <p className="text-sm text-slate-400">Configure alert thresholds and delivery channels</p>
+          <h2 className="text-xl font-bold text-slate-900">Alert Configuration</h2>
+          <p className="text-sm text-slate-500">Configure alert thresholds and delivery channels</p>
         </div>
       </div>
 
       <div>
-        <label className="mb-2 block text-sm font-medium text-slate-300">Select Account</label>
+        <label className="mb-2 block text-sm font-medium text-slate-600">Select Account</label>
         <select
           value={selectedAccount}
           onChange={(e) => setSelectedAccount(e.target.value)}
-          className="w-full max-w-xs rounded-lg border border-slate-700 bg-navy-800 px-3 py-2 text-sm text-slate-200 outline-none focus:border-accent-blue"
+          className="w-full max-w-xs rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-indigo-400"
         >
           <option value="">Choose an account...</option>
           {accounts.map((acc) => (
@@ -91,12 +91,12 @@ export default function AlertConfig() {
             return (
               <div
                 key={alertType.value}
-                className="rounded-xl border border-slate-800 bg-navy-900 p-5"
+                className="rounded-xl border border-slate-200 bg-white p-5"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3">
-                      <h3 className="text-sm font-semibold text-white">{alertType.label}</h3>
+                      <h3 className="text-sm font-semibold text-slate-800">{alertType.label}</h3>
                       <label className="relative inline-flex cursor-pointer items-center">
                         <input
                           type="checkbox"
@@ -104,7 +104,7 @@ export default function AlertConfig() {
                           onChange={(e) => handleToggle(alertType.value, e.target.checked)}
                           className="peer sr-only"
                         />
-                        <div className="h-5 w-9 rounded-full bg-slate-700 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:bg-accent-blue peer-checked:after:translate-x-full" />
+                        <div className="h-5 w-9 rounded-full bg-slate-200 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow after:transition-all peer-checked:bg-indigo-600 peer-checked:after:translate-x-full" />
                       </label>
                     </div>
                     <p className="mt-1 text-xs text-slate-400">{alertType.description}</p>
@@ -120,27 +120,27 @@ export default function AlertConfig() {
                         step="0.1"
                         value={threshold}
                         onChange={(e) => handleThresholdChange(alertType.value, parseFloat(e.target.value) || 0)}
-                        className="w-full rounded-md border border-slate-600 bg-navy-800 px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-accent-blue"
+                        className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-indigo-400"
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-400">Cooldown (hours)</label>
+                      <label className="mb-1 block text-xs font-medium text-slate-500">Cooldown (hours)</label>
                       <input
                         type="number"
                         value={cooldown}
                         onChange={() => {}}
-                        className="w-full rounded-md border border-slate-600 bg-navy-800 px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-accent-blue"
+                        className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-indigo-400"
                       />
                     </div>
                     <div>
                       <label className="mb-1 block text-xs font-medium text-slate-400">Channels</label>
                       <div className="flex gap-2 pt-1">
                         {["telegram", "email", "sms"].map((ch) => (
-                          <label key={ch} className="flex items-center gap-1.5 text-xs text-slate-300">
+                          <label key={ch} className="flex items-center gap-1.5 text-xs text-slate-600">
                             <input
                               type="checkbox"
                               defaultChecked={ch === "telegram"}
-                              className="rounded border-slate-600 bg-navy-800"
+                              className="rounded border-slate-300 accent-indigo-600"
                             />
                             {ch}
                           </label>

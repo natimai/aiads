@@ -21,7 +21,7 @@ interface CreativeMatrixProps {
 export function CreativeMatrix({ campaigns, currency = "USD", loading }: CreativeMatrixProps) {
   if (loading) {
     return (
-      <div className="rounded-xl border border-slate-800 bg-navy-900 p-6">
+      <div className="rounded-xl border border-slate-200 bg-white p-6">
         <div className="mb-4 h-5 w-40 rounded bg-slate-800 skeleton" />
         <div className="h-64 rounded bg-slate-800 skeleton" />
       </div>
@@ -39,9 +39,9 @@ export function CreativeMatrix({ campaigns, currency = "USD", loading }: Creativ
     }));
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-navy-900 p-5">
+    <div className="rounded-lg border border-slate-200 bg-white p-5">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white">Spend vs. ROAS</h3>
+        <h3 className="text-sm font-semibold text-slate-900">Spend vs. ROAS</h3>
         <div className="flex gap-3 text-[11px] text-slate-500">
           <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-green-500" /> {">"}1.5x</span>
           <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-yellow-500" /> 1–1.5x</span>

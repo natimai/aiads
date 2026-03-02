@@ -24,12 +24,12 @@ import {
   RefreshCw,
   Database,
   Loader2,
-  ChevronDown,
-  ChevronUp,
   Brain,
   TrendingUp,
   BarChart3,
   X,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { RecommendationModifications, Campaign } from "../types";
@@ -63,7 +63,7 @@ export default function Dashboard() {
         msg += ` (${totalCampaigns} campaigns)`;
       }
       if (failed.length > 0) {
-        msg += ` | ${failed.length} failed: ${failed[0]?.error ?? "Unknown error"}`;
+        msg += ` · ${failed.length} failed`;
       }
       setSyncMsg(msg);
       await queryClient.invalidateQueries();
@@ -152,16 +152,16 @@ export default function Dashboard() {
   if (accounts.length === 0 && !isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-24">
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl border border-slate-700 bg-navy-900">
-          <Database className="h-6 w-6 text-slate-500" />
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 border border-slate-200">
+          <Database className="h-7 w-7 text-slate-400" />
         </div>
-        <h2 className="text-base font-semibold text-white">No accounts connected</h2>
-        <p className="mt-1.5 text-sm text-slate-500">
-          Connect a Meta Ad Account to start tracking your campaigns
+        <h2 className="text-base font-semibold text-slate-800">No accounts connected</h2>
+        <p className="mt-1.5 max-w-xs text-center text-sm text-slate-500">
+          Connect a Meta Ad Account to start managing your campaigns with Nati AI.
         </p>
         <Link
           to="/settings/accounts"
-          className="mt-5 rounded-lg bg-accent-blue px-5 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
+          className="mt-5 rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
         >
           Connect Account
         </Link>
@@ -172,22 +172,18 @@ export default function Dashboard() {
   if (managedAccounts.length === 0 && accounts.length > 0) {
     return (
       <div className="flex flex-col items-center justify-center py-24">
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl border border-slate-700 bg-navy-900">
-          <Brain className="h-6 w-6 text-slate-500" />
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 border border-indigo-100">
+          <Brain className="h-7 w-7 text-indigo-500" />
         </div>
-        <h2 className="text-base font-semibold text-white">
-          No managed accounts
-        </h2>
+        <h2 className="text-base font-semibold text-slate-800">No managed accounts</h2>
         <p className="mt-1.5 max-w-sm text-center text-sm text-slate-500">
-          You have {accounts.length} connected account
-          {accounts.length > 1 ? "s" : ""} but none are set to be managed by
-          Nati AI. Enable management in Account Settings.
+          You have {accounts.length} connected account{accounts.length > 1 ? "s" : ""} but none are enabled for Nati AI management.
         </p>
         <Link
           to="/settings/accounts"
-          className="mt-5 rounded-lg bg-accent-blue px-5 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
+          className="mt-5 rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
         >
-          Manage Accounts
+          Enable Accounts
         </Link>
       </div>
     );
@@ -197,16 +193,20 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4">
-      {/* Sticky Header Bar */}
+      {/* Page header bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <p className="text-[11px] text-slate-500 uppercase tracking-wider">
+          <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">
             {dateRange.label} · {formatDateDisplay(dateRange.from)}
             {dateRange.from !== dateRange.to && ` – ${formatDateDisplay(dateRange.to)}`}
           </p>
           {syncMsg && (
             <span
-              className={`text-[11px] ${syncMsg.startsWith("Error") ? "text-red-400" : "text-accent-green"}`}
+              className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
+                syncMsg.startsWith("Error")
+                  ? "bg-rose-50 text-rose-700"
+                  : "bg-emerald-50 text-emerald-700"
+              }`}
             >
               {syncMsg}
             </span>
@@ -216,7 +216,7 @@ export default function Dashboard() {
           <button
             onClick={handleSync}
             disabled={syncing}
-            className="flex items-center gap-1.5 rounded border border-slate-700/60 px-3 py-1.5 text-[12px] font-medium text-slate-400 transition-colors hover:border-slate-600 hover:text-slate-200 disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-600 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
           >
             {syncing ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -225,32 +225,20 @@ export default function Dashboard() {
             )}
             {syncing ? "Syncing..." : "Sync"}
           </button>
-          <button
-            onClick={() => generateMutation.mutate()}
-            disabled={generateMutation.isPending || !accountId}
-            className="flex items-center gap-2 rounded-lg bg-accent-blue px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:opacity-50 transition-colors"
-          >
-            {generateMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Brain className="h-4 w-4" />
-            )}
-            {generateMutation.isPending ? "מנתח..." : "Generate AI Tasks"}
-          </button>
         </div>
       </div>
 
       {noData && (
-        <div className="flex flex-col items-center rounded-lg border border-slate-800 bg-navy-900 py-16">
-          <Database className="mb-3 h-8 w-8 text-slate-700" />
-          <p className="text-sm font-medium text-slate-400">No campaign data</p>
-          <p className="mt-1 text-[12px] text-slate-600">
-            Click &quot;Sync&quot; to fetch your campaigns from Meta
+        <div className="flex flex-col items-center rounded-xl border border-dashed border-slate-200 bg-white py-16 shadow-sm">
+          <WifiOff className="mb-3 h-8 w-8 text-slate-300" />
+          <p className="text-sm font-medium text-slate-600">No campaign data</p>
+          <p className="mt-1 text-[12px] text-slate-400">
+            Click &ldquo;Sync&rdquo; above to fetch your campaigns from Meta
           </p>
         </div>
       )}
 
-      {/* Main content: 70/30 split on desktop */}
+      {/* 70/30 split: Action Feed | Sidebar */}
       <div className="flex flex-col gap-5 xl:flex-row">
         {/* LEFT: Action Feed (70%) */}
         <div className="min-w-0 xl:w-[70%]">
@@ -269,37 +257,37 @@ export default function Dashboard() {
 
         {/* RIGHT: Context sidebar (30%) */}
         <div className="space-y-4 xl:w-[30%]">
-          {/* KPI Cards stacked */}
-          <div className="rounded-xl border border-slate-800 bg-navy-900 p-4">
-            <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-              <BarChart3 className="h-3.5 w-3.5" />
-              KPIs
+          {/* KPI Strip */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <BarChart3 className="h-3.5 w-3.5 text-indigo-500" />
+              Performance KPIs
             </h3>
             <KPICards current={currentSummary} currency={currency} loading={isLoading} />
           </div>
 
           {/* Top Performing Campaigns */}
           {topCampaigns.length > 0 && (
-            <div className="rounded-xl border border-slate-800 bg-navy-900 p-4">
-              <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                <TrendingUp className="h-3.5 w-3.5" />
-                Top Performing
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+                Top Performers
               </h3>
               <div className="space-y-2">
                 {topCampaigns.map((c, i) => (
                   <div
                     key={c.id}
-                    className="flex items-center gap-3 rounded-lg border border-slate-800/60 bg-slate-900/30 px-3 py-2"
+                    className="flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
                   >
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-blue/15 text-[10px] font-bold text-accent-blue">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[10px] font-bold text-indigo-600">
                       {i + 1}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13px] font-medium text-slate-200">
+                      <p className="truncate text-[13px] font-medium text-slate-700">
                         {c.name}
                       </p>
                     </div>
-                    <span className="shrink-0 text-xs font-semibold tabular-nums text-emerald-400">
+                    <span className="shrink-0 text-xs font-semibold tabular-nums text-emerald-600">
                       {c.todayInsights?.roas
                         ? `${c.todayInsights.roas.toFixed(2)}x`
                         : "—"}
@@ -310,14 +298,22 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* View Full Analytics button */}
+          {/* View Full Analytics */}
           <button
             onClick={() => setAnalyticsOpen(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700/60 bg-navy-900 px-4 py-3 text-sm font-medium text-slate-300 transition-colors hover:border-slate-600 hover:text-white"
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
           >
             <BarChart3 className="h-4 w-4" />
             View Full Analytics
           </button>
+
+          {/* Sync status */}
+          <div className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+            <Wifi className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+            <span className="text-[11px] text-slate-500">
+              {accounts.filter(a => a.isManagedByPlatform).length} account{accounts.filter(a => a.isManagedByPlatform).length !== 1 ? "s" : ""} managed by Nati AI
+            </span>
+          </div>
         </div>
       </div>
 
@@ -332,18 +328,18 @@ export default function Dashboard() {
       {/* Full Analytics Modal */}
       {analyticsOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 backdrop-blur-sm p-4 pt-12"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 backdrop-blur-sm p-4 pt-12"
           onClick={() => setAnalyticsOpen(false)}
         >
           <div
-            className="w-full max-w-6xl rounded-2xl border border-slate-700 bg-navy-950 shadow-2xl"
+            className="w-full max-w-6xl rounded-2xl border border-slate-200 bg-white shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-800 bg-navy-950 px-6 py-4 rounded-t-2xl">
-              <h2 className="text-lg font-bold text-white">Full Analytics</h2>
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-6 py-4 rounded-t-2xl">
+              <h2 className="text-lg font-bold text-slate-900">Full Analytics</h2>
               <button
                 onClick={() => setAnalyticsOpen(false)}
-                className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+                className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
               >
                 <X className="h-5 w-5" />
               </button>

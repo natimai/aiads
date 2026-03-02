@@ -14,6 +14,7 @@ export const DEMO_ACCOUNTS: MetaAccount[] = [
     currency: "USD",
     businessName: "MyApp Inc.",
     isActive: true,
+    isManagedByPlatform: true,
     tokenExpiry: new Date(Date.now() + 30 * 86400000).toISOString(),
     kpiSummary: {
       date: today,
@@ -35,6 +36,7 @@ export const DEMO_ACCOUNTS: MetaAccount[] = [
     currency: "EUR",
     businessName: "MyApp Inc.",
     isActive: true,
+    isManagedByPlatform: true,
     tokenExpiry: new Date(Date.now() + 45 * 86400000).toISOString(),
     kpiSummary: {
       date: today,

@@ -9,6 +9,7 @@ import {
   Palette,
   LogOut,
   X,
+  Zap,
 } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { auth } from "../../services/firebase";
@@ -18,7 +19,7 @@ const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/campaigns", icon: Megaphone, label: "Campaigns" },
   { to: "/alerts", icon: Bell, label: "Alerts", badge: true },
-  { to: "/ai-insights", icon: Brain, label: "AI Campaign Manager" },
+  { to: "/ai-insights", icon: Brain, label: "AI Command Center" },
   { to: "/reports", icon: FileText, label: "Reports" },
   { to: "/creative-lab", icon: Palette, label: "Creative Lab" },
 ];
@@ -35,14 +36,15 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
     : user?.email?.slice(0, 2).toUpperCase() ?? "??";
 
   return (
-    <aside className={`fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-slate-800 bg-navy-950 transition-transform duration-200 lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
+    <aside className={`fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-slate-800 bg-slate-900 transition-transform duration-200 lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
+      {/* Logo */}
       <div className="flex h-14 items-center gap-3 border-b border-slate-800 px-5">
-        <div className="flex h-7 w-7 items-center justify-center rounded bg-accent-blue font-bold text-white text-xs shrink-0">
-          MA
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 shrink-0">
+          <Zap className="h-4 w-4 text-white" />
         </div>
         <div className="min-w-0 flex-1">
-          <h1 className="text-sm font-semibold text-white leading-none">Meta Ads AI</h1>
-          <p className="mt-0.5 text-[11px] text-slate-500 leading-none">Campaign Manager</p>
+          <h1 className="text-sm font-bold text-white leading-none">Nati AI</h1>
+          <p className="mt-0.5 text-[11px] text-slate-500 leading-none">Meta Ads Command Center</p>
         </div>
         {onMobileClose && (
           <button
@@ -54,17 +56,17 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
         )}
       </div>
 
-      <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             end={item.to === "/"}
             className={({ isActive }) =>
-              `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
+              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
                 isActive
-                  ? "bg-accent-blue/10 text-accent-blue border-l-2 border-accent-blue -ml-px pl-[11px]"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-100 border-l-2 border-transparent -ml-px pl-[11px]"
+                  ? "bg-indigo-600/20 text-indigo-400"
+                  : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
               }`
             }
           >
@@ -79,10 +81,10 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
         <NavLink
           to="/settings"
           className={({ isActive }) =>
-            `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
+            `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
               isActive
-                ? "bg-accent-blue/10 text-accent-blue border-l-2 border-accent-blue -ml-px pl-[11px]"
-                : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-100 border-l-2 border-transparent -ml-px pl-[11px]"
+                ? "bg-indigo-600/20 text-indigo-400"
+                : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
             }`
           }
         >
@@ -91,9 +93,9 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
         </NavLink>
 
         {user && (
-          <div className="mt-2 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2.5">
+          <div className="mt-2 rounded-lg border border-slate-800 bg-slate-800/50 px-3 py-2.5">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-700 text-xs font-semibold text-slate-200">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-600/30 text-xs font-semibold text-indigo-300">
                 {userInitials}
               </div>
               <div className="min-w-0 flex-1">

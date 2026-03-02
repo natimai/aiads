@@ -44,7 +44,7 @@ export function HourlyHeatmap({ data, loading }: DayPerformanceChartProps) {
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-slate-800 bg-navy-900 p-6">
+      <div className="rounded-xl border border-slate-200 bg-white p-6">
         <div className="mb-4 h-5 w-48 rounded bg-slate-800 skeleton" />
         <div className="h-48 rounded bg-slate-800 skeleton" />
       </div>
@@ -54,9 +54,9 @@ export function HourlyHeatmap({ data, loading }: DayPerformanceChartProps) {
   const hasData = chartData.some((d) => d.spend > 0);
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-navy-900 p-6">
+    <div className="rounded-xl border border-slate-200 bg-white p-6">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white">Spend by Day of Week</h3>
+        <h3 className="text-sm font-semibold text-slate-900">Spend by Day of Week</h3>
         <span className="text-[11px] text-slate-500">Aggregated over period</span>
       </div>
 
