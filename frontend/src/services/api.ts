@@ -148,11 +148,12 @@ export async function getAIInsights(accountId: string): Promise<AIInsight[]> {
 
 export async function triggerAIAnalysis(
   accountId: string,
-  type: string
-): Promise<{ content: string; generatedAt: string }> {
+  type: string,
+  options?: { campaignName?: string; objective?: string }
+): Promise<{ content?: string; copyVariations?: Array<{ text: string; hook?: string }>; generatedAt: string }> {
   return apiFetch("/api/ai/analyze", {
     method: "POST",
-    body: JSON.stringify({ accountId, type }),
+    body: JSON.stringify({ accountId, type, ...options }),
   });
 }
 

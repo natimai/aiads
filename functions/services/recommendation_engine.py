@@ -14,6 +14,9 @@ RECOMMENDATION_TYPES = {
     "audience_optimization",
     "creative_optimization",
     "ab_test",
+    "campaign_build",
+    "audience_build",
+    "creative_copy",
 }
 ENTITY_LEVELS = {"account", "campaign", "adset", "ad"}
 PRIORITIES = {"high", "medium", "low"}
@@ -94,6 +97,9 @@ class RecommendationEngine:
         rec_type = str(rec.get("type", "budget_optimization")).strip().lower()
         if rec_type not in RECOMMENDATION_TYPES:
             rec_type = "budget_optimization"
+        suggested_content = rec.get("suggestedContent")
+        if not isinstance(suggested_content, dict):
+            suggested_content = {}
 
         entity_level = str(rec.get("entityLevel", "campaign")).strip().lower()
         if entity_level not in ENTITY_LEVELS:
@@ -135,6 +141,7 @@ class RecommendationEngine:
             "actionsDraft": actions_draft[:5],
             "status": status,
             "executionPlan": execution_plan,
+            "suggestedContent": suggested_content,
             "createdAt": now,
             "expiresAt": now + timedelta(hours=12),
             "review": {},
@@ -170,7 +177,7 @@ class RecommendationEngine:
                 "deltaPct": delta_pct,
             }
 
-        if rec_type in {"audience_optimization", "creative_optimization", "ab_test"}:
+        if rec_type in {"audience_optimization", "creative_optimization", "ab_test", "campaign_build", "audience_build", "creative_copy"}:
             return {"action": "none", "targetLevel": entity_level, "targetId": entity_id}
 
         return {"action": "none", "targetLevel": entity_level, "targetId": entity_id}

@@ -1,4 +1,4 @@
-"""AI-powered campaign analysis using Google Gemini 2.5 Pro."""
+"""AI-powered campaign analysis using Google Gemini 3 Pro."""
 import os
 import json
 import logging
@@ -20,12 +20,13 @@ Guidelines:
 class AIAnalyzer:
     def __init__(self):
         self.api_key = os.environ.get("GEMINI_API_KEY", "")
+        self.model_name = os.environ.get("GEMINI_MODEL", "gemini-3.1-pro-preview")
 
     def _get_model(self):
         import google.generativeai as genai
         genai.configure(api_key=self.api_key)
         return genai.GenerativeModel(
-            "gemini-2.5-pro",
+            self.model_name,
             system_instruction=SYSTEM_PROMPT,
         )
 
@@ -117,19 +118,44 @@ Provide:
 
         return self._generate(prompt)
 
-    def generate_recommendations(self, recommendation_context: dict, *, max_items: int = 12) -> list[dict]:
-        """Generate normalized recommendation JSON for budget/audience/creative/AB testing."""
+    def generate_creative_copy(self, campaign_data: dict, campaign_name: str = "", objective: str = "conversions") -> list[dict]:
+        """Generate ad copy variations for creatives based on campaign context."""
+        summary = self._build_context_summary(campaign_data)
+        prompt = f"""You are a Meta ads copywriter. Based on the campaign performance below, generate 3-5 short ad copy variations (primary text for feed ads).
+
+**Campaign context:** {campaign_name or "General"}
+**Objective:** {objective}
+
+**Account Performance:**
+{summary}
+
+Return ONLY valid JSON:
+{{
+  "copyVariations": [
+    {{ "text": "ad copy 1", "hook": "attention-grabbing opening" }},
+    {{ "text": "ad copy 2", "hook": "..." }}
+  ]
+}}
+
+Rules: 30-125 characters ideal for primary text; hooks can be longer. Match tone to performance (urgency if underperforming, confidence if strong).
+"""
+        raw = self._generate(prompt)
+        return self._parse_creative_copy_json(raw)
+
+    def generate_recommendations(self, recommendation_context: dict, *, max_items: int = 16) -> list[dict]:
+        """Generate normalized recommendation JSON for budget/audience/creative/AB testing/campaign/audience build."""
         compact_context = json.dumps(recommendation_context, default=str)
-        prompt = f"""Generate optimization recommendations for this Meta ads account.
+        prompt = f"""You are an AI Campaign Manager. Generate actionable recommendations for this Meta ads account.
+Prioritize high-impact, executable actions. Include diverse types: budget, audience, creative, A/B test, campaign ideas, audience ideas.
 
 Return ONLY valid JSON with this exact shape:
 {{
   "recommendations": [
     {{
-      "type": "budget_optimization|audience_optimization|creative_optimization|ab_test",
+      "type": "budget_optimization|audience_optimization|creative_optimization|ab_test|campaign_build|audience_build|creative_copy",
       "entityLevel": "account|campaign|adset|ad",
       "entityId": "string",
-      "title": "short title",
+      "title": "short actionable title",
       "priority": "high|medium|low",
       "confidence": 0.0,
       "expectedImpact": {{
@@ -139,30 +165,50 @@ Return ONLY valid JSON with this exact shape:
         "summary": "brief expected outcome"
       }},
       "why": "1-2 sentence explanation",
-      "reasoning": "data-driven rationale with concrete evidence",
-      "actionsDraft": ["step 1", "step 2", "step 3"],
-      "executionPlan": {
+      "reasoning": "data-driven rationale",
+      "actionsDraft": ["step 1", "step 2"],
+      "executionPlan": {{
         "action": "adjust_budget|set_status|none",
         "targetLevel": "campaign|adset|ad|account",
         "targetId": "string",
         "deltaPct": 0.0,
         "desiredStatus": "active|paused"
-      }
+      }},
+      "suggestedContent": {{
+        "creativeCopy": "optional: ad copy text when type=creative_copy",
+        "campaignPlan": {{ "name": "...", "objective": "...", "targeting": "..." }} when type=campaign_build,
+        "audienceSuggestions": ["interest 1", "lookalike %"] when type=audience_build
+      }}
     }}
   ]
 }}
 
 Rules:
-- Prioritize by impact and confidence.
-- Use concrete numbers where available.
+- Prioritize by impact. Include budget/creative/ab_test plus at least one campaign_build or audience_build or creative_copy when data supports it.
 - Keep to at most {max_items} recommendations.
-- Include at least one recommendation for each type when data is sufficient.
+- For creative_copy: include suggestedContent.creativeCopy with ready-to-use ad text.
+- For campaign_build: include suggestedContent.campaignPlan with name, objective, targeting hints.
+- For audience_build: include suggestedContent.audienceSuggestions array.
 
 Data:
 {compact_context}
 """
         raw = self._generate(prompt)
         return self._parse_recommendation_json(raw, max_items=max_items)
+
+    @staticmethod
+    def _parse_creative_copy_json(text: str) -> list[dict]:
+        try:
+            start = text.find("{")
+            end = text.rfind("}") + 1
+            if start >= 0 and end > start:
+                payload = json.loads(text[start:end])
+                if isinstance(payload, dict):
+                    variations = payload.get("copyVariations", [])
+                    return [v for v in variations if isinstance(v, dict) and v.get("text")][:5]
+        except Exception:
+            pass
+        return []
 
     def _build_context_summary(self, campaign_data: dict) -> str:
         """Build a condensed summary of campaign data for the AI context."""

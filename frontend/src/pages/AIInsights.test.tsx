@@ -17,6 +17,11 @@ vi.mock("../contexts/AccountContext", () => ({
   }),
 }));
 
+vi.mock("../hooks/useAIAnalysis", () => ({
+  useAIInsights: () => ({ data: [], isLoading: false }),
+  useTriggerAIAnalysis: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
 vi.mock("../hooks/useRecommendations", () => ({
   useRecommendations: () => ({
     data: [
@@ -78,6 +83,7 @@ vi.mock("../hooks/useRecommendations", () => ({
   }),
   useReviewRecommendation: () => ({
     mutate: reviewMutate,
+    mutateAsync: vi.fn().mockResolvedValue(undefined),
     isPending: false,
     isError: false,
     isSuccess: false,
@@ -85,6 +91,7 @@ vi.mock("../hooks/useRecommendations", () => ({
   }),
   useExecuteRecommendation: () => ({
     mutate: executeMutate,
+    mutateAsync: vi.fn().mockResolvedValue(undefined),
     isPending: false,
     isError: false,
     isSuccess: false,
@@ -133,13 +140,15 @@ describe("AIInsights", () => {
     savePolicyMutate.mockReset();
   });
 
-  it("renders recommendations and allows approve action", async () => {
+  it("renders AI Campaign Manager and recommendations", async () => {
     render(<AIInsights />);
 
-    expect(screen.getByText("AI Recommendation Center")).toBeInTheDocument();
+    expect(screen.getByText("AI Campaign Manager")).toBeInTheDocument();
     expect(screen.getByText("Increase budget on winner")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Approve" }));
+    const approveButtons = screen.getAllByRole("button", { name: /^אשר$/ });
+    expect(approveButtons.length).toBeGreaterThan(0);
+    await userEvent.click(approveButtons[0]!);
     expect(reviewMutate).toHaveBeenCalledWith({
       recommendationId: "rec-1",
       decision: "approve",
@@ -149,43 +158,43 @@ describe("AIInsights", () => {
   it("triggers generation action", async () => {
     render(<AIInsights />);
 
-    const generateButtons = screen.getAllByRole("button", { name: "Generate Recommendations" });
-    expect(generateButtons.length).toBeGreaterThan(0);
+    const generateButtons = screen.getAllByRole("button", { name: "ייצר המלצות חדשות" });
     await userEvent.click(generateButtons[0]!);
     expect(generateMutate).toHaveBeenCalledTimes(1);
   });
 
-  it("requires execute preview before confirm execute", async () => {
+  it("shows execute flow for approved recommendation", async () => {
     render(<AIInsights />);
-    const previewButtons = screen.getAllByRole("button", { name: "Preview Execute" });
+    const previewButtons = screen.getAllByRole("button", { name: "תצוגה מקדימה" });
     expect(previewButtons.length).toBeGreaterThan(0);
     await userEvent.click(previewButtons[0]!);
-    const confirmButtons = screen.getAllByRole("button", { name: "Confirm Execute" });
-    await userEvent.click(confirmButtons[0]!);
+    const executeButtons = screen.getAllByRole("button", { name: "הפעל" });
+    await userEvent.click(executeButtons[0]!);
     expect(executeMutate).toHaveBeenCalledTimes(1);
   });
 
   it("shows execution history toggle for executed recommendations", () => {
     render(<AIInsights />);
-    const historyButtons = screen.getAllByRole("button", { name: /Show execution history/i });
+    const historyButtons = screen.getAllByRole("button", { name: /היסטוריית ביצוע/i });
     expect(historyButtons.length).toBeGreaterThan(0);
   });
 
   it("allows rollback action on executed recommendation", async () => {
     render(<AIInsights />);
-    const previewButtons = screen.getAllByRole("button", { name: "Preview Rollback" });
+    const previewButtons = screen.getAllByRole("button", { name: "תצוגת Rollback" });
     expect(previewButtons.length).toBeGreaterThan(0);
     await userEvent.click(previewButtons[0]!);
-    const confirmButtons = screen.getAllByRole("button", { name: "Confirm Rollback" });
-    await userEvent.click(confirmButtons[0]!);
+    const rollbackButtons = screen.getAllByRole("button", { name: "Rollback" });
+    await userEvent.click(rollbackButtons[0]!);
     expect(rollbackMutate).toHaveBeenCalledTimes(1);
   });
 
   it("saves execution policy", async () => {
     render(<AIInsights />);
-    const savePolicyButtons = screen.getAllByRole("button", { name: "Save Policy" });
-    expect(savePolicyButtons.length).toBeGreaterThan(0);
-    await userEvent.click(savePolicyButtons[0]!);
+    const policyTabButtons = screen.getAllByRole("button", { name: "הגדרות" });
+    await userEvent.click(policyTabButtons[0]!);
+    const saveButtons = screen.getAllByRole("button", { name: "שמור" });
+    await userEvent.click(saveButtons[0]!);
     expect(savePolicyMutate).toHaveBeenCalledTimes(1);
   });
 });

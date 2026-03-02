@@ -145,7 +145,10 @@ export type RecommendationType =
   | "budget_optimization"
   | "audience_optimization"
   | "creative_optimization"
-  | "ab_test";
+  | "ab_test"
+  | "campaign_build"
+  | "audience_build"
+  | "creative_copy";
 
 export type RecommendationStatus = "pending" | "approved" | "rejected" | "executed" | "failed";
 export type RecommendationPriority = "high" | "medium" | "low";
@@ -175,6 +178,11 @@ export interface Recommendation {
     targetId?: string;
     deltaPct?: number;
     desiredStatus?: "active" | "paused";
+  };
+  suggestedContent?: {
+    creativeCopy?: string;
+    campaignPlan?: { name?: string; objective?: string; targeting?: string };
+    audienceSuggestions?: string[];
   };
   execution?: {
     executedBy?: string;

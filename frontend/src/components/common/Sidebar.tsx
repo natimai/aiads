@@ -18,7 +18,7 @@ const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/campaigns", icon: Megaphone, label: "Campaigns" },
   { to: "/alerts", icon: Bell, label: "Alerts", badge: true },
-  { to: "/ai-insights", icon: Brain, label: "AI Insights" },
+  { to: "/ai-insights", icon: Brain, label: "AI Campaign Manager" },
   { to: "/reports", icon: FileText, label: "Reports" },
   { to: "/creative-lab", icon: Palette, label: "Creative Lab" },
 ];

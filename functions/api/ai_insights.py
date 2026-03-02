@@ -70,12 +70,18 @@ def _trigger_analysis(request, user_id: str):
         campaign_data = _gather_campaign_data(db, user_id, account_id)
 
         result = None
+        result = None
         if analysis_type == "daily_summary":
             result = analyzer.daily_summary(campaign_data)
         elif analysis_type == "budget_optimization":
             result = analyzer.budget_optimization(campaign_data)
         elif analysis_type == "creative_recommendations":
             result = analyzer.creative_recommendations(campaign_data)
+        elif analysis_type == "creative_copy":
+            campaign_name = data.get("campaignName", "")
+            objective = data.get("objective", "conversions")
+            variations = analyzer.generate_creative_copy(campaign_data, campaign_name, objective)
+            result = json.dumps({"copyVariations": variations})
         else:
             return _cors_response(json.dumps({"error": f"Unknown analysis type: {analysis_type}"}), 400)
 
@@ -84,17 +90,18 @@ def _trigger_analysis(request, user_id: str):
             "userId": user_id,
             "accountId": account_id,
             "insightType": analysis_type,
-            "content": result,
+            "content": result if isinstance(result, str) else json.dumps(result),
             "generatedAt": now,
             "expiresAt": now + timedelta(hours=1),
         }
         doc_ref = db.collection("aiInsights").add(insight_data)
 
-        return _cors_response(json.dumps({
-            "id": doc_ref[1].id,
-            "content": result,
-            "generatedAt": now.isoformat(),
-        }))
+        payload = {"id": doc_ref[1].id, "generatedAt": now.isoformat()}
+        if analysis_type == "creative_copy":
+            payload["copyVariations"] = json.loads(result).get("copyVariations", [])
+        else:
+            payload["content"] = result
+        return _cors_response(json.dumps(payload))
 
     except Exception as e:
         logger.error(f"AI analysis error: {e}")
