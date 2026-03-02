@@ -1,4 +1,6 @@
 """AI-powered campaign analysis using Google Gemini."""
+from __future__ import annotations
+
 import os
 import json
 import logging
@@ -315,6 +317,84 @@ Data:
         raw = self._generate(prompt, model=self.pro_model)
         return self._parse_recommendation_json(raw, max_items=max_items)
 
+    def generate_campaign_builder_draft(self, context: dict) -> dict:
+        """Generate campaign builder blocks for a new draft."""
+        compact_context = json.dumps(context, default=str)
+        prompt = f"""You are an expert Meta ads strategist. Build a launch-ready campaign draft.
+
+Return ONLY valid JSON with this exact shape:
+{{
+  "campaignPlan": {{
+    "name": "string",
+    "objective": "string",
+    "buyingType": "AUCTION",
+    "budgetType": "daily",
+    "dailyBudget": 0
+  }},
+  "audiencePlan": {{
+    "name": "string",
+    "geo": {{"countries": ["US"]}},
+    "ageRange": {{"min": 21, "max": 55}},
+    "genders": ["all"],
+    "interests": ["interest 1", "interest 2"],
+    "lookalikeHints": ["1% purchasers"]
+  }},
+  "creativePlan": {{
+    "angles": ["angle 1", "angle 2", "angle 3"],
+    "primaryTexts": ["text 1", "text 2", "text 3"],
+    "headlines": ["headline 1", "headline 2", "headline 3"],
+    "cta": "LEARN_MORE"
+  }},
+  "reasoning": "short reasoning with benchmark references"
+}}
+
+Rules:
+- Use selected account performance and peer benchmark.
+- Prioritize clear direct-response messaging.
+- Use language from input (if provided).
+- Never return markdown.
+
+Data:
+{compact_context}
+"""
+        raw = self._generate(prompt, model=self.pro_model)
+        parsed = self._parse_json_dict(raw)
+        return parsed if isinstance(parsed, dict) else {}
+
+    def regenerate_campaign_builder_block(
+        self,
+        context: dict,
+        *,
+        current_blocks: dict,
+        block_type: str,
+        instruction: str = "",
+    ) -> dict:
+        """Regenerate a single campaign builder block while preserving others."""
+        compact_context = json.dumps(context, default=str)
+        compact_blocks = json.dumps(current_blocks, default=str)
+        prompt = f"""You are an expert Meta ads strategist.
+Regenerate only this block: {block_type}
+
+Current blocks:
+{compact_blocks}
+
+Extra instruction:
+{instruction or "N/A"}
+
+Return ONLY valid JSON with exactly one top-level key named "{block_type}".
+Do not include any other keys.
+
+Data:
+{compact_context}
+"""
+        raw = self._generate(prompt, model=self.flash_model)
+        parsed = self._parse_json_dict(raw)
+        if not isinstance(parsed, dict):
+            return {}
+        if block_type not in parsed:
+            return {}
+        return {block_type: parsed.get(block_type)}
+
     @staticmethod
     def _parse_creative_copy_json(text: str) -> list[dict]:
         try:
@@ -328,6 +408,22 @@ Data:
         except Exception:
             pass
         return []
+
+    @staticmethod
+    def _parse_json_dict(text: str) -> dict:
+        try:
+            payload = json.loads(text)
+            return payload if isinstance(payload, dict) else {}
+        except Exception:
+            start = text.find("{")
+            end = text.rfind("}")
+            if start >= 0 and end > start:
+                try:
+                    payload = json.loads(text[start:end + 1])
+                    return payload if isinstance(payload, dict) else {}
+                except Exception:
+                    return {}
+        return {}
 
     def _build_context_summary(self, campaign_data: dict) -> str:
         """Build a condensed summary of campaign data for the AI context."""

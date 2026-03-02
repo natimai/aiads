@@ -1,10 +1,10 @@
-import firebase_admin
-from firebase_admin import firestore
-from google.cloud.firestore_v1.base_query import FieldFilter
 from datetime import datetime, timezone
 
 
 def get_db():
+    import firebase_admin
+    from firebase_admin import firestore
+
     if not firebase_admin._apps:
         firebase_admin.initialize_app()
     return firestore.client()
@@ -12,6 +12,8 @@ def get_db():
 
 def get_user_accounts(db, user_id: str, *, managed_only: bool = False) -> list[dict]:
     """Fetch active Meta accounts for a user. If managed_only, restrict to platform-managed."""
+    from google.cloud.firestore_v1.base_query import FieldFilter
+
     accounts_ref = db.collection("users").document(user_id).collection("metaAccounts")
     query = accounts_ref.where(filter=FieldFilter("isActive", "==", True))
     if managed_only:
@@ -54,6 +56,8 @@ def get_insights_for_date_range(
     db, user_id: str, account_id: str, campaign_id: str, date_from: str, date_to: str
 ) -> list[dict]:
     """Fetch insights documents for a campaign within a date range."""
+    from google.cloud.firestore_v1.base_query import FieldFilter
+
     insights_ref = (
         db.collection("users")
         .document(user_id)

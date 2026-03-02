@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from services.meta_api import MetaAPIService
-from services.meta_auth import get_decrypted_token
 from utils.firestore_helpers import get_db
 
 MAX_BUDGET_DELTA_PCT = 30.0
@@ -19,6 +17,9 @@ DEFAULT_POLICY = {
 
 def execute_recommendation(user_id: str, account_id: str, recommendation: dict, policy: dict | None = None) -> dict:
     """Execute a single approved recommendation against Meta API."""
+    from services.meta_api import MetaAPIService
+    from services.meta_auth import get_decrypted_token
+
     effective_policy = _merge_policy(policy)
     if not effective_policy["allowExecute"]:
         raise ValueError("Execution disabled by policy")
@@ -147,6 +148,9 @@ def execute_preview(user_id: str, account_id: str, recommendation: dict, policy:
 
 def rollback_recommendation(user_id: str, account_id: str, recommendation: dict, policy: dict | None = None) -> dict:
     """Rollback a previously executed recommendation."""
+    from services.meta_api import MetaAPIService
+    from services.meta_auth import get_decrypted_token
+
     effective_policy = _merge_policy(policy)
     if not effective_policy["allowRollback"]:
         raise ValueError("Rollback disabled by policy")

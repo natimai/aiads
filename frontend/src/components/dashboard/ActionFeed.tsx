@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { Link } from "react-router-dom";
 import {
   CheckCircle2,
   XCircle,
@@ -372,6 +373,8 @@ function TaskCard({
       : canExecute
       ? "Approve & Execute"
       : "Approve";
+  const isGhostDraft = rec.batchType === "GHOST_DRAFT" && Boolean(rec.metadata?.draftId);
+  const isLaunchWatch = rec.batchType === "LAUNCH_WATCH";
 
   return (
     <div
@@ -409,6 +412,16 @@ function TaskCard({
             {rec.accountName && (
               <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
                 {rec.accountName}
+              </span>
+            )}
+            {isLaunchWatch && (
+              <span className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-700">
+                Launch Watch
+              </span>
+            )}
+            {isGhostDraft && (
+              <span className="rounded-md border border-purple-200 bg-purple-50 px-2 py-0.5 text-[10px] font-medium text-purple-700">
+                Ghost Draft
               </span>
             )}
             <span className="ml-auto shrink-0 text-[11px] tabular-nums text-slate-400">
@@ -619,6 +632,14 @@ function TaskCard({
       {/* ── Footer action buttons ─────────────────────────────── */}
       {rec.status === "pending" && !editing && (
         <div className="flex items-center gap-2 border-t border-slate-100 px-4 py-3">
+          {isGhostDraft && rec.metadata?.draftId && (
+            <Link
+              to={`/campaign-builder?draftId=${encodeURIComponent(rec.metadata.draftId)}${rec.accountId ? `&accountId=${encodeURIComponent(rec.accountId)}` : ""}`}
+              className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+            >
+              Open Draft
+            </Link>
+          )}
           {/* Dismiss */}
           <button
             onClick={handleReject}

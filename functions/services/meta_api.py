@@ -165,6 +165,77 @@ class MetaAPIService:
         adset.api_update(params={"daily_budget": int(daily_budget)})
         return True
 
+    @with_retry
+    def create_campaign(self, *, name: str, objective: str, status: str = "PAUSED") -> str:
+        params = {
+            "name": name,
+            "objective": objective,
+            "status": status,
+            "special_ad_categories": [],
+        }
+        created = self.account.create_campaign(params=params)
+        return str(created.get("id"))
+
+    @with_retry
+    def create_adset(
+        self,
+        *,
+        campaign_id: str,
+        name: str,
+        daily_budget: int,
+        targeting: dict,
+        optimization_goal: str = "OFFSITE_CONVERSIONS",
+        billing_event: str = "IMPRESSIONS",
+        status: str = "PAUSED",
+    ) -> str:
+        params = {
+            "name": name,
+            "campaign_id": campaign_id,
+            "daily_budget": int(daily_budget),
+            "targeting": targeting,
+            "optimization_goal": optimization_goal,
+            "billing_event": billing_event,
+            "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+            "status": status,
+        }
+        created = self.account.create_ad_set(params=params)
+        return str(created.get("id"))
+
+    @with_retry
+    def create_ad_creative(
+        self,
+        *,
+        name: str,
+        page_id: str,
+        message: str,
+        link: str,
+        headline: str,
+    ) -> str:
+        params = {
+            "name": name,
+            "object_story_spec": {
+                "page_id": page_id,
+                "link_data": {
+                    "message": message,
+                    "link": link,
+                    "name": headline,
+                },
+            },
+        }
+        created = self.account.create_ad_creative(params=params)
+        return str(created.get("id"))
+
+    @with_retry
+    def create_ad(self, *, adset_id: str, name: str, creative_id: str, status: str = "PAUSED") -> str:
+        params = {
+            "name": name,
+            "adset_id": adset_id,
+            "creative": {"creative_id": creative_id},
+            "status": status,
+        }
+        created = self.account.create_ad(params=params)
+        return str(created.get("id"))
+
     def _serialize_campaign(self, c) -> dict:
         data = dict(c)
         return {

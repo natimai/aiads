@@ -45,6 +45,7 @@ const navItems = [
   { to: "/campaigns", icon: "campaign", label: "Campaigns" },
   { to: "/alerts", icon: "notifications", label: "Alerts", badge: true },
   { to: "/ai-insights", icon: "psychology", label: "AI Command Center" },
+  { to: "/campaign-builder", icon: "build", label: "Campaign Builder" },
   { to: "/reports", icon: "description", label: "Reports" },
   { to: "/creative-lab", icon: "palette", label: "Creative Lab" },
 ];

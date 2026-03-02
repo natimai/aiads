@@ -2,15 +2,6 @@
 import json
 import logging
 import os
-from firebase_admin import auth as firebase_auth
-from services.meta_auth import (
-    get_oauth_url,
-    exchange_code_for_token,
-    fetch_ad_accounts,
-    store_account_with_token,
-    encode_state,
-    decode_state,
-)
 from utils.firestore_helpers import get_db
 
 logger = logging.getLogger(__name__)
@@ -20,6 +11,8 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
 def verify_auth(request) -> str:
     """Extract and verify Firebase Auth token from request. Returns user ID."""
+    from firebase_admin import auth as firebase_auth
+
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         raise PermissionError("Missing or invalid Authorization header")
@@ -91,6 +84,8 @@ def _get_callback_uri(_request) -> str:
 
 
 def _initiate_connect(request, user_id: str):
+    from services.meta_auth import encode_state, get_oauth_url
+
     redirect_uri = _get_callback_uri(request)
     state = encode_state(user_id)
     oauth_url = get_oauth_url(redirect_uri, state)
@@ -113,12 +108,14 @@ def _handle_callback(request):
         return "", 302, {"Location": f"{FRONTEND_URL}/settings/accounts?error=missing_params"}
 
     try:
+        from services.meta_auth import decode_state
         user_id = decode_state(state)
     except Exception as e:
         logger.error(f"Invalid OAuth state: {e}")
         return "", 302, {"Location": f"{FRONTEND_URL}/settings/accounts?error=invalid_state"}
 
     try:
+        from services.meta_auth import exchange_code_for_token, fetch_ad_accounts, store_account_with_token
         redirect_uri = _get_callback_uri(request)
         token_data = exchange_code_for_token(code, redirect_uri)
         access_token = token_data["access_token"]

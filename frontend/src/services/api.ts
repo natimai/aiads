@@ -16,6 +16,10 @@ import type {
   Report,
   ReportConfig,
   TasksResponse,
+  CampaignBuilderInputs,
+  CampaignDraft,
+  DraftSafety,
+  PublishDraftResult,
 } from "../types";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
@@ -165,6 +169,62 @@ export async function triggerAIAnalysis(
   return apiFetch("/api/ai/analyze", {
     method: "POST",
     body: JSON.stringify({ accountId, type, ...options }),
+  });
+}
+
+// ---------- AI Campaign Builder ----------
+
+export async function createCampaignDraft(
+  accountId: string,
+  inputs: CampaignBuilderInputs
+): Promise<{ draftId: string; draft: CampaignDraft }> {
+  return apiFetch("/api/ai/campaign-builder/drafts", {
+    method: "POST",
+    body: JSON.stringify({ accountId, inputs }),
+  });
+}
+
+export async function getCampaignDraft(accountId: string, draftId: string): Promise<CampaignDraft> {
+  const data = await apiFetch<{ draft: CampaignDraft }>(
+    `/api/ai/campaign-builder/drafts/${draftId}?accountId=${accountId}`
+  );
+  return data.draft;
+}
+
+export async function regenerateCampaignDraftBlock(
+  accountId: string,
+  draftId: string,
+  blockType: "campaignPlan" | "audiencePlan" | "creativePlan" | "reasoning",
+  instruction?: string
+): Promise<CampaignDraft> {
+  const data = await apiFetch<{ draft: CampaignDraft }>(
+    `/api/ai/campaign-builder/drafts/${draftId}/regenerate`,
+    {
+      method: "POST",
+      body: JSON.stringify({ accountId, blockType, instruction }),
+    }
+  );
+  return data.draft;
+}
+
+export async function preflightCampaignDraft(
+  accountId: string,
+  draftId: string
+): Promise<DraftSafety> {
+  return apiFetch(`/api/ai/campaign-builder/drafts/${draftId}/preflight`, {
+    method: "POST",
+    body: JSON.stringify({ accountId }),
+  });
+}
+
+export async function publishCampaignDraft(
+  accountId: string,
+  draftId: string,
+  confirmHighBudget = false
+): Promise<PublishDraftResult> {
+  return apiFetch(`/api/ai/campaign-builder/drafts/${draftId}/publish`, {
+    method: "POST",
+    body: JSON.stringify({ accountId, confirmHighBudget }),
   });
 }
 

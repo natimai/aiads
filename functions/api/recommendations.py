@@ -5,8 +5,6 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 
-from google.cloud.firestore_v1.base_query import FieldFilter
-
 from api.accounts import _cors_response, verify_auth
 from services.recommendation_executor import (
     execute_preview,
@@ -25,6 +23,12 @@ DEFAULT_POLICY = {
     "minConfidenceToExecute": 0.65,
     "maxBudgetDeltaPct": 30.0,
 }
+
+
+def _field_filter(field: str, op: str, value):
+    from google.cloud.firestore_v1.base_query import FieldFilter
+
+    return FieldFilter(field, op, value)
 
 
 def handle_recommendations(request):
@@ -105,15 +109,15 @@ def _list_recommendations(request, user_id: str, account_id: str):
     )
     query = base_ref
     if status:
-        query = query.where(filter=FieldFilter("status", "==", status))
+        query = query.where(filter=_field_filter("status", "==", status))
     if rec_type:
-        query = query.where(filter=FieldFilter("type", "==", rec_type))
+        query = query.where(filter=_field_filter("type", "==", rec_type))
     if priority:
-        query = query.where(filter=FieldFilter("priority", "==", priority))
+        query = query.where(filter=_field_filter("priority", "==", priority))
     if date_from:
-        query = query.where(filter=FieldFilter("createdAt", ">=", _to_dt(date_from)))
+        query = query.where(filter=_field_filter("createdAt", ">=", _to_dt(date_from)))
     if date_to:
-        query = query.where(filter=FieldFilter("createdAt", "<=", _to_dt(date_to, end_of_day=True)))
+        query = query.where(filter=_field_filter("createdAt", "<=", _to_dt(date_to, end_of_day=True)))
 
     docs = query.order_by("createdAt", direction="DESCENDING").limit(max(1, min(limit, 200))).stream()
     recommendations = [{"id": doc.id, **_serialize(doc.to_dict() or {})} for doc in docs]
@@ -539,10 +543,10 @@ def _save_policy(request, user_id: str, account_id: str):
 def _is_recent_duplicate(rec_ref, candidate: dict) -> bool:
     since = datetime.now(timezone.utc) - timedelta(hours=6)
     docs = (
-        rec_ref.where(filter=FieldFilter("type", "==", candidate.get("type")))
-        .where(filter=FieldFilter("entityId", "==", candidate.get("entityId")))
-        .where(filter=FieldFilter("status", "==", "pending"))
-        .where(filter=FieldFilter("createdAt", ">=", since))
+        rec_ref.where(filter=_field_filter("type", "==", candidate.get("type")))
+        .where(filter=_field_filter("entityId", "==", candidate.get("entityId")))
+        .where(filter=_field_filter("status", "==", "pending"))
+        .where(filter=_field_filter("createdAt", ">=", since))
         .limit(1)
         .stream()
     )

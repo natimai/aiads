@@ -162,7 +162,12 @@ export interface ProposedAction {
   value?: unknown;
 }
 
-export type BatchType = "MORNING_BRIEF" | "EVENING_CHECK" | "";
+export type BatchType =
+  | "MORNING_BRIEF"
+  | "EVENING_CHECK"
+  | "LAUNCH_WATCH"
+  | "GHOST_DRAFT"
+  | "";
 
 export interface TasksResponse {
   greeting: string;
@@ -206,6 +211,11 @@ export interface Recommendation {
     deltaPct?: number;
     desiredStatus?: "active" | "paused";
   };
+  metadata?: {
+    draftId?: string;
+    watchWindowHours?: number;
+    opportunityTheme?: string;
+  };
   suggestedContent?: {
     creativeCopy?: string;
     campaignPlan?: { name?: string; objective?: string; targeting?: string };
@@ -234,6 +244,113 @@ export interface Recommendation {
     reviewedAt?: string;
     reason?: string;
   };
+}
+
+export interface CampaignBuilderInputs {
+  objective: string;
+  offer: string;
+  country: string;
+  language: string;
+  dailyBudget: number;
+  campaignName: string;
+  pageId?: string;
+  destinationUrl?: string;
+  brandVoice?: string;
+}
+
+export interface CampaignPlanBlock {
+  name: string;
+  objective: string;
+  buyingType: string;
+  budgetType: string;
+  dailyBudget: number;
+}
+
+export interface AudiencePlanBlock {
+  name?: string;
+  geo: { countries: string[] };
+  ageRange: { min: number; max: number };
+  genders: string[];
+  interests: string[];
+  lookalikeHints: string[];
+}
+
+export interface CreativePlanBlock {
+  angles: string[];
+  primaryTexts: string[];
+  headlines: string[];
+  cta: string;
+}
+
+export interface CampaignDraftBlocks {
+  campaignPlan: CampaignPlanBlock;
+  audiencePlan: AudiencePlanBlock;
+  creativePlan: CreativePlanBlock;
+  reasoning: string;
+}
+
+export interface BenchmarkSnapshot {
+  selectedAccount: {
+    kpi: {
+      roas: number;
+      avgCTR: number;
+      avgCPM: number;
+    };
+  };
+  peerBenchmark: {
+    accountsCompared: number;
+    medianRoas: number;
+    medianCTR: number;
+    medianCPM: number;
+  };
+}
+
+export interface DraftValidation {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface DraftSafety {
+  safetyStatus: "passed" | "blocked";
+  warnings: string[];
+  errors: string[];
+  requiresExplicitConfirm: boolean;
+  budgetCheck: {
+    avgDailyBudget: number;
+    proposedDailyBudget: number;
+    threshold: number;
+    isOver10x: boolean;
+  };
+}
+
+export interface CampaignDraft {
+  id: string;
+  accountId: string;
+  userId: string;
+  origin: "manual" | "ghost";
+  opportunityTheme?: string;
+  inputs: CampaignBuilderInputs;
+  blocks: CampaignDraftBlocks;
+  benchmarkSnapshot: BenchmarkSnapshot;
+  validation: DraftValidation;
+  safety?: DraftSafety;
+  status: "draft" | "ready_for_publish" | "published";
+  publishedMetaIds?: {
+    campaignId?: string;
+    adsetId?: string;
+    adIds?: string[];
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublishDraftResult {
+  campaignId: string;
+  adsetId: string;
+  adIds: string[];
+  watchCardId: string;
+  warnings: string[];
 }
 
 export interface RecommendationModifications {

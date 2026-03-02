@@ -17,6 +17,10 @@ def handle_ai_insights(request):
         user_id = verify_auth(request)
         path = request.path.rstrip("/")
 
+        if path.startswith("/api/ai/campaign-builder/"):
+            from api.campaign_builder import handle_campaign_builder
+            return handle_campaign_builder(request)
+
         if path.startswith("/api/ai/insights/") and request.method == "GET":
             account_id = path.split("/api/ai/insights/")[1]
             return _get_insights(user_id, account_id)

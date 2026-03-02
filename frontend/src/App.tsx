@@ -16,6 +16,7 @@ const Campaigns = lazy(() => import("./pages/Campaigns"));
 const Alerts = lazy(() => import("./pages/Alerts"));
 const AlertConfig = lazy(() => import("./pages/AlertConfig"));
 const AIInsights = lazy(() => import("./pages/AIInsights"));
+const CampaignBuilder = lazy(() => import("./pages/CampaignBuilder"));
 const Reports = lazy(() => import("./pages/Reports"));
 const CreativeLab = lazy(() => import("./pages/CreativeLab"));
 const SettingsPage = lazy(() => import("./pages/Settings"));
@@ -164,6 +165,7 @@ function AuthenticatedApp() {
               <Route path="/alerts" element={<Alerts />} />
               <Route path="/alerts/config" element={<AlertConfig />} />
               <Route path="/ai-insights" element={<AIInsights />} />
+              <Route path="/campaign-builder" element={<CampaignBuilder />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/creative-lab" element={<CreativeLab />} />
               <Route path="/settings" element={<SettingsPage />} />
@@ -180,6 +182,7 @@ function AuthenticatedApp() {
           { to: "/campaigns", icon: "campaign", label: "Campaigns" },
           { to: "/alerts", icon: "notifications", label: "Alerts" },
           { to: "/ai-insights", icon: "psychology", label: "Insights" },
+          { to: "/campaign-builder", icon: "build", label: "Builder" },
           { to: "/settings", icon: "settings", label: "Settings" },
         ].map((item) => (
           <NavLink

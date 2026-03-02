@@ -4,8 +4,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from google.cloud.firestore_v1.base_query import FieldFilter
-
 
 class FeatureBuilder:
     """Build campaign/account feature payload used by recommendation engines."""
@@ -46,6 +44,8 @@ class FeatureBuilder:
         }
 
     def _load_campaign_insights(self, campaign_ref, date_from: str, date_to: str) -> list[dict[str, Any]]:
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
         insights_ref = campaign_ref.collection("insights")
         docs = (
             insights_ref.where(filter=FieldFilter("date", ">=", date_from))

@@ -177,6 +177,17 @@ def scheduled_evening_guard(event: scheduler_fn.ScheduledEvent) -> None:
 
 
 @scheduler_fn.on_schedule(
+    schedule="0 9 * * *",
+    memory=options.MemoryOption.MB_512,
+    timeout_sec=540,
+)
+def scheduled_ghost_drafts(event: scheduler_fn.ScheduledEvent) -> None:
+    """Daily at 09:00 AM: create proactive ghost campaign drafts (max 1/account/day)."""
+    from scheduled.ghost_drafts import run_ghost_drafts
+    run_ghost_drafts()
+
+
+@scheduler_fn.on_schedule(
     schedule="0 0 * * *",
     memory=options.MemoryOption.MB_256,
     timeout_sec=120,
