@@ -180,6 +180,7 @@ def _review_recommendation(request, user_id: str, recommendation_id: str, status
     payload = request.get_json(silent=True) or {}
     account_id = payload.get("accountId")
     reason = payload.get("reason", "")
+    modifications = payload.get("modifications")
 
     if not account_id:
         return _cors_response(json.dumps({"error": "accountId required"}), 400)
@@ -197,15 +198,41 @@ def _review_recommendation(request, user_id: str, recommendation_id: str, status
     if not rec_doc.exists:
         return _cors_response(json.dumps({"error": "Recommendation not found"}), 404)
 
-    review_data = {
+    now = datetime.now(timezone.utc)
+    review_data: dict = {
         "status": status,
         "review": {
             "reviewedBy": user_id,
-            "reviewedAt": datetime.now(timezone.utc),
+            "reviewedAt": now,
             "reason": reason,
         },
-        "updatedAt": datetime.now(timezone.utc),
+        "updatedAt": now,
     }
+
+    if status == "approved" and isinstance(modifications, dict) and modifications:
+        rec_data = rec_doc.to_dict() or {}
+        original_plan = rec_data.get("executionPlan", {})
+        original_content = rec_data.get("suggestedContent", {})
+        review_data["originalPlan"] = original_plan
+        review_data["originalSuggestedContent"] = original_content
+        review_data["wasModified"] = True
+
+        new_plan = dict(original_plan)
+        if "deltaPct" in modifications:
+            delta = float(modifications["deltaPct"])
+            delta = min(delta, 20.0) if delta > 0 else max(delta, -50.0)
+            new_plan["deltaPct"] = round(delta, 2)
+        if "desiredStatus" in modifications and modifications["desiredStatus"] in ("active", "paused"):
+            new_plan["desiredStatus"] = modifications["desiredStatus"]
+        review_data["executionPlan"] = new_plan
+
+        new_content = dict(original_content)
+        if "creativeCopy" in modifications:
+            new_content["creativeCopy"] = str(modifications["creativeCopy"])[:2000]
+        if "audienceSuggestions" in modifications and isinstance(modifications["audienceSuggestions"], list):
+            new_content["audienceSuggestions"] = [str(s)[:200] for s in modifications["audienceSuggestions"][:10]]
+        review_data["suggestedContent"] = new_content
+
     rec_ref.update(review_data)
 
     log_event(
@@ -214,8 +241,9 @@ def _review_recommendation(request, user_id: str, recommendation_id: str, status
         account_id=account_id,
         recommendation_id=recommendation_id,
         status=status,
+        was_modified=bool(modifications),
     )
-    return _cors_response(json.dumps({"success": True, "status": status}))
+    return _cors_response(json.dumps({"success": True, "status": status, "wasModified": bool(modifications)}))
 
 
 def _execute_recommendation(request, user_id: str, recommendation_id: str):

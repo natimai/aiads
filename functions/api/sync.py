@@ -49,6 +49,9 @@ def _sync_all_accounts(user_id: str):
         if not acc_data.get("isActive"):
             logger.info(f"Skipping inactive account {acc_doc.id}")
             continue
+        if not acc_data.get("isManagedByPlatform"):
+            logger.info(f"Skipping unmanaged account {acc_doc.id}")
+            continue
         try:
             logger.info(f"Syncing account {acc_doc.id} ({acc_data.get('accountName')})")
             res = _do_sync(db, user_id, acc_doc.id)

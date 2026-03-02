@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 def run_fetch_insights():
     """Fetch today's incremental insights for all active accounts."""
     db = get_db()
-    users = get_all_active_users(db)
+    users = get_all_active_users(db, managed_only=True)
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     for user in users:

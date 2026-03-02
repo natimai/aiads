@@ -17,7 +17,7 @@ def run_generate_recommendations() -> None:
     """Generate recommendations for active accounts with freshness and quota guards."""
     db = get_db()
     engine = RecommendationEngine(db)
-    users = get_all_active_users(db)
+    users = get_all_active_users(db, managed_only=True)
     now = datetime.now(timezone.utc)
     date_to = now.strftime("%Y-%m-%d")
     date_from = (now - timedelta(days=6)).strftime("%Y-%m-%d")

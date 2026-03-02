@@ -4,6 +4,7 @@ export interface MetaAccount {
   currency: string;
   businessName?: string;
   isActive: boolean;
+  isManagedByPlatform: boolean;
   tokenExpiry?: string;
   kpiSummary?: KPISummary;
   kpiUpdatedAt?: string;
@@ -154,6 +155,13 @@ export type RecommendationStatus = "pending" | "approved" | "rejected" | "execut
 export type RecommendationPriority = "high" | "medium" | "low";
 export type RecommendationEntityLevel = "account" | "campaign" | "adset" | "ad";
 
+export interface ProposedAction {
+  action?: string;
+  entity_id?: string;
+  entity_name?: string;
+  value?: unknown;
+}
+
 export interface Recommendation {
   id: string;
   type: RecommendationType;
@@ -184,6 +192,11 @@ export interface Recommendation {
     campaignPlan?: { name?: string; objective?: string; targeting?: string };
     audienceSuggestions?: string[];
   };
+  metricsSnapshot?: Record<string, number>;
+  uiDisplayText?: string;
+  proposedAction?: ProposedAction;
+  wasModified?: boolean;
+  originalPlan?: Record<string, unknown>;
   execution?: {
     executedBy?: string;
     executedAt?: string;
@@ -202,6 +215,13 @@ export interface Recommendation {
     reviewedAt?: string;
     reason?: string;
   };
+}
+
+export interface RecommendationModifications {
+  deltaPct?: number;
+  desiredStatus?: "active" | "paused";
+  creativeCopy?: string;
+  audienceSuggestions?: string[];
 }
 
 export interface RecommendationExecution {

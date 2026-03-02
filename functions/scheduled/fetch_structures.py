@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 def run_fetch_structures():
     """Sync campaign, adset, and ad structures for all active accounts."""
     db = get_db()
-    users = get_all_active_users(db)
+    users = get_all_active_users(db, managed_only=True)
 
     for user in users:
         user_id = user["id"]

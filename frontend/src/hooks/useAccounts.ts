@@ -15,9 +15,11 @@ export function useAccountsQuery() {
   useEffect(() => {
     if (query.data) {
       setAccounts(query.data);
-      const firstAccount = query.data[0];
-      if (selectedAccountId === null && firstAccount) {
-        setSelectedAccountId(firstAccount.id);
+      if (selectedAccountId === null) {
+        const firstManaged = query.data.find((a) => a.isManagedByPlatform);
+        const fallback = query.data[0];
+        const pick = firstManaged ?? fallback;
+        if (pick) setSelectedAccountId(pick.id);
       }
     }
   }, [query.data, setAccounts, selectedAccountId, setSelectedAccountId]);

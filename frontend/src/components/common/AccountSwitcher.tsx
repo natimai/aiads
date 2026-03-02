@@ -1,11 +1,15 @@
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown, Building2, Globe } from "lucide-react";
+import { ChevronDown, Building2, Globe, Settings } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useAccounts } from "../../contexts/AccountContext";
 
 export function AccountSwitcher() {
-  const { accounts, selectedAccountId, setSelectedAccountId, selectedAccount } = useAccounts();
+  const { accounts, selectedAccountId, setSelectedAccountId, selectedAccount } =
+    useAccounts();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  const managedAccounts = accounts.filter((a) => a.isManagedByPlatform);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -33,11 +37,13 @@ export function AccountSwitcher() {
           <Globe className="h-3.5 w-3.5 text-accent-green shrink-0" />
         )}
         <span className="max-w-[160px] truncate">{displayName}</span>
-        <ChevronDown className={`h-3.5 w-3.5 text-slate-500 transition-transform ${open ? "rotate-180" : ""}`} />
+        <ChevronDown
+          className={`h-3.5 w-3.5 text-slate-500 transition-transform ${open ? "rotate-180" : ""}`}
+        />
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-slate-700 bg-navy-900 py-1 shadow-2xl">
+        <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-lg border border-slate-700 bg-navy-900 py-1 shadow-2xl">
           <button
             onClick={() => {
               setSelectedAccountId(null);
@@ -49,15 +55,21 @@ export function AccountSwitcher() {
           >
             <Globe className="h-3.5 w-3.5 shrink-0" />
             <div>
-              <div className="font-medium">All Accounts</div>
-              <div className="text-[11px] text-slate-500">{accounts.length} connected</div>
+              <div className="font-medium">All Managed Accounts</div>
+              <div className="text-[11px] text-slate-500">
+                {managedAccounts.length} managed
+              </div>
             </div>
-            {selectedAccountId === null && <div className="ml-auto h-1.5 w-1.5 rounded-full bg-accent-blue" />}
+            {selectedAccountId === null && (
+              <div className="ml-auto h-1.5 w-1.5 rounded-full bg-accent-blue" />
+            )}
           </button>
 
-          {accounts.length > 0 && <div className="mx-3 my-0.5 border-t border-slate-800" />}
+          {managedAccounts.length > 0 && (
+            <div className="mx-3 my-0.5 border-t border-slate-800" />
+          )}
 
-          {accounts.map((account) => (
+          {managedAccounts.map((account) => (
             <button
               key={account.id}
               onClick={() => {
@@ -65,7 +77,9 @@ export function AccountSwitcher() {
                 setOpen(false);
               }}
               className={`flex w-full items-center gap-3 px-3 py-2 text-left text-[13px] transition-colors hover:bg-slate-800/80 ${
-                selectedAccountId === account.id ? "text-accent-blue" : "text-slate-300"
+                selectedAccountId === account.id
+                  ? "text-accent-blue"
+                  : "text-slate-300"
               }`}
             >
               <Building2 className="h-3.5 w-3.5 shrink-0" />
@@ -76,16 +90,33 @@ export function AccountSwitcher() {
                   {account.businessName ? ` · ${account.businessName}` : ""}
                 </div>
               </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                {!account.isActive && (
-                  <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] text-red-400">
-                    Inactive
-                  </span>
-                )}
-                {selectedAccountId === account.id && <div className="h-1.5 w-1.5 rounded-full bg-accent-blue" />}
-              </div>
+              {selectedAccountId === account.id && (
+                <div className="h-1.5 w-1.5 rounded-full bg-accent-blue shrink-0" />
+              )}
             </button>
           ))}
+
+          {/* Unmanaged accounts note */}
+          {accounts.length > managedAccounts.length && (
+            <>
+              <div className="mx-3 my-0.5 border-t border-slate-800" />
+              <div className="px-3 py-2 text-[11px] text-slate-500">
+                {accounts.length - managedAccounts.length} unmanaged account
+                {accounts.length - managedAccounts.length !== 1 ? "s" : ""} hidden
+              </div>
+            </>
+          )}
+
+          {/* Manage accounts link */}
+          <div className="mx-3 my-0.5 border-t border-slate-800" />
+          <Link
+            to="/settings/accounts"
+            onClick={() => setOpen(false)}
+            className="flex w-full items-center gap-2 px-3 py-2 text-[12px] text-slate-400 transition-colors hover:bg-slate-800/80 hover:text-slate-200"
+          >
+            <Settings className="h-3.5 w-3.5" />
+            Manage Accounts
+          </Link>
         </div>
       )}
     </div>

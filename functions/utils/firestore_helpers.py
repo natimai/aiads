@@ -10,20 +10,23 @@ def get_db():
     return firestore.client()
 
 
-def get_user_accounts(db, user_id: str) -> list[dict]:
-    """Fetch all active Meta accounts for a user."""
+def get_user_accounts(db, user_id: str, *, managed_only: bool = False) -> list[dict]:
+    """Fetch active Meta accounts for a user. If managed_only, restrict to platform-managed."""
     accounts_ref = db.collection("users").document(user_id).collection("metaAccounts")
-    docs = accounts_ref.where(filter=FieldFilter("isActive", "==", True)).stream()
+    query = accounts_ref.where(filter=FieldFilter("isActive", "==", True))
+    if managed_only:
+        query = query.where(filter=FieldFilter("isManagedByPlatform", "==", True))
+    docs = query.stream()
     return [{"id": doc.id, **doc.to_dict()} for doc in docs]
 
 
-def get_all_active_users(db) -> list[dict]:
+def get_all_active_users(db, *, managed_only: bool = False) -> list[dict]:
     """Fetch all users who have at least one active account."""
     users_ref = db.collection("users").stream()
     results = []
     for user_doc in users_ref:
         user_data = {"id": user_doc.id, **user_doc.to_dict()}
-        accounts = get_user_accounts(db, user_doc.id)
+        accounts = get_user_accounts(db, user_doc.id, managed_only=managed_only)
         if accounts:
             user_data["accounts"] = accounts
             results.append(user_data)

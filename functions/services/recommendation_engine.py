@@ -1,6 +1,7 @@
 """Recommendation generation orchestration (features + scoring + Gemini)."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -8,6 +9,7 @@ from services.ai_analyzer import AIAnalyzer
 from services.feature_builder import FeatureBuilder
 from services.performance_scoring import PerformanceScoring
 
+logger = logging.getLogger(__name__)
 
 RECOMMENDATION_TYPES = {
     "budget_optimization",
@@ -21,6 +23,25 @@ RECOMMENDATION_TYPES = {
 ENTITY_LEVELS = {"account", "campaign", "adset", "ad"}
 PRIORITIES = {"high", "medium", "low"}
 STATUSES = {"pending", "approved", "rejected", "executed", "failed"}
+
+AI_TYPE_MAP: dict[str, str] = {
+    "BUDGET_OPTIMIZATION": "budget_optimization",
+    "CREATIVE_GENERATION": "creative_optimization",
+    "AUDIENCE_TWEAK": "audience_optimization",
+    "ANOMALY": "budget_optimization",
+}
+
+AI_ACTION_TO_EXECUTION: dict[str, dict[str, str]] = {
+    "PAUSE_AD_SET": {"action": "set_status", "desiredStatus": "paused"},
+    "INCREASE_BUDGET": {"action": "adjust_budget"},
+    "DECREASE_BUDGET": {"action": "adjust_budget"},
+    "CREATE_NEW_AD": {"action": "none"},
+    "UPDATE_AUDIENCE": {"action": "none"},
+    "MANUAL_REVIEW": {"action": "none"},
+}
+
+MAX_BUDGET_INCREASE_PCT = 20.0
+MAX_BUDGET_DECREASE_PCT = 50.0
 
 
 class RecommendationEngine:
@@ -94,13 +115,24 @@ class RecommendationEngine:
 
     @staticmethod
     def _normalize_recommendation(rec: dict[str, Any], now: datetime) -> dict[str, Any]:
-        rec_type = str(rec.get("type", "budget_optimization")).strip().lower()
+        raw_type = str(rec.get("type", "budget_optimization")).strip()
+        rec_type = AI_TYPE_MAP.get(raw_type.upper(), raw_type.lower())
         if rec_type not in RECOMMENDATION_TYPES:
             rec_type = "budget_optimization"
+
         suggested_content = rec.get("suggestedContent")
         if not isinstance(suggested_content, dict):
             suggested_content = {}
 
+        proposed_action = rec.get("proposed_action") or {}
+        if not isinstance(proposed_action, dict):
+            proposed_action = {}
+
+        entity_id = str(
+            rec.get("entityId")
+            or proposed_action.get("entity_id")
+            or ""
+        )
         entity_level = str(rec.get("entityLevel", "campaign")).strip().lower()
         if entity_level not in ENTITY_LEVELS:
             entity_level = "campaign"
@@ -120,18 +152,40 @@ class RecommendationEngine:
         if not isinstance(actions_draft, list):
             actions_draft = [str(actions_draft)]
 
-        status = str(rec.get("status", "pending")).strip().lower()
-        if status not in STATUSES:
-            status = "pending"
+        status = "pending"
 
         execution_plan = rec.get("executionPlan")
         if not isinstance(execution_plan, dict):
-            execution_plan = RecommendationEngine._derive_execution_plan(rec_type, entity_level, rec)
+            execution_plan = RecommendationEngine._derive_execution_plan(
+                rec_type, entity_level, rec
+            )
+
+        execution_plan = RecommendationEngine._apply_safety_guardrails(
+            execution_plan, proposed_action
+        )
+
+        metrics_snapshot = rec.get("metrics_snapshot") or {}
+        if not isinstance(metrics_snapshot, dict):
+            metrics_snapshot = {}
+
+        ui_display_text = str(rec.get("ui_display_text") or rec.get("title") or "")
+
+        if proposed_action.get("action") in ("CREATE_NEW_AD",) and not suggested_content.get("creativeCopy"):
+            value = proposed_action.get("value")
+            if isinstance(value, str) and value:
+                suggested_content["creativeCopy"] = value
+
+        if proposed_action.get("action") == "UPDATE_AUDIENCE" and not suggested_content.get("audienceSuggestions"):
+            value = proposed_action.get("value")
+            if isinstance(value, str) and value:
+                suggested_content["audienceSuggestions"] = [value]
+            elif isinstance(value, list):
+                suggested_content["audienceSuggestions"] = value
 
         return {
             "type": rec_type,
             "entityLevel": entity_level,
-            "entityId": str(rec.get("entityId") or ""),
+            "entityId": entity_id,
             "title": str(rec.get("title") or "Optimization recommendation"),
             "priority": priority,
             "confidence": round(confidence, 4),
@@ -142,11 +196,62 @@ class RecommendationEngine:
             "status": status,
             "executionPlan": execution_plan,
             "suggestedContent": suggested_content,
+            "metricsSnapshot": metrics_snapshot,
+            "uiDisplayText": ui_display_text,
+            "proposedAction": proposed_action,
             "createdAt": now,
             "expiresAt": now + timedelta(hours=12),
             "review": {},
-            "source": "gemini",
+            "source": "nati_ai",
         }
+
+    @staticmethod
+    def _apply_safety_guardrails(
+        execution_plan: dict[str, Any],
+        proposed_action: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Hard-coded safety caps — never trust the AI's numbers blindly."""
+        ai_action = str(proposed_action.get("action", "")).upper()
+        mapped = AI_ACTION_TO_EXECUTION.get(ai_action, {})
+
+        if mapped.get("action") == "set_status":
+            execution_plan = {
+                **execution_plan,
+                "action": "set_status",
+                "desiredStatus": mapped.get("desiredStatus", "paused"),
+                "targetId": str(proposed_action.get("entity_id") or execution_plan.get("targetId") or ""),
+                "targetLevel": execution_plan.get("targetLevel", "adset"),
+            }
+
+        if mapped.get("action") == "adjust_budget":
+            raw_value = proposed_action.get("value")
+            try:
+                delta_pct = float(raw_value) if raw_value is not None else execution_plan.get("deltaPct", 0)
+            except (TypeError, ValueError):
+                delta_pct = execution_plan.get("deltaPct", 0)
+
+            if ai_action == "DECREASE_BUDGET":
+                delta_pct = -abs(delta_pct) if delta_pct else -10.0
+
+            if delta_pct > 0:
+                delta_pct = min(delta_pct, MAX_BUDGET_INCREASE_PCT)
+            else:
+                delta_pct = max(delta_pct, -MAX_BUDGET_DECREASE_PCT)
+
+            execution_plan = {
+                **execution_plan,
+                "action": "adjust_budget",
+                "deltaPct": round(delta_pct, 2),
+                "targetId": str(proposed_action.get("entity_id") or execution_plan.get("targetId") or ""),
+                "targetLevel": execution_plan.get("targetLevel", "campaign"),
+            }
+
+        if not execution_plan.get("targetId"):
+            target_id = str(proposed_action.get("entity_id") or "")
+            if target_id:
+                execution_plan["targetId"] = target_id
+
+        return execution_plan
 
     @staticmethod
     def _dedup(recommendations: list[dict[str, Any]]) -> list[dict[str, Any]]:

@@ -62,6 +62,16 @@ export async function disconnectAccount(accountId: string): Promise<void> {
   await apiFetch(`/api/accounts/${accountId}`, { method: "DELETE" });
 }
 
+export async function toggleManagedAccount(
+  accountId: string,
+  isManagedByPlatform: boolean
+): Promise<{ success: boolean; isManagedByPlatform: boolean }> {
+  return apiFetch(`/api/accounts/${accountId}/managed`, {
+    method: "POST",
+    body: JSON.stringify({ isManagedByPlatform }),
+  });
+}
+
 // ---------- Campaigns ----------
 
 export async function getCampaigns(
@@ -199,11 +209,12 @@ export async function generateRecommendations(
 export async function approveRecommendation(
   accountId: string,
   recommendationId: string,
-  reason = ""
-): Promise<void> {
-  await apiFetch(`/api/recommendations/${recommendationId}/approve`, {
+  reason = "",
+  modifications?: Record<string, unknown>
+): Promise<{ success: boolean; wasModified?: boolean }> {
+  return apiFetch(`/api/recommendations/${recommendationId}/approve`, {
     method: "POST",
-    body: JSON.stringify({ accountId, reason }),
+    body: JSON.stringify({ accountId, reason, ...(modifications ? { modifications } : {}) }),
   });
 }
 

@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 def run_fetch_breakdowns():
     """Fetch breakdowns (age, gender, platform, placement, device, hourly) for all accounts."""
     db = get_db()
-    users = get_all_active_users(db)
+    users = get_all_active_users(db, managed_only=True)
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     breakdown_types = ["demographic", "platform", "placement", "device", "hourly", "country"]
 

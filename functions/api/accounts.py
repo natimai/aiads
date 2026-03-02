@@ -46,6 +46,9 @@ def handle_accounts(request):
             return _get_accounts(user_id)
         elif path == "/api/accounts/connect" and request.method == "POST":
             return _initiate_connect(request, user_id)
+        elif path.endswith("/managed") and request.method == "POST":
+            account_id = path.split("/api/accounts/")[1].split("/managed")[0]
+            return _toggle_managed(request, user_id, account_id)
         elif path.startswith("/api/accounts/") and request.method == "DELETE":
             account_id = path.split("/api/accounts/")[1]
             return _disconnect_account(user_id, account_id)
@@ -73,6 +76,7 @@ def _get_accounts(user_id: str):
             "currency": data.get("currency"),
             "businessName": data.get("businessName"),
             "isActive": data.get("isActive", False),
+            "isManagedByPlatform": data.get("isManagedByPlatform", False),
             "tokenExpiry": data.get("tokenExpiry").isoformat() if data.get("tokenExpiry") else None,
             "kpiSummary": data.get("kpiSummary"),
             "kpiUpdatedAt": data.get("kpiUpdatedAt").isoformat() if data.get("kpiUpdatedAt") else None,
@@ -134,6 +138,18 @@ def _handle_callback(request):
     except Exception as e:
         logger.error(f"OAuth token exchange failed: {e}", exc_info=True)
         return "", 302, {"Location": f"{FRONTEND_URL}/settings/accounts?error=token_exchange_failed"}
+
+
+def _toggle_managed(request, user_id: str, account_id: str):
+    payload = request.get_json(silent=True) or {}
+    managed = bool(payload.get("isManagedByPlatform", False))
+    db = get_db()
+    doc_ref = db.collection("users").document(user_id).collection("metaAccounts").document(account_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        return _cors_response(json.dumps({"error": "Account not found"}), 404)
+    doc_ref.update({"isManagedByPlatform": managed})
+    return _cors_response(json.dumps({"success": True, "isManagedByPlatform": managed}))
 
 
 def _disconnect_account(user_id: str, account_id: str):

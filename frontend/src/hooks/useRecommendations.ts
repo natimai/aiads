@@ -76,10 +76,16 @@ export function useReviewRecommendation() {
       recommendationId: string;
       decision: "approve" | "reject";
       reason?: string;
+      modifications?: Record<string, unknown>;
     }) => {
       if (!accountId) throw new Error("No account selected");
       if (payload.decision === "approve") {
-        await approveRecommendation(accountId, payload.recommendationId, payload.reason ?? "");
+        await approveRecommendation(
+          accountId,
+          payload.recommendationId,
+          payload.reason ?? "",
+          payload.modifications
+        );
       } else {
         await rejectRecommendation(accountId, payload.recommendationId, payload.reason ?? "");
       }

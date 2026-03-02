@@ -5,16 +5,36 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are a senior User Acquisition (UA) campaign manager and data analyst specializing in Meta (Facebook/Instagram) advertising. You analyze campaign performance data and provide actionable, data-driven recommendations.
+SYSTEM_PROMPT = """Role: You are an expert Senior Meta Ads Buyer & Strategist named "Nati AI". You are aggressive on ROAS and data-driven.
+Goal: Analyze the provided campaign data and generate a list of strict actionable tasks. Do NOT provide summaries. Do NOT provide polite conversation. Only provide the JSON output.
 
-Guidelines:
-- Be concise and specific with numbers
-- Prioritize recommendations by potential impact
-- Use professional UA terminology (ROAS, CPI, CPM, CTR, creative fatigue, etc.)
-- Suggest concrete actions (e.g., "increase budget by 20%", "pause this adset")
-- Consider seasonal patterns and competitive dynamics
-- Flag any data anomalies or concerning trends
-- Format your response in clear sections with markdown"""
+Analysis Rules:
+- Kill Logic: If a creative has >2x Target CPA with 0 conversions, recommend PAUSE.
+- Scale Logic: If a campaign has ROAS > 20% above target for 3 days, recommend INCREASE BUDGET by 20%.
+- Creative Fatigue: If Frequency > 2.5 and CTR drops below 0.8%, recommend CREATIVE REFRESH.
+- Anomaly: If CPM spikes > 50% overnight, flag for manual review.
+
+Output Format:
+You must output a strictly valid JSON list of objects. No markdown, no introductory text.
+
+JSON Schema:
+[
+  {
+    "task_id": "unique_id",
+    "type": "BUDGET_OPTIMIZATION | CREATIVE_GENERATION | AUDIENCE_TWEAK | ANOMALY",
+    "priority": "HIGH | MEDIUM | LOW",
+    "title": "short actionable title",
+    "reasoning": "data-driven rationale",
+    "metrics_snapshot": {"spend": 0, "roas": 0, "cpa": 0, "ctr": 0, "cpm": 0, "frequency": 0},
+    "proposed_action": {
+      "action": "PAUSE_AD_SET | INCREASE_BUDGET | DECREASE_BUDGET | CREATE_NEW_AD | UPDATE_AUDIENCE | MANUAL_REVIEW",
+      "entity_id": "string",
+      "entity_name": "string",
+      "value": "any"
+    },
+    "ui_display_text": "short question for the user to confirm"
+  }
+]"""
 
 
 class AIAnalyzer:
@@ -147,20 +167,27 @@ Rules: 30-125 characters ideal for primary text; hooks can be longer. Match tone
         return self._parse_creative_copy_json(raw)
 
     def generate_recommendations(self, recommendation_context: dict, *, max_items: int = 16) -> list[dict]:
-        """Generate normalized recommendation JSON for budget/audience/creative/AB testing/campaign/audience build."""
+        """Generate strict actionable task JSON using the Nati AI persona."""
         compact_context = json.dumps(recommendation_context, default=str)
-        prompt = f"""You are an AI Campaign Manager. Generate actionable recommendations for this Meta ads account.
-Prioritize high-impact, executable actions. Include diverse types: budget, audience, creative, A/B test, campaign ideas, audience ideas.
+        prompt = f"""Analyze this Meta ads account data and generate actionable tasks.
 
-Return ONLY valid JSON with this exact shape:
+Return ONLY a valid JSON object with this exact shape (no markdown, no intro text):
 {{
-  "recommendations": [
+  "tasks": [
     {{
-      "type": "budget_optimization|audience_optimization|creative_optimization|ab_test|campaign_build|audience_build|creative_copy",
-      "entityLevel": "account|campaign|adset|ad",
-      "entityId": "string",
+      "task_id": "unique_id",
+      "type": "BUDGET_OPTIMIZATION | CREATIVE_GENERATION | AUDIENCE_TWEAK | ANOMALY",
+      "priority": "HIGH | MEDIUM | LOW",
       "title": "short actionable title",
-      "priority": "high|medium|low",
+      "reasoning": "data-driven rationale with specific numbers",
+      "metrics_snapshot": {{"spend": 0, "roas": 0, "cpa": 0, "ctr": 0, "cpm": 0, "frequency": 0}},
+      "proposed_action": {{
+        "action": "PAUSE_AD_SET | INCREASE_BUDGET | DECREASE_BUDGET | CREATE_NEW_AD | UPDATE_AUDIENCE | MANUAL_REVIEW",
+        "entity_id": "the Meta entity ID",
+        "entity_name": "human-readable name",
+        "value": "any relevant value (e.g. budget delta %, new copy text, audience spec)"
+      }},
+      "ui_display_text": "short question for the user to confirm",
       "confidence": 0.0,
       "expectedImpact": {{
         "metric": "roas|cpi|ctr|cpm|spend|conversions",
@@ -168,31 +195,23 @@ Return ONLY valid JSON with this exact shape:
         "magnitudePct": 0.0,
         "summary": "brief expected outcome"
       }},
-      "why": "1-2 sentence explanation",
-      "reasoning": "data-driven rationale",
-      "actionsDraft": ["step 1", "step 2"],
-      "executionPlan": {{
-        "action": "adjust_budget|set_status|none",
-        "targetLevel": "campaign|adset|ad|account",
-        "targetId": "string",
-        "deltaPct": 0.0,
-        "desiredStatus": "active|paused"
-      }},
       "suggestedContent": {{
-        "creativeCopy": "optional: ad copy text when type=creative_copy",
-        "campaignPlan": {{ "name": "...", "objective": "...", "targeting": "..." }} when type=campaign_build,
-        "audienceSuggestions": ["interest 1", "lookalike %"] when type=audience_build
+        "creativeCopy": "optional ad copy when type=CREATIVE_GENERATION",
+        "campaignPlan": {{"name": "...", "objective": "...", "targeting": "..."}},
+        "audienceSuggestions": ["interest 1", "lookalike %"]
       }}
     }}
   ]
 }}
 
 Rules:
-- Prioritize by impact. Include budget/creative/ab_test plus at least one campaign_build or audience_build or creative_copy when data supports it.
-- Keep to at most {max_items} recommendations.
-- For creative_copy: include suggestedContent.creativeCopy with ready-to-use ad text.
-- For campaign_build: include suggestedContent.campaignPlan with name, objective, targeting hints.
-- For audience_build: include suggestedContent.audienceSuggestions array.
+- Be aggressive. Kill underperformers fast, scale winners hard.
+- Kill Logic: >2x Target CPA with 0 conversions = PAUSE immediately.
+- Scale Logic: ROAS > 20% above target for 3+ days = INCREASE BUDGET by 20%.
+- Creative Fatigue: Frequency > 2.5 AND CTR < 0.8% = CREATIVE REFRESH.
+- Anomaly: CPM spike > 50% overnight = flag MANUAL_REVIEW.
+- Max {max_items} tasks, sorted by priority (HIGH first).
+- Every task MUST have a valid entity_id and proposed_action.
 
 Data:
 {compact_context}
@@ -274,11 +293,24 @@ Data:
                 try:
                     payload = json.loads(text[start:end + 1])
                 except Exception:
-                    payload = None
+                    pass
+
+        if isinstance(payload, list):
+            return [r for r in payload if isinstance(r, dict)][:max_items]
 
         if not isinstance(payload, dict):
+            try:
+                start = text.find("[")
+                end = text.rfind("]")
+                if start >= 0 and end > start:
+                    arr = json.loads(text[start:end + 1])
+                    if isinstance(arr, list):
+                        return [r for r in arr if isinstance(r, dict)][:max_items]
+            except Exception:
+                pass
             return []
-        recommendations = payload.get("recommendations", [])
-        if not isinstance(recommendations, list):
+
+        items = payload.get("tasks") or payload.get("recommendations") or []
+        if not isinstance(items, list):
             return []
-        return [r for r in recommendations if isinstance(r, dict)][:max_items]
+        return [r for r in items if isinstance(r, dict)][:max_items]

@@ -13,7 +13,7 @@ def run_check_alerts():
     """Run all enabled alert checks for all users and accounts."""
     db = get_db()
     engine = AlertEngine()
-    users = get_all_active_users(db)
+    users = get_all_active_users(db, managed_only=True)
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     hour = datetime.now(timezone.utc).hour
 
