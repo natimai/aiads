@@ -1,7 +1,3 @@
-# Deploy to Firebase Hosting + Firestore + Storage (Functions require Blaze plan)
-# Setup: Add FIREBASE_TOKEN secret (run: firebase login:ci)
-# Optional: Delete App Hosting backend - this project uses static Hosting, not App Hosting
-
 name: Deploy to Firebase
 
 on:
@@ -16,6 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ── Frontend Build ─────────────────────────────────────────────
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -23,19 +20,31 @@ jobs:
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install and build frontend
+      - name: Install frontend dependencies
         working-directory: frontend
-        run: |
-          npm ci
-          npm run build
-        env:
-          # Firebase config for aiads-f0675 (public). Override via repo Variables if using different project.
-          VITE_FIREBASE_API_KEY: AIzaSyDL66XmXpMe5mXngpMNsl9aVBWUtb5dzGY
-          VITE_FIREBASE_AUTH_DOMAIN: aiads-f0675.firebaseapp.com
-          VITE_FIREBASE_PROJECT_ID: aiads-f0675
-          VITE_FIREBASE_STORAGE_BUCKET: aiads-f0675.firebasestorage.app
-          VITE_FIREBASE_MESSAGING_SENDER_ID: "187388826909"
-          VITE_FIREBASE_APP_ID: 1:187388826909:web:a0589e81f4208022eefdf4
+        run: npm ci
 
-      - name: Deploy to Firebase
-        run: npx firebase-tools deploy --only hosting,firestore:rules,storage --project aiads-f0675 --non-interactive --token "${{ secrets.FIREBASE_TOKEN }}"
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+
+      # ── Firebase Deploy ────────────────────────────────────────────
+      - name: Write service account key
+        run: echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" > /tmp/sa.json
+
+      - name: Deploy Hosting + Firestore + Storage rules
+        run: |
+          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa.json
+          npx firebase-tools deploy --only hosting,firestore,storage --project aiads-f0675 --non-interactive
+
+      - name: Deploy Cloud Functions
+        run: |
+          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa.json
+          npx firebase-tools deploy --only functions --project aiads-f0675 --non-interactive
