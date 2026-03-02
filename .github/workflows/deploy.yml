@@ -44,5 +44,17 @@ jobs:
       - name: Deploy Hosting + Firestore + Storage
         run: npx firebase-tools deploy --only hosting,firestore,storage --project aiads-f0675 --non-interactive
 
+      - name: Set up Python 3.13 for Functions
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Create venv and install Python dependencies
+        working-directory: functions
+        run: |
+          python3.13 -m venv venv
+          venv/bin/pip install --upgrade pip
+          venv/bin/pip install -r requirements.txt
+
       - name: Deploy Cloud Functions
         run: npx firebase-tools deploy --only functions --project aiads-f0675 --non-interactive
