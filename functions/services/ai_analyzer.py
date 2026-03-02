@@ -1,4 +1,4 @@
-"""AI-powered campaign analysis using Google Gemini 3 Pro."""
+"""AI-powered campaign analysis using Google Gemini."""
 import os
 import json
 import logging
@@ -20,7 +20,7 @@ Guidelines:
 class AIAnalyzer:
     def __init__(self):
         self.api_key = os.environ.get("GEMINI_API_KEY", "")
-        self.model_name = os.environ.get("GEMINI_MODEL", "gemini-3.1-pro-preview")
+        self.model_name = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 
     def _get_model(self):
         import google.generativeai as genai
