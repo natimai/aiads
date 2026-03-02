@@ -162,11 +162,30 @@ export interface ProposedAction {
   value?: unknown;
 }
 
+export type BatchType = "MORNING_BRIEF" | "EVENING_CHECK" | "";
+
+export interface TasksResponse {
+  greeting: string;
+  total: number;
+  tasks: Recommendation[];
+  groups: {
+    morning: Recommendation[];
+    evening: Recommendation[];
+    other: Recommendation[];
+  };
+}
+
 export interface Recommendation {
   id: string;
   type: RecommendationType;
   status: RecommendationStatus;
   priority: RecommendationPriority;
+  batchType?: BatchType;
+  accountId?: string;
+  accountName?: string;
+  /** Pre-generated image variations from Nano Banana (Imagen 3). Present on CREATIVE_REFRESH tasks. */
+  nanoBananaImages?: string[];
+  nanoBananaGeneratedAt?: string;
   entityLevel: RecommendationEntityLevel;
   entityId: string;
   title: string;

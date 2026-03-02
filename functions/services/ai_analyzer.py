@@ -166,6 +166,102 @@ Rules: 30-125 characters ideal for primary text; hooks can be longer. Match tone
         raw = self._generate(prompt, model=self.flash_model)
         return self._parse_creative_copy_json(raw)
 
+    def generate_morning_tasks(self, recommendation_context: dict, *, max_items: int = 8) -> list[dict]:
+        """Morning Strategist: growth, scale, creative refresh, A/B testing. Uses 7-day data."""
+        compact_context = json.dumps(recommendation_context, default=str)
+        prompt = f"""You are Nati AI — Morning Strategist mode. Analyze this account's 7-day performance.
+FOCUS ONLY ON:
+1. SCALE winners: campaigns with ROAS > 20% above target for 3+ days → INCREASE_BUDGET +20%
+2. CREATIVE_REFRESH: Frequency > 2.5 AND CTR < 0.8% → recommend new creative
+3. A/B_TEST: audiences showing saturation → draft test plan with new segments
+4. Growth opportunities missed yesterday
+
+DO NOT generate budget-cut or kill recommendations (that's the Evening Guard's job).
+
+Return ONLY a valid JSON object:
+{{
+  "tasks": [
+    {{
+      "task_id": "unique_id",
+      "type": "BUDGET_OPTIMIZATION | CREATIVE_GENERATION | AUDIENCE_TWEAK",
+      "priority": "HIGH | MEDIUM",
+      "title": "short actionable title",
+      "reasoning": "data-driven rationale with specific numbers",
+      "metrics_snapshot": {{"spend": 0, "roas": 0, "cpa": 0, "ctr": 0, "cpm": 0, "frequency": 0}},
+      "proposed_action": {{
+        "action": "INCREASE_BUDGET | CREATE_NEW_AD | UPDATE_AUDIENCE",
+        "entity_id": "the Meta entity ID",
+        "entity_name": "human-readable name",
+        "value": "budget delta % or audience spec"
+      }},
+      "ui_display_text": "short question for the user to confirm",
+      "confidence": 0.0,
+      "expectedImpact": {{
+        "metric": "roas|ctr|reach",
+        "direction": "up",
+        "magnitudePct": 0.0,
+        "summary": "brief expected growth outcome"
+      }}
+    }}
+  ]
+}}
+
+Max {max_items} tasks, sorted HIGH priority first. Every task MUST have entity_id.
+
+Data:
+{compact_context}
+"""
+        raw = self._generate(prompt, model=self.pro_model)
+        return self._parse_recommendation_json(raw, max_items=max_items)
+
+    def generate_evening_tasks(self, recommendation_context: dict, *, max_items: int = 6) -> list[dict]:
+        """Evening Guard: budget pacing, bleeding ads, day-end safety. Uses today-so-far data."""
+        compact_context = json.dumps(recommendation_context, default=str)
+        prompt = f"""You are Nati AI — Evening Guard mode. Analyze TODAY's performance so far.
+FOCUS ONLY ON:
+1. BLEEDING ADS: today's CPA > 2x target with spend > $50 → PAUSE immediately (HIGH priority)
+2. BUDGET UNDER-PACE: if spend < 50% of daily budget by end of day → INCREASE_BUDGET or raise bid
+3. BUDGET OVER-SPEND: if projected to exceed daily budget → DECREASE_BUDGET
+4. ANOMALIES: CPM spike > 50% vs yesterday, or sudden CTR drop > 40%
+
+DO NOT generate long-term growth or creative recommendations (that's the Morning Strategist's job).
+
+Return ONLY a valid JSON object:
+{{
+  "tasks": [
+    {{
+      "task_id": "unique_id",
+      "type": "BUDGET_OPTIMIZATION | ANOMALY",
+      "priority": "HIGH | MEDIUM",
+      "title": "short actionable title",
+      "reasoning": "specific today's numbers vs thresholds",
+      "metrics_snapshot": {{"spend": 0, "roas": 0, "cpa": 0, "ctr": 0, "cpm": 0, "daily_budget": 0}},
+      "proposed_action": {{
+        "action": "PAUSE_AD_SET | INCREASE_BUDGET | DECREASE_BUDGET | MANUAL_REVIEW",
+        "entity_id": "the Meta entity ID",
+        "entity_name": "human-readable name",
+        "value": "budget delta % or reason"
+      }},
+      "ui_display_text": "short question for the user to confirm",
+      "confidence": 0.0,
+      "expectedImpact": {{
+        "metric": "cpa|spend|roas",
+        "direction": "down",
+        "magnitudePct": 0.0,
+        "summary": "brief safety outcome"
+      }}
+    }}
+  ]
+}}
+
+Max {max_items} tasks. HIGH priority items first. Every task MUST have entity_id.
+
+Data:
+{compact_context}
+"""
+        raw = self._generate(prompt, model=self.flash_model)
+        return self._parse_recommendation_json(raw, max_items=max_items)
+
     def generate_recommendations(self, recommendation_context: dict, *, max_items: int = 16) -> list[dict]:
         """Generate strict actionable task JSON using the Nati AI persona."""
         compact_context = json.dumps(recommendation_context, default=str)

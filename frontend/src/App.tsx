@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState, useEffect } from "react";
-import { Routes, Route, useLocation } from "react-router-dom";
+import { Routes, Route, useLocation, NavLink } from "react-router-dom";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { auth } from "./services/firebase";
 import { Sidebar } from "./components/common/Sidebar";
@@ -7,7 +7,7 @@ import { AccountSwitcher } from "./components/common/AccountSwitcher";
 import { DateRangePicker } from "./components/common/DateRangePicker";
 import { useAccountsQuery } from "./hooks/useAccounts";
 import { useKeyboardShortcuts, SHORTCUTS } from "./hooks/useKeyboardShortcuts";
-import { RefreshCw, Keyboard, X, Menu } from "lucide-react";
+import { Keyboard, X, Menu } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 const Login = lazy(() => import("./pages/Login"));
@@ -84,37 +84,78 @@ function AuthenticatedApp() {
 
       <Sidebar mobileOpen={sidebarOpen} onMobileClose={() => setSidebarOpen(false)} />
 
-      <main className="lg:ml-64 flex-1 min-w-0">
-        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-slate-200 bg-white/95 px-4 shadow-sm backdrop-blur-sm">
-          <div className="flex items-center gap-3">
+      <main className="lg:ml-20 flex-1 min-w-0">
+        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200/60 bg-white/80 px-5 shadow-sm backdrop-blur-md">
+          {/* Left: hamburger (mobile) + search */}
+          <div className="flex items-center gap-4">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="lg:hidden rounded border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors"
+              className="lg:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors"
             >
               <Menu className="h-4 w-4" />
             </button>
-            <AccountSwitcher />
+            {/* Search bar */}
+            <div className="relative hidden md:block">
+              <span
+                className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 leading-none select-none"
+                style={{ fontSize: "18px" }}
+              >
+                search
+              </span>
+              <input
+                type="search"
+                placeholder="Search campaigns, accounts…"
+                className="h-9 w-64 rounded-xl border border-slate-200 bg-slate-50/80 pl-9 pr-4 text-sm placeholder:text-slate-400 text-slate-700 focus:border-indigo-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
+              />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+
+          {/* Right: account switcher + date picker + actions */}
+          <div className="flex items-center gap-2.5">
+            <AccountSwitcher />
             <DateRangePicker />
+
+            {/* Keyboard shortcuts — desktop only */}
             <button
               onClick={() => setShowHelp(true)}
-              className="rounded border border-slate-200 px-2 py-1.5 text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
+              className="hidden lg:flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-50"
               title="Keyboard shortcuts (?)"
             >
-              <Keyboard className="h-3.5 w-3.5" />
+              <Keyboard className="h-4 w-4" />
             </button>
+
+            {/* Notifications bell with red badge */}
+            <button
+              className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-50"
+              title="Notifications"
+            >
+              <span
+                className="material-symbols-outlined leading-none select-none"
+                style={{ fontSize: "20px" }}
+              >
+                notifications
+              </span>
+              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />
+            </button>
+
+            {/* Refresh */}
             <button
               onClick={handleRefresh}
-              className="rounded border border-slate-200 px-2 py-1.5 text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
+              className="hidden sm:flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-50"
               title="Refresh all data (R)"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+              <span
+                className={`material-symbols-outlined leading-none select-none ${refreshing ? "animate-spin" : ""}`}
+                style={{ fontSize: "20px" }}
+              >
+                sync
+              </span>
             </button>
           </div>
         </header>
 
-        <div className="p-5">
+        {/* Page content — extra bottom padding on mobile for bottom nav */}
+        <div className="p-5 pb-24 lg:pb-5">
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
@@ -131,6 +172,43 @@ function AuthenticatedApp() {
           </Suspense>
         </div>
       </main>
+
+      {/* ── Mobile bottom navigation bar (hidden on desktop) ──────── */}
+      <nav className="fixed bottom-0 inset-x-0 z-30 lg:hidden flex justify-around items-start border-t border-slate-100 bg-white/95 pt-3 pb-8 px-2 shadow-[0_-1px_8px_0_rgba(0,0,0,0.06)] backdrop-blur-sm">
+        {[
+          { to: "/", icon: "dashboard", label: "Home" },
+          { to: "/campaigns", icon: "campaign", label: "Campaigns" },
+          { to: "/alerts", icon: "notifications", label: "Alerts" },
+          { to: "/ai-insights", icon: "psychology", label: "Insights" },
+          { to: "/settings", icon: "settings", label: "Settings" },
+        ].map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === "/"}
+            className={({ isActive }) =>
+              `flex w-14 flex-col items-center gap-1 rounded-xl py-1.5 transition-colors ${
+                isActive ? "text-primary" : "text-slate-400 hover:text-slate-600"
+              }`
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <span
+                  className="material-symbols-outlined leading-none select-none"
+                  style={{
+                    fontSize: "24px",
+                    fontVariationSettings: `'FILL' ${isActive ? 1 : 0}, 'wght' 400, 'GRAD' 0, 'opsz' 24`,
+                  }}
+                >
+                  {item.icon}
+                </span>
+                <span className="text-[10px] font-medium">{item.label}</span>
+              </>
+            )}
+          </NavLink>
+        ))}
+      </nav>
 
       {showHelp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowHelp(false)}>

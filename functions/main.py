@@ -67,6 +67,11 @@ def api(req: https_fn.Request) -> https_fn.Response:
         body, status, headers = handle_sync(req)
         return https_fn.Response(body, status=status, headers=headers)
 
+    if path.startswith("/api/tasks"):
+        from api.tasks import handle_tasks
+        body, status, headers = handle_tasks(req)
+        return https_fn.Response(body, status=status, headers=headers)
+
     return https_fn.Response('{"error": "Not found"}', status=404, headers={"Content-Type": "application/json"})
 
 
@@ -147,6 +152,28 @@ def scheduled_generate_recommendations(event: scheduler_fn.ScheduledEvent) -> No
     """Every 4 hours: generate fresh AI recommendations for active accounts."""
     from scheduled.generate_recommendations import run_generate_recommendations
     run_generate_recommendations()
+
+
+@scheduler_fn.on_schedule(
+    schedule="0 7 * * *",
+    memory=options.MemoryOption.MB_512,
+    timeout_sec=540,
+)
+def scheduled_morning_strategist(event: scheduler_fn.ScheduledEvent) -> None:
+    """Daily at 07:00 AM: Morning Strategist — growth, creative refresh, A/B testing."""
+    from scheduled.morning_strategist import run_morning_strategist
+    run_morning_strategist()
+
+
+@scheduler_fn.on_schedule(
+    schedule="0 18 * * *",
+    memory=options.MemoryOption.MB_512,
+    timeout_sec=540,
+)
+def scheduled_evening_guard(event: scheduler_fn.ScheduledEvent) -> None:
+    """Daily at 18:00 PM: Evening Guard — budget pacing, bleeding ads, day-end safety."""
+    from scheduled.evening_guard import run_evening_guard
+    run_evening_guard()
 
 
 @scheduler_fn.on_schedule(

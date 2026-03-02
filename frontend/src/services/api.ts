@@ -15,6 +15,7 @@ import type {
   RecommendationType,
   Report,
   ReportConfig,
+  TasksResponse,
 } from "../types";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
@@ -326,6 +327,19 @@ export async function saveReportConfig(config: Partial<ReportConfig>): Promise<s
     body: JSON.stringify(config),
   });
   return data.id;
+}
+
+// ---------- Task Inbox ----------
+
+export async function getTasks(params?: {
+  status?: string;
+  limit?: number;
+}): Promise<TasksResponse> {
+  const search = new URLSearchParams();
+  if (params?.status) search.set("status", params.status);
+  if (params?.limit) search.set("limit", String(params.limit));
+  const qs = search.toString();
+  return apiFetch<TasksResponse>(`/api/tasks${qs ? `?${qs}` : ""}`);
 }
 
 // ---------- Sync ----------

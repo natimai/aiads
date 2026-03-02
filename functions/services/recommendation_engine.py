@@ -59,6 +59,7 @@ class RecommendationEngine:
         date_to: str,
         *,
         max_items: int = 12,
+        batch_type: str = "",
     ) -> dict[str, Any]:
         features = self.feature_builder.build(user_id, account_id, date_from, date_to)
         guardrail_error = self._validate_data_readiness(features)
@@ -66,24 +67,28 @@ class RecommendationEngine:
             return {"recommendations": [], "meta": {"guardrailBlocked": True, "reason": guardrail_error}}
 
         scored_campaigns = self.scoring.score_campaigns(features.get("campaigns", []))
-        recommendations = self.ai.generate_recommendations(
-            {
-                "account": {
-                    "id": features.get("accountId"),
-                    "name": features.get("accountName"),
-                    "currency": features.get("currency"),
-                    "kpiSummary": features.get("kpiSummary", {}),
-                    "dateRange": features.get("dateRange", {}),
-                },
-                "campaigns": features.get("campaigns", []),
-                "breakdowns": features.get("breakdowns", []),
-                "scores": scored_campaigns,
+        context = {
+            "account": {
+                "id": features.get("accountId"),
+                "name": features.get("accountName"),
+                "currency": features.get("currency"),
+                "kpiSummary": features.get("kpiSummary", {}),
+                "dateRange": features.get("dateRange", {}),
             },
-            max_items=max_items,
-        )
+            "campaigns": features.get("campaigns", []),
+            "breakdowns": features.get("breakdowns", []),
+            "scores": scored_campaigns,
+        }
+
+        if batch_type == "MORNING_BRIEF":
+            recommendations = self.ai.generate_morning_tasks(context, max_items=max_items)
+        elif batch_type == "EVENING_CHECK":
+            recommendations = self.ai.generate_evening_tasks(context, max_items=max_items)
+        else:
+            recommendations = self.ai.generate_recommendations(context, max_items=max_items)
 
         now = datetime.now(timezone.utc)
-        normalized = [self._normalize_recommendation(rec, now) for rec in recommendations]
+        normalized = [self._normalize_recommendation(rec, now, batch_type=batch_type) for rec in recommendations]
         deduped = self._dedup(normalized)
         return {
             "recommendations": deduped,
@@ -91,6 +96,7 @@ class RecommendationEngine:
                 "guardrailBlocked": False,
                 "generatedAt": now.isoformat(),
                 "campaignsAnalyzed": len(features.get("campaigns", [])),
+                "batchType": batch_type,
             },
         }
 
@@ -114,7 +120,7 @@ class RecommendationEngine:
         return None
 
     @staticmethod
-    def _normalize_recommendation(rec: dict[str, Any], now: datetime) -> dict[str, Any]:
+    def _normalize_recommendation(rec: dict[str, Any], now: datetime, *, batch_type: str = "") -> dict[str, Any]:
         raw_type = str(rec.get("type", "budget_optimization")).strip()
         rec_type = AI_TYPE_MAP.get(raw_type.upper(), raw_type.lower())
         if rec_type not in RECOMMENDATION_TYPES:
@@ -203,6 +209,7 @@ class RecommendationEngine:
             "expiresAt": now + timedelta(hours=12),
             "review": {},
             "source": "nati_ai",
+            "batchType": batch_type,
         }
 
     @staticmethod
