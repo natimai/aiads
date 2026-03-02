@@ -2,7 +2,7 @@
   "name": "adsai",
   "private": true,
   "scripts": {
-    "build": "cd frontend && npm run build",
+    "build": "cd frontend && npm ci && npm run build",
     "deploy": "npm run build && firebase deploy"
   }
 }
