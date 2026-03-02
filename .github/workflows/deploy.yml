@@ -43,7 +43,7 @@ jobs:
         working-directory: functions
         run: pip install -r requirements.txt
 
-      - name: Deploy to Firebase
+      - name: Deploy to Firebase Hosting (static site)
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
@@ -51,8 +51,10 @@ jobs:
           channelId: live
           projectId: ${{ secrets.FIREBASE_PROJECT_ID }}
 
-      - name: Deploy Functions
-        run: npx firebase-tools deploy --only functions --project ${{ secrets.FIREBASE_PROJECT_ID }} --token ${{ secrets.FIREBASE_TOKEN }}
-
       - name: Deploy Firestore Rules
         run: npx firebase-tools deploy --only firestore:rules --project ${{ secrets.FIREBASE_PROJECT_ID }} --token ${{ secrets.FIREBASE_TOKEN }}
+        continue-on-error: true
+
+      - name: Deploy Functions
+        run: npx firebase-tools deploy --only functions --project ${{ secrets.FIREBASE_PROJECT_ID }} --token ${{ secrets.FIREBASE_TOKEN }}
+        continue-on-error: true
