@@ -12,6 +12,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ── Google Auth (ADC) ──────────────────────────────────────────
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
       # ── Frontend Build ─────────────────────────────────────────────
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -36,15 +41,8 @@ jobs:
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
 
       # ── Firebase Deploy ────────────────────────────────────────────
-      - name: Write service account key
-        run: echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" > /tmp/sa.json
-
-      - name: Deploy Hosting + Firestore + Storage rules
-        run: |
-          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa.json
-          npx firebase-tools deploy --only hosting,firestore,storage --project aiads-f0675 --non-interactive
+      - name: Deploy Hosting + Firestore + Storage
+        run: npx firebase-tools deploy --only hosting,firestore,storage --project aiads-f0675 --non-interactive
 
       - name: Deploy Cloud Functions
-        run: |
-          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa.json
-          npx firebase-tools deploy --only functions --project aiads-f0675 --non-interactive
+        run: npx firebase-tools deploy --only functions --project aiads-f0675 --non-interactive
