@@ -1,51 +1,127 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  Loader2,
+  Pencil,
+  RefreshCw,
+  Rocket,
+  Sparkles,
+  WandSparkles,
+} from "lucide-react";
 import {
   useCampaignDraft,
   useCreateCampaignDraft,
-  usePreflightCampaignDraft,
   usePublishCampaignDraft,
   useRegenerateCampaignBlock,
+  useUpdateCampaignBlock,
 } from "../hooks/useCampaignBuilder";
-import type { CampaignBuilderInputs } from "../types";
 import { useAccounts } from "../contexts/AccountContext";
+import type { DraftBlockType } from "../types";
 
-const DEFAULT_INPUTS: CampaignBuilderInputs = {
-  objective: "OUTCOME_SALES",
-  offer: "",
-  country: "US",
-  language: "he",
-  dailyBudget: 100,
+type Step = 1 | 2 | 3;
+
+type BriefForm = {
+  objective: "lead" | "sales";
+  offerProduct: string;
+  targetGeo: string;
+  budget: number;
+  language: string;
+  campaignName: string;
+  pageId: string;
+  destinationUrl: string;
+};
+
+const DEFAULT_BRIEF: BriefForm = {
+  objective: "sales",
+  offerProduct: "",
+  targetGeo: "US",
+  budget: 100,
+  language: "en",
   campaignName: "",
   pageId: "",
   destinationUrl: "",
-  brandVoice: "",
+};
+
+type StrategyForm = {
+  name: string;
+  objective: string;
+  dailyBudget: number;
+  reasoning: string;
+};
+
+type AudienceForm = {
+  countriesCsv: string;
+  ageMin: number;
+  ageMax: number;
+  interestsText: string;
+  strategyNote: string;
+};
+
+type CreativeForm = {
+  primaryTexts: string;
+  headlines: string;
+  hooks: string;
 };
 
 export default function CampaignBuilder() {
+  const navigate = useNavigate();
   const { setSelectedAccountId } = useAccounts();
   const [searchParams, setSearchParams] = useSearchParams();
   const draftIdFromQuery = searchParams.get("draftId") ?? undefined;
   const accountIdFromQuery = searchParams.get("accountId") ?? undefined;
 
-  const [inputs, setInputs] = useState<CampaignBuilderInputs>(DEFAULT_INPUTS);
+  const [step, setStep] = useState<Step>(draftIdFromQuery ? 2 : 1);
+  const [brief, setBrief] = useState<BriefForm>(DEFAULT_BRIEF);
   const [activeDraftId, setActiveDraftId] = useState<string | undefined>(draftIdFromQuery);
-  const [instructions, setInstructions] = useState<Record<string, string>>({});
-  const [confirmHighBudget, setConfirmHighBudget] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [publishSuccess, setPublishSuccess] = useState("");
+
+  const [editing, setEditing] = useState<Record<"strategy" | "audience" | "creative", boolean>>({
+    strategy: false,
+    audience: false,
+    creative: false,
+  });
+  const [regenOpen, setRegenOpen] = useState<Record<"strategy" | "audience" | "creative", boolean>>({
+    strategy: false,
+    audience: false,
+    creative: false,
+  });
+  const [regenPrompt, setRegenPrompt] = useState<Record<"strategy" | "audience" | "creative", string>>({
+    strategy: "",
+    audience: "",
+    creative: "",
+  });
+  const [regeneratingBlock, setRegeneratingBlock] = useState<DraftBlockType | null>(null);
+
+  const [strategyForm, setStrategyForm] = useState<StrategyForm>({
+    name: "",
+    objective: "OUTCOME_SALES",
+    dailyBudget: 0,
+    reasoning: "",
+  });
+  const [audienceForm, setAudienceForm] = useState<AudienceForm>({
+    countriesCsv: "",
+    ageMin: 21,
+    ageMax: 55,
+    interestsText: "",
+    strategyNote: "",
+  });
+  const [creativeForm, setCreativeForm] = useState<CreativeForm>({
+    primaryTexts: "",
+    headlines: "",
+    hooks: "",
+  });
 
   const createMutation = useCreateCampaignDraft(accountIdFromQuery);
-  const regenMutation = useRegenerateCampaignBlock(accountIdFromQuery);
-  const preflightMutation = usePreflightCampaignDraft(accountIdFromQuery);
+  const regenerateMutation = useRegenerateCampaignBlock(accountIdFromQuery);
+  const updateBlockMutation = useUpdateCampaignBlock(accountIdFromQuery);
   const publishMutation = usePublishCampaignDraft(accountIdFromQuery);
 
   const draftQuery = useCampaignDraft(activeDraftId, accountIdFromQuery);
   const draft = draftQuery.data;
-
-  useEffect(() => {
-    if (draftIdFromQuery && draftIdFromQuery !== activeDraftId) {
-      setActiveDraftId(draftIdFromQuery);
-    }
-  }, [draftIdFromQuery, activeDraftId]);
 
   useEffect(() => {
     if (accountIdFromQuery) {
@@ -54,200 +130,823 @@ export default function CampaignBuilder() {
   }, [accountIdFromQuery, setSelectedAccountId]);
 
   useEffect(() => {
-    if (draft?.inputs) {
-      setInputs({ ...DEFAULT_INPUTS, ...draft.inputs });
-    }
-  }, [draft?.inputs]);
+    if (!draftIdFromQuery) return;
+    setActiveDraftId(draftIdFromQuery);
+    setStep(2);
+  }, [draftIdFromQuery]);
 
-  const safety = useMemo(() => {
-    return preflightMutation.data ?? draft?.safety;
-  }, [preflightMutation.data, draft?.safety]);
+  useEffect(() => {
+    if (!draft) return;
+    const cp = draft.blocks?.campaignPlan;
+    const ap = draft.blocks?.audiencePlan;
+    const cr = draft.blocks?.creativePlan;
+    const reason = draft.blocks?.reasoning ?? "";
+
+    setStrategyForm({
+      name: cp?.name ?? "",
+      objective: cp?.objective ?? "OUTCOME_SALES",
+      dailyBudget: Number(cp?.dailyBudget ?? 0),
+      reasoning: reason,
+    });
+    setAudienceForm({
+      countriesCsv: (ap?.geo?.countries ?? []).join(", "),
+      ageMin: Number(ap?.ageRange?.min ?? 21),
+      ageMax: Number(ap?.ageRange?.max ?? 55),
+      interestsText: (ap?.interests ?? []).join(", "),
+      strategyNote: (ap?.lookalikeHints ?? []).join(", "),
+    });
+    setCreativeForm({
+      primaryTexts: (cr?.primaryTexts ?? []).join("\n\n"),
+      headlines: (cr?.headlines ?? []).join("\n"),
+      hooks: (cr?.angles ?? []).join("\n"),
+    });
+  }, [draft]);
+
+  const publishValidation = useMemo(() => {
+    const errors: string[] = [];
+    if (!draft) return { valid: false, errors: ["Generate a draft first."] };
+    const budget = Number(draft.blocks?.campaignPlan?.dailyBudget ?? 0);
+    const primaryTexts = draft.blocks?.creativePlan?.primaryTexts ?? [];
+    const headlines = draft.blocks?.creativePlan?.headlines ?? [];
+    if (budget <= 0) errors.push("Daily budget must be greater than 0.");
+    if (!primaryTexts.length || primaryTexts.every((t) => !String(t).trim())) {
+      errors.push("At least one primary text is required.");
+    }
+    if (!headlines.length || headlines.every((t) => !String(t).trim())) {
+      errors.push("At least one headline is required.");
+    }
+    return { valid: errors.length === 0, errors };
+  }, [draft]);
 
   const busy =
     createMutation.isPending ||
-    draftQuery.isLoading ||
-    regenMutation.isPending ||
-    preflightMutation.isPending ||
-    publishMutation.isPending;
-  const blockedByErrors = (safety?.errors?.length ?? 0) > 0;
-  const blockedByBudget = Boolean(safety?.requiresExplicitConfirm && !confirmHighBudget);
+    regenerateMutation.isPending ||
+    updateBlockMutation.isPending ||
+    publishMutation.isPending ||
+    draftQuery.isLoading;
 
-  const handleCreateDraft = async () => {
-    const res = await createMutation.mutateAsync(inputs);
-    setActiveDraftId(res.draftId);
-    const next: Record<string, string> = { draftId: res.draftId };
-    if (accountIdFromQuery) {
-      next.accountId = accountIdFromQuery;
+  const handleGenerateDraft = async () => {
+    setErrorMessage("");
+    setPublishSuccess("");
+    if (!brief.offerProduct.trim()) {
+      setErrorMessage("Product / offer description is required.");
+      return;
     }
-    setSearchParams(next);
-    setConfirmHighBudget(false);
+    if (brief.budget <= 0) {
+      setErrorMessage("Daily budget must be greater than 0.");
+      return;
+    }
+    try {
+      const result = await createMutation.mutateAsync({
+        objective: brief.objective,
+        offerProduct: brief.offerProduct,
+        targetGeo: brief.targetGeo,
+        budget: brief.budget,
+        language: brief.language,
+        campaignName: brief.campaignName,
+        pageId: brief.pageId,
+        destinationUrl: brief.destinationUrl,
+      });
+      setActiveDraftId(result.draftId);
+      const nextParams: Record<string, string> = { draftId: result.draftId };
+      if (accountIdFromQuery) nextParams.accountId = accountIdFromQuery;
+      setSearchParams(nextParams);
+      setStep(2);
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : "Failed to generate draft");
+    }
   };
 
-  const regenerate = async (blockType: "campaignPlan" | "audiencePlan" | "creativePlan" | "reasoning") => {
+  const handleRegenerate = async (
+    section: "strategy" | "audience" | "creative",
+    blockType: DraftBlockType
+  ) => {
     if (!activeDraftId) return;
-    await regenMutation.mutateAsync({
-      draftId: activeDraftId,
-      blockType,
-      instruction: instructions[blockType] ?? "",
-    });
+    setErrorMessage("");
+    try {
+      setRegeneratingBlock(blockType);
+      await regenerateMutation.mutateAsync({
+        draftId: activeDraftId,
+        blockType,
+        userInstructions: regenPrompt[section],
+      });
+      setRegenOpen((prev) => ({ ...prev, [section]: false }));
+      setRegenPrompt((prev) => ({ ...prev, [section]: "" }));
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : "Regeneration failed");
+    } finally {
+      setRegeneratingBlock(null);
+    }
   };
 
-  const runPreflight = async () => {
+  const handleSaveStrategy = async () => {
     if (!activeDraftId) return;
-    await preflightMutation.mutateAsync(activeDraftId);
+    setErrorMessage("");
+    try {
+      await updateBlockMutation.mutateAsync({
+        draftId: activeDraftId,
+        blockType: "campaignPlan",
+        value: {
+          name: strategyForm.name,
+          objective: strategyForm.objective,
+          dailyBudget: Number(strategyForm.dailyBudget || 0),
+        },
+      });
+      await updateBlockMutation.mutateAsync({
+        draftId: activeDraftId,
+        blockType: "reasoning",
+        value: strategyForm.reasoning,
+      });
+      setEditing((prev) => ({ ...prev, strategy: false }));
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : "Failed saving strategy block");
+    }
   };
 
-  const publish = async () => {
+  const handleSaveAudience = async () => {
     if (!activeDraftId) return;
-    await publishMutation.mutateAsync({ draftId: activeDraftId, confirmHighBudget });
+    setErrorMessage("");
+    const countries = audienceForm.countriesCsv
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+    const interests = audienceForm.interestsText
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+    const lookalikeHints = audienceForm.strategyNote
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+    try {
+      await updateBlockMutation.mutateAsync({
+        draftId: activeDraftId,
+        blockType: "AUDIENCE",
+        value: {
+          geo: { countries: countries.length ? countries : ["US"] },
+          ageRange: {
+            min: Number(audienceForm.ageMin || 21),
+            max: Number(audienceForm.ageMax || 55),
+          },
+          interests,
+          lookalikeHints,
+        },
+      });
+      setEditing((prev) => ({ ...prev, audience: false }));
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : "Failed saving audience block");
+    }
   };
 
-  const error =
-    (createMutation.error as Error | null)?.message ||
-    (draftQuery.error as Error | null)?.message ||
-    (regenMutation.error as Error | null)?.message ||
-    (preflightMutation.error as Error | null)?.message ||
-    (publishMutation.error as Error | null)?.message ||
-    "";
+  const handleSaveCreative = async () => {
+    if (!activeDraftId) return;
+    setErrorMessage("");
+    const primaryTexts = creativeForm.primaryTexts
+      .split("\n")
+      .map((x) => x.trim())
+      .filter(Boolean);
+    const headlines = creativeForm.headlines
+      .split("\n")
+      .map((x) => x.trim())
+      .filter(Boolean);
+    const angles = creativeForm.hooks
+      .split("\n")
+      .map((x) => x.trim())
+      .filter(Boolean);
+    try {
+      await updateBlockMutation.mutateAsync({
+        draftId: activeDraftId,
+        blockType: "CREATIVE",
+        value: {
+          primaryTexts,
+          headlines,
+          angles,
+        },
+      });
+      setEditing((prev) => ({ ...prev, creative: false }));
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : "Failed saving creative block");
+    }
+  };
+
+  const handlePublish = async () => {
+    if (!activeDraftId || !publishValidation.valid) return;
+    setErrorMessage("");
+    setPublishSuccess("");
+    try {
+      const result = await publishMutation.mutateAsync({
+        draftId: activeDraftId,
+      });
+      setPublishSuccess(`Published campaign ${result.campaignId} successfully.`);
+      navigate("/", {
+        state: {
+          toast: {
+            type: "success",
+            message: "Campaign draft published to Meta Ads successfully.",
+          },
+        },
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Publish failed";
+      if (msg.includes("Budget exceeds safety limits")) {
+        setErrorMessage("Budget exceeds safety limits. Please edit the budget block.");
+      } else {
+        setErrorMessage(msg);
+      }
+    }
+  };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-slate-900">AI Campaign Builder</h2>
-        <p className="text-sm text-slate-500">
-          Build campaign drafts from account data, regenerate by block, then publish with safety checks.
-        </p>
-      </div>
-
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-        <h3 className="text-sm font-semibold text-slate-800">Step 1: Inputs</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Input label="Campaign Name" value={inputs.campaignName} onChange={(v) => setInputs((s) => ({ ...s, campaignName: v }))} />
-          <Input label="Objective" value={inputs.objective} onChange={(v) => setInputs((s) => ({ ...s, objective: v }))} />
-          <Input label="Offer" value={inputs.offer} onChange={(v) => setInputs((s) => ({ ...s, offer: v }))} />
-          <Input label="Country" value={inputs.country} onChange={(v) => setInputs((s) => ({ ...s, country: v }))} />
-          <Input label="Language" value={inputs.language} onChange={(v) => setInputs((s) => ({ ...s, language: v }))} />
-          <Input
-            label="Daily Budget"
-            value={String(inputs.dailyBudget)}
-            onChange={(v) => setInputs((s) => ({ ...s, dailyBudget: Number(v) || 0 }))}
-          />
-          <Input label="Meta Page ID (optional)" value={inputs.pageId ?? ""} onChange={(v) => setInputs((s) => ({ ...s, pageId: v }))} />
-          <Input label="Destination URL (optional)" value={inputs.destinationUrl ?? ""} onChange={(v) => setInputs((s) => ({ ...s, destinationUrl: v }))} />
+    <div className="space-y-6 pb-28 md:pb-6">
+      <header className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div>
+            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-indigo-600">
+              <WandSparkles className="h-3.5 w-3.5" />
+              AI Campaign Builder
+            </p>
+            <h1 className="mt-1 text-xl font-bold text-slate-900">Create Campaign</h1>
+            <p className="text-sm text-slate-500">
+              Generate, iterate, and publish a full campaign draft in three guided steps.
+            </p>
+          </div>
+          <StepTracker step={step} />
         </div>
+      </header>
 
-        <button
-          onClick={handleCreateDraft}
-          disabled={busy}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-        >
-          {createMutation.isPending ? "Generating..." : "Generate Draft"}
-        </button>
-      </div>
+      {step === 1 && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <h2 className="text-sm font-semibold text-slate-800">Step 1: The Brief</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Define the campaign objective and core offer so Gemini can produce a launch-ready draft.
+          </p>
 
-      {draft && (
-        <>
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-            <h3 className="text-sm font-semibold text-slate-800">Step 2: Draft Blocks</h3>
-            <BlockCard
-              title="Campaign Plan"
-              content={JSON.stringify(draft.blocks.campaignPlan, null, 2)}
-              instruction={instructions.campaignPlan ?? ""}
-              onInstruction={(v) => setInstructions((s) => ({ ...s, campaignPlan: v }))}
-              onRegenerate={() => regenerate("campaignPlan")}
-              loading={regenMutation.isPending}
-            />
-            <BlockCard
-              title="Audience Plan"
-              content={JSON.stringify(draft.blocks.audiencePlan, null, 2)}
-              instruction={instructions.audiencePlan ?? ""}
-              onInstruction={(v) => setInstructions((s) => ({ ...s, audiencePlan: v }))}
-              onRegenerate={() => regenerate("audiencePlan")}
-              loading={regenMutation.isPending}
-            />
-            <BlockCard
-              title="Creative Plan"
-              content={JSON.stringify(draft.blocks.creativePlan, null, 2)}
-              instruction={instructions.creativePlan ?? ""}
-              onInstruction={(v) => setInstructions((s) => ({ ...s, creativePlan: v }))}
-              onRegenerate={() => regenerate("creativePlan")}
-              loading={regenMutation.isPending}
-            />
-            <BlockCard
-              title="Reasoning"
-              content={draft.blocks.reasoning}
-              instruction={instructions.reasoning ?? ""}
-              onInstruction={(v) => setInstructions((s) => ({ ...s, reasoning: v }))}
-              onRegenerate={() => regenerate("reasoning")}
-              loading={regenMutation.isPending}
-            />
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-            <h3 className="text-sm font-semibold text-slate-800">Step 3: Safety & Publish</h3>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={runPreflight}
-                disabled={busy}
-                className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-slate-700">Campaign Objective</span>
+              <select
+                value={brief.objective}
+                onChange={(e) => setBrief((prev) => ({ ...prev, objective: e.target.value as "lead" | "sales" }))}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800"
               >
-                {preflightMutation.isPending ? "Running preflight..." : "Run Preflight"}
-              </button>
-              <span className="text-xs text-slate-500">Status: {safety?.safetyStatus ?? "not-run"}</span>
-            </div>
+                <option value="lead">Lead</option>
+                <option value="sales">Sales</option>
+              </select>
+            </label>
 
-            {safety?.budgetCheck?.isOver10x && (
-              <div className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-700">
-                Budget warning: proposed {safety.budgetCheck.proposedDailyBudget} is above 10x average ({safety.budgetCheck.avgDailyBudget}).
-                <label className="mt-2 flex items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={confirmHighBudget}
-                    onChange={(e) => setConfirmHighBudget(e.target.checked)}
-                  />
-                  I explicitly confirm this high budget.
-                </label>
-              </div>
-            )}
-
-            {draft.validation.errors.length > 0 && (
-              <ul className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 space-y-1">
-                {draft.validation.errors.map((e, i) => (
-                  <li key={i}>• {e}</li>
-                ))}
-              </ul>
-            )}
-            {(safety?.warnings?.length ?? 0) > 0 && (
-              <ul className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700 space-y-1">
-                {safety?.warnings?.map((w, i) => (
-                  <li key={i}>• {w}</li>
-                ))}
-              </ul>
-            )}
-
-            <button
-              onClick={publish}
-              disabled={
-                busy ||
-                !activeDraftId ||
-                blockedByErrors ||
-                blockedByBudget
-              }
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-            >
-              {publishMutation.isPending ? "Publishing..." : "Publish Draft"}
-            </button>
-
-            {publishMutation.data && (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">
-                Published successfully. Campaign: {publishMutation.data.campaignId}, Watch card: {publishMutation.data.watchCardId}
-              </div>
-            )}
+            <Input
+              label="Target Geo"
+              value={brief.targetGeo}
+              onChange={(value) => setBrief((prev) => ({ ...prev, targetGeo: value }))}
+            />
+            <Input
+              label="Product / Offer Description"
+              value={brief.offerProduct}
+              onChange={(value) => setBrief((prev) => ({ ...prev, offerProduct: value }))}
+            />
+            <Input
+              label="Language"
+              value={brief.language}
+              onChange={(value) => setBrief((prev) => ({ ...prev, language: value }))}
+            />
+            <Input
+              label="Daily Budget"
+              type="number"
+              value={String(brief.budget)}
+              onChange={(value) => setBrief((prev) => ({ ...prev, budget: Number(value || 0) }))}
+            />
+            <Input
+              label="Campaign Name (optional)"
+              value={brief.campaignName}
+              onChange={(value) => setBrief((prev) => ({ ...prev, campaignName: value }))}
+            />
           </div>
-        </>
+
+          <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <summary className="cursor-pointer text-sm font-medium text-slate-700">
+              Advanced Publish Fields (optional)
+            </summary>
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Input
+                label="Meta Page ID"
+                value={brief.pageId}
+                onChange={(value) => setBrief((prev) => ({ ...prev, pageId: value }))}
+              />
+              <Input
+                label="Destination URL"
+                value={brief.destinationUrl}
+                onChange={(value) => setBrief((prev) => ({ ...prev, destinationUrl: value }))}
+              />
+            </div>
+          </details>
+
+          <button
+            onClick={handleGenerateDraft}
+            disabled={busy}
+            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-indigo-700 hover:to-violet-700 disabled:opacity-50 sm:w-auto"
+          >
+            {createMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Gemini is crafting your draft...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4" />
+                Generate AI Draft
+              </>
+            )}
+          </button>
+        </section>
       )}
 
-      {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
+      {step === 2 && draft && (
+        <section className="space-y-4 pb-24 md:pb-0">
+          <h2 className="text-sm font-semibold text-slate-800">Step 2: Block Editor</h2>
+
+          <BlockCard
+            title="Strategy & Setup"
+            loading={regeneratingBlock === "STRATEGY" && regenerateMutation.isPending}
+            onEdit={() => setEditing((prev) => ({ ...prev, strategy: !prev.strategy }))}
+            onRegenerate={() => setRegenOpen((prev) => ({ ...prev, strategy: !prev.strategy }))}
+          >
+            <RegeneratePrompt
+              open={regenOpen.strategy}
+              value={regenPrompt.strategy}
+              onChange={(value) => setRegenPrompt((prev) => ({ ...prev, strategy: value }))}
+              onSubmit={() => handleRegenerate("strategy", "STRATEGY")}
+              busy={regenerateMutation.isPending}
+            />
+
+            {editing.strategy ? (
+              <div className="space-y-3">
+                <Input
+                  label="Campaign Name"
+                  value={strategyForm.name}
+                  onChange={(value) => setStrategyForm((prev) => ({ ...prev, name: value }))}
+                />
+                <Input
+                  label="Objective"
+                  value={strategyForm.objective}
+                  onChange={(value) => setStrategyForm((prev) => ({ ...prev, objective: value }))}
+                />
+                <Input
+                  label="Daily Budget"
+                  type="number"
+                  value={String(strategyForm.dailyBudget)}
+                  onChange={(value) =>
+                    setStrategyForm((prev) => ({ ...prev, dailyBudget: Number(value || 0) }))
+                  }
+                />
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-slate-700">Strategy Note</span>
+                  <textarea
+                    rows={3}
+                    value={strategyForm.reasoning}
+                    onChange={(e) =>
+                      setStrategyForm((prev) => ({ ...prev, reasoning: e.target.value }))
+                    }
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800"
+                  />
+                </label>
+                <button
+                  onClick={handleSaveStrategy}
+                  disabled={busy}
+                  className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  Save Strategy
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2 text-sm text-slate-700">
+                <p>
+                  <span className="font-semibold">Campaign:</span> {draft.blocks.campaignPlan.name}
+                </p>
+                <p>
+                  <span className="font-semibold">Objective:</span> {draft.blocks.campaignPlan.objective}
+                </p>
+                <p>
+                  <span className="font-semibold">Daily Budget:</span> ${draft.blocks.campaignPlan.dailyBudget}
+                </p>
+                <p className="rounded-lg bg-slate-50 p-2 text-slate-600">{draft.blocks.reasoning}</p>
+              </div>
+            )}
+          </BlockCard>
+
+          <BlockCard
+            title="Audience"
+            loading={regeneratingBlock === "AUDIENCE" && regenerateMutation.isPending}
+            onEdit={() => setEditing((prev) => ({ ...prev, audience: !prev.audience }))}
+            onRegenerate={() => setRegenOpen((prev) => ({ ...prev, audience: !prev.audience }))}
+          >
+            <RegeneratePrompt
+              open={regenOpen.audience}
+              value={regenPrompt.audience}
+              onChange={(value) => setRegenPrompt((prev) => ({ ...prev, audience: value }))}
+              onSubmit={() => handleRegenerate("audience", "AUDIENCE")}
+              busy={regenerateMutation.isPending}
+            />
+
+            {editing.audience ? (
+              <div className="space-y-3">
+                <Input
+                  label="Geo (comma separated countries)"
+                  value={audienceForm.countriesCsv}
+                  onChange={(value) => setAudienceForm((prev) => ({ ...prev, countriesCsv: value }))}
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    label="Age Min"
+                    type="number"
+                    value={String(audienceForm.ageMin)}
+                    onChange={(value) => setAudienceForm((prev) => ({ ...prev, ageMin: Number(value || 21) }))}
+                  />
+                  <Input
+                    label="Age Max"
+                    type="number"
+                    value={String(audienceForm.ageMax)}
+                    onChange={(value) => setAudienceForm((prev) => ({ ...prev, ageMax: Number(value || 55) }))}
+                  />
+                </div>
+                <Input
+                  label="Interests (comma separated)"
+                  value={audienceForm.interestsText}
+                  onChange={(value) => setAudienceForm((prev) => ({ ...prev, interestsText: value }))}
+                />
+                <Input
+                  label="Strategy Note / Lookalikes"
+                  value={audienceForm.strategyNote}
+                  onChange={(value) => setAudienceForm((prev) => ({ ...prev, strategyNote: value }))}
+                />
+                <button
+                  onClick={handleSaveAudience}
+                  disabled={busy}
+                  className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  Save Audience
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2 text-sm text-slate-700">
+                <p>
+                  <span className="font-semibold">Geo:</span>{" "}
+                  {(draft.blocks.audiencePlan.geo?.countries ?? []).join(", ")}
+                </p>
+                <p>
+                  <span className="font-semibold">Age:</span>{" "}
+                  {draft.blocks.audiencePlan.ageRange?.min}-{draft.blocks.audiencePlan.ageRange?.max}
+                </p>
+                <p>
+                  <span className="font-semibold">Interests:</span>{" "}
+                  {(draft.blocks.audiencePlan.interests ?? []).join(", ")}
+                </p>
+                <p className="rounded-lg bg-slate-50 p-2 text-slate-600">
+                  {(draft.blocks.audiencePlan.lookalikeHints ?? []).join(", ")}
+                </p>
+              </div>
+            )}
+          </BlockCard>
+
+          <BlockCard
+            title="Creative"
+            loading={regeneratingBlock === "CREATIVE" && regenerateMutation.isPending}
+            onEdit={() => setEditing((prev) => ({ ...prev, creative: !prev.creative }))}
+            onRegenerate={() => setRegenOpen((prev) => ({ ...prev, creative: !prev.creative }))}
+          >
+            <RegeneratePrompt
+              open={regenOpen.creative}
+              value={regenPrompt.creative}
+              onChange={(value) => setRegenPrompt((prev) => ({ ...prev, creative: value }))}
+              onSubmit={() => handleRegenerate("creative", "CREATIVE")}
+              busy={regenerateMutation.isPending}
+            />
+
+            {editing.creative ? (
+              <div className="space-y-3">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-slate-700">
+                    Primary Texts (one per line)
+                  </span>
+                  <textarea
+                    rows={5}
+                    value={creativeForm.primaryTexts}
+                    onChange={(e) =>
+                      setCreativeForm((prev) => ({ ...prev, primaryTexts: e.target.value }))
+                    }
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-slate-700">
+                    Headlines (one per line)
+                  </span>
+                  <textarea
+                    rows={3}
+                    value={creativeForm.headlines}
+                    onChange={(e) =>
+                      setCreativeForm((prev) => ({ ...prev, headlines: e.target.value }))
+                    }
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-slate-700">
+                    Hooks (one per line)
+                  </span>
+                  <textarea
+                    rows={3}
+                    value={creativeForm.hooks}
+                    onChange={(e) =>
+                      setCreativeForm((prev) => ({ ...prev, hooks: e.target.value }))
+                    }
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800"
+                  />
+                </label>
+                <button
+                  onClick={handleSaveCreative}
+                  disabled={busy}
+                  className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  Save Creative
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2 text-sm text-slate-700">
+                <div>
+                  <p className="mb-1 font-semibold">Primary Text Variations</p>
+                  <ul className="list-disc space-y-1 pl-5">
+                    {(draft.blocks.creativePlan.primaryTexts ?? []).map((text, idx) => (
+                      <li key={idx}>{text}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <p className="mb-1 font-semibold">Headlines</p>
+                  <ul className="list-disc space-y-1 pl-5">
+                    {(draft.blocks.creativePlan.headlines ?? []).map((text, idx) => (
+                      <li key={idx}>{text}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+          </BlockCard>
+
+          <div className="hidden items-center justify-between md:flex">
+            <button
+              onClick={() => setStep(1)}
+              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Brief
+            </button>
+            <button
+              onClick={() => setStep(3)}
+              className="inline-flex items-center gap-1 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+            >
+              Review & Publish
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="fixed inset-x-3 bottom-20 z-30 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur md:hidden">
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => setStep(1)}
+                className="inline-flex w-full items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Brief
+              </button>
+              <button
+                onClick={() => setStep(3)}
+                className="inline-flex w-full items-center justify-center gap-1 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+              >
+                Review & Publish
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {step === 3 && draft && (
+        <section className="space-y-4 pb-24 md:pb-0">
+          <h2 className="text-sm font-semibold text-slate-800">Step 3: Review & Publish</h2>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="space-y-3 text-sm text-slate-700">
+              <p>
+                <span className="font-semibold">Campaign:</span> {draft.blocks.campaignPlan.name}
+              </p>
+              <p>
+                <span className="font-semibold">Objective:</span> {draft.blocks.campaignPlan.objective}
+              </p>
+              <p>
+                <span className="font-semibold">Budget:</span> ${draft.blocks.campaignPlan.dailyBudget}/day
+              </p>
+              <p>
+                <span className="font-semibold">Geo:</span>{" "}
+                {(draft.blocks.audiencePlan.geo?.countries ?? []).join(", ")}
+              </p>
+              <p>
+                <span className="font-semibold">Creative Texts:</span>{" "}
+                {(draft.blocks.creativePlan.primaryTexts ?? []).length} variations
+              </p>
+            </div>
+          </div>
+
+          {!publishValidation.valid && (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+              <p className="font-semibold">Fix these before publishing:</p>
+              <ul className="mt-1 list-disc pl-5">
+                {publishValidation.errors.map((err, idx) => (
+                  <li key={idx}>{err}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="hidden items-center justify-between md:flex">
+            <button
+              onClick={() => setStep(2)}
+              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Editor
+            </button>
+            <button
+              onClick={handlePublish}
+              disabled={busy || !publishValidation.valid}
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {publishMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Publishing...
+                </>
+              ) : (
+                <>
+                  <Rocket className="h-4 w-4" />
+                  Publish to Meta Ads
+                </>
+              )}
+            </button>
+          </div>
+
+          <div className="fixed inset-x-3 bottom-20 z-30 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur md:hidden">
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => setStep(2)}
+                className="inline-flex w-full items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Editor
+              </button>
+              <button
+                onClick={handlePublish}
+                disabled={busy || !publishValidation.valid}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {publishMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Publishing...
+                  </>
+                ) : (
+                  <>
+                    <Rocket className="h-4 w-4" />
+                    Publish to Meta Ads
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {publishSuccess && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4" />
+            {publishSuccess}
+          </div>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          {errorMessage}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StepTracker({ step }: { step: Step }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <StepPill active={step === 1} label="1. Brief" />
+      <StepPill active={step === 2} label="2. Blocks" />
+      <StepPill active={step === 3} label="3. Publish" />
+    </div>
+  );
+}
+
+function StepPill({ active, label }: { active: boolean; label: string }) {
+  return (
+    <span
+      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+        active ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-500"
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function BlockCard({
+  title,
+  loading,
+  onRegenerate,
+  onEdit,
+  children,
+}: {
+  title: string;
+  loading: boolean;
+  onRegenerate: () => void;
+  onEdit: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={onRegenerate}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Regenerate
+          </button>
+          <button
+            onClick={onEdit}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Edit
+          </button>
+        </div>
+      </div>
+      {loading ? <BlockSkeleton /> : children}
+    </div>
+  );
+}
+
+function BlockSkeleton() {
+  return (
+    <div className="space-y-2">
+      <div className="h-3 w-2/5 animate-pulse rounded bg-slate-200" />
+      <div className="h-3 w-full animate-pulse rounded bg-slate-200" />
+      <div className="h-3 w-4/5 animate-pulse rounded bg-slate-200" />
+      <div className="h-3 w-3/5 animate-pulse rounded bg-slate-200" />
+    </div>
+  );
+}
+
+function RegeneratePrompt({
+  open,
+  value,
+  onChange,
+  onSubmit,
+  busy,
+}: {
+  open: boolean;
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+  busy: boolean;
+}) {
+  if (!open) return null;
+  return (
+    <div className="mb-3 rounded-xl border border-indigo-200 bg-indigo-50 p-3">
+      <label className="block text-xs font-medium text-indigo-700">
+        Any specific instructions for the AI?
+      </label>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Example: Make it funnier and add stronger urgency"
+        className="mt-1 w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm text-slate-700"
+      />
+      <button
+        onClick={onSubmit}
+        disabled={busy}
+        className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 sm:w-auto"
+      >
+        {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <WandSparkles className="h-3.5 w-3.5" />}
+        Regenerate Block
+      </button>
     </div>
   );
 }
@@ -256,57 +955,22 @@ function Input({
   label,
   value,
   onChange,
+  type = "text",
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  type?: "text" | "number";
 }) {
   return (
     <label className="block">
       <span className="mb-1 block text-xs font-medium text-slate-700">{label}</span>
       <input
         value={value}
+        type={type}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800"
       />
     </label>
-  );
-}
-
-function BlockCard({
-  title,
-  content,
-  instruction,
-  onInstruction,
-  onRegenerate,
-  loading,
-}: {
-  title: string;
-  content: string;
-  instruction: string;
-  onInstruction: (value: string) => void;
-  onRegenerate: () => void;
-  loading: boolean;
-}) {
-  return (
-    <div className="rounded-lg border border-slate-200 p-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-slate-800">{title}</p>
-        <button
-          onClick={onRegenerate}
-          disabled={loading}
-          className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-        >
-          {loading ? "Regenerating..." : "Regenerate"}
-        </button>
-      </div>
-      <pre className="whitespace-pre-wrap rounded-md bg-slate-50 p-2 text-xs text-slate-700">{content}</pre>
-      <input
-        value={instruction}
-        onChange={(e) => onInstruction(e.target.value)}
-        placeholder="Optional instruction for this block"
-        className="w-full rounded-md border border-slate-200 px-3 py-2 text-xs text-slate-700"
-      />
-    </div>
   );
 }

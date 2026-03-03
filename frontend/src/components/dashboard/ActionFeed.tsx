@@ -79,7 +79,13 @@ function getVariant(rec: Recommendation): CardVariant {
     return "scale";
 
   if (rec.type === "creative_optimization" || rec.type === "creative_copy") return "creative";
-  if (rec.type === "audience_optimization" || rec.type === "audience_build") return "audience";
+  if (
+    rec.type === "audience_optimization" ||
+    rec.type === "audience_build" ||
+    rec.type === "audience_discovery" ||
+    rec.type === "targeting_optimization"
+  )
+    return "audience";
   if (rec.type === "ab_test") return "ab_test";
   return "generic";
 }
@@ -301,7 +307,12 @@ function TaskCard({
         hasChanges = true;
       }
     }
-    if (rec.type === "audience_optimization" || rec.type === "audience_build") {
+    if (
+      rec.type === "audience_optimization" ||
+      rec.type === "audience_build" ||
+      rec.type === "audience_discovery" ||
+      rec.type === "targeting_optimization"
+    ) {
       const original = (rec.suggestedContent?.audienceSuggestions ?? []).join(", ");
       if (editAudience !== original) {
         mods.audienceSuggestions = editAudience
@@ -368,13 +379,19 @@ function TaskCard({
   }
 
   const approveBtnLabel =
-    variant === "kill"
+    variant === "ab_test"
+      ? "Approve Test"
+      : variant === "kill"
       ? "Pause Campaign"
       : canExecute
       ? "Approve & Execute"
       : "Approve";
-  const isGhostDraft = rec.batchType === "GHOST_DRAFT" && Boolean(rec.metadata?.draftId);
-  const isLaunchWatch = rec.batchType === "LAUNCH_WATCH";
+  const isGhostDraft =
+    Boolean(rec.metadata?.draftId) &&
+    (rec.type === "ghost_draft" ||
+      rec.batchType === "GHOST_DRAFT" ||
+      rec.batchType === "PROACTIVE_DRAFT");
+  const isLaunchWatch = rec.type === "monitor_launch" || rec.batchType === "LAUNCH_WATCH";
 
   return (
     <div
@@ -430,10 +447,10 @@ function TaskCard({
           </div>
 
           {/* Title + description */}
-          <h3 className="text-[15px] font-semibold leading-snug text-slate-900">
+          <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug text-slate-900">
             {rec.title}
           </h3>
-          <p className="mt-0.5 text-sm leading-relaxed text-slate-600">
+          <p className="mt-0.5 line-clamp-2 text-sm leading-relaxed text-slate-600">
             {rec.uiDisplayText || rec.why || rec.reasoning}
           </p>
 
@@ -595,7 +612,10 @@ function TaskCard({
                 </label>
               )}
 
-              {(rec.type === "audience_optimization" || rec.type === "audience_build") && (
+              {(rec.type === "audience_optimization" ||
+                rec.type === "audience_build" ||
+                rec.type === "audience_discovery" ||
+                rec.type === "targeting_optimization") && (
                 <label className="block">
                   <span className="text-xs font-medium text-slate-700">
                     Audience (comma-separated)
@@ -631,13 +651,13 @@ function TaskCard({
 
       {/* ── Footer action buttons ─────────────────────────────── */}
       {rec.status === "pending" && !editing && (
-        <div className="flex items-center gap-2 border-t border-slate-100 px-4 py-3">
+        <div className="flex flex-col items-stretch gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row sm:items-center">
           {isGhostDraft && rec.metadata?.draftId && (
             <Link
               to={`/campaign-builder?draftId=${encodeURIComponent(rec.metadata.draftId)}${rec.accountId ? `&accountId=${encodeURIComponent(rec.accountId)}` : ""}`}
-              className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+              className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-center text-sm font-medium text-indigo-700 hover:bg-indigo-100"
             >
-              Open Draft
+              {rec.uiDisplayText || "Review AI Draft"}
             </Link>
           )}
           {/* Dismiss */}
@@ -664,7 +684,7 @@ function TaskCard({
           <button
             onClick={handleApprove}
             disabled={busy || cardStatus === "processing"}
-            className={`ml-auto flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold shadow-sm transition-colors disabled:opacity-50 ${styles.approveBtn}`}
+            className={`flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold shadow-sm transition-colors disabled:opacity-50 sm:ml-auto ${styles.approveBtn}`}
           >
             {cardStatus === "processing" ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -704,6 +724,226 @@ function TaskCard({
           <span className="flex items-center gap-1.5 text-xs text-slate-400">
             <XCircle className="h-3.5 w-3.5" /> Dismissed
           </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ABTestCard({
+  rec,
+  busy,
+  onApprove,
+  onApproveAndExecute,
+  onReject,
+}: {
+  rec: Recommendation;
+  busy: boolean;
+  onApprove: (id: string, modifications?: RecommendationModifications) => Promise<void>;
+  onApproveAndExecute: (id: string, modifications?: RecommendationModifications) => Promise<void>;
+  onReject: (id: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [cardStatus, setCardStatus] = useState<CardStatus>("idle");
+
+  const setup = rec.suggestedContent?.testSetup;
+  const control = rec.suggestedContent?.abTest?.control;
+  const variant = rec.suggestedContent?.abTest?.variant;
+
+  const defaultBudget = Number(
+    rec.executionPlan?.recommendedTestBudget ?? setup?.recommendedTestBudget ?? 50
+  );
+  const variantSettings = (rec.executionPlan?.variantSettings ??
+    setup?.variantSettings ??
+    {}) as Record<string, unknown>;
+  const initialCustom = Array.isArray(variantSettings.custom_audiences)
+    ? (variantSettings.custom_audiences as unknown[]).map((x) => String(x)).join(", ")
+    : "lookalike_purchase_3pct";
+  const initialInterests = Array.isArray(variantSettings.interests)
+    ? (variantSettings.interests as unknown[]).map((x) => String(x)).join(", ")
+    : "";
+
+  const [budget, setBudget] = useState(defaultBudget);
+  const [customAudiences, setCustomAudiences] = useState(initialCustom);
+  const [interests, setInterests] = useState(initialInterests);
+
+  const buildModifications = (): RecommendationModifications => {
+    const parsedCustom = customAudiences
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const parsedInterests = interests
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const nextVariantSettings = {
+      ...variantSettings,
+      custom_audiences: parsedCustom,
+      interests: parsedInterests,
+    };
+    return {
+      recommendedTestBudget: budget,
+      variantSettings: nextVariantSettings,
+      testSetup: {
+        ...(setup ?? {}),
+        recommendedTestBudget: budget,
+        variantSettings: nextVariantSettings,
+      },
+    };
+  };
+
+  const handleApprove = async () => {
+    setCardStatus("processing");
+    setErrorMsg("");
+    try {
+      const modifications = buildModifications();
+      if (rec.executionPlan?.action && rec.executionPlan.action !== "none") {
+        await onApproveAndExecute(rec.id, modifications);
+      } else {
+        await onApprove(rec.id, modifications);
+      }
+      setCardStatus("success");
+    } catch (err: unknown) {
+      setCardStatus("error");
+      setErrorMsg(err instanceof Error ? err.message : "A/B test execution failed");
+    }
+  };
+
+  const handleReject = () => {
+    setCardStatus("processing");
+    onReject(rec.id);
+    setCardStatus("success");
+  };
+
+  if (cardStatus === "success") {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-4 opacity-50 transition-all duration-500">
+        <div className="flex items-center gap-2 text-sm text-slate-500">
+          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+          <span className="line-through">{rec.title}</span>
+          <span className="ml-auto text-xs">Done</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`rounded-xl border border-slate-200 border-l-4 border-l-amber-500 bg-white shadow-sm ${
+        cardStatus === "processing" ? "pointer-events-none opacity-50" : ""
+      }`}
+    >
+      <div className="p-4">
+        <div className="mb-2 flex items-center gap-2">
+          <span className="rounded-md border border-amber-200 bg-amber-100 px-2 py-0.5 text-[10px] font-bold tracking-wider text-amber-700">
+            A/B TEST
+          </span>
+          <span className="rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+            {rec.priority.toUpperCase()}
+          </span>
+          <span className="ml-auto text-[11px] text-slate-400">
+            {Math.round(rec.confidence * 100)}% confidence
+          </span>
+        </div>
+        <h3 className="line-clamp-2 text-[15px] font-semibold text-slate-900">{rec.title}</h3>
+        <p className="mt-1 line-clamp-2 text-sm text-slate-600">{rec.uiDisplayText || rec.reasoning}</p>
+
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              Control (Current)
+            </p>
+            <p className="mt-1 text-sm text-slate-700">
+              {String(control?.name ?? control?.targeting ?? setup?.controlAdsetId ?? "Current audience")}
+            </p>
+            {setup?.controlAdsetId && (
+              <p className="mt-1 text-xs text-slate-500">AdSet ID: {setup.controlAdsetId}</p>
+            )}
+          </div>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600">
+              Variant (AI Proposal)
+            </p>
+            <p className="mt-1 text-sm text-amber-900">
+              {String(variant?.targeting ?? "3% Purchase Lookalike")}
+            </p>
+            <p className="mt-1 text-xs text-amber-700">
+              Budget: ${Number.isFinite(budget) ? budget : defaultBudget}/day
+            </p>
+          </div>
+        </div>
+
+        {editing && (
+          <div className="mt-3 space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <label className="block text-xs font-medium text-slate-700">
+              Test budget (USD/day)
+              <input
+                type="number"
+                min={1}
+                value={budget}
+                onChange={(e) => setBudget(Math.max(1, Number(e.target.value || 1)))}
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="block text-xs font-medium text-slate-700">
+              Variant custom audiences (comma-separated)
+              <input
+                type="text"
+                value={customAudiences}
+                onChange={(e) => setCustomAudiences(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="block text-xs font-medium text-slate-700">
+              Variant interests (comma-separated, empty to isolate lookalike)
+              <input
+                type="text"
+                value={interests}
+                onChange={(e) => setInterests(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+              />
+            </label>
+          </div>
+        )}
+
+        {errorMsg && (
+          <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+            {errorMsg}
+          </div>
+        )}
+      </div>
+
+      {rec.status === "pending" && (
+        <div className="flex flex-col items-stretch gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row sm:items-center">
+          <button
+            onClick={handleReject}
+            disabled={busy || cardStatus === "processing"}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+          >
+            <XCircle className="h-3.5 w-3.5" />
+            Dismiss
+          </button>
+          <button
+            onClick={() => setEditing((v) => !v)}
+            disabled={busy || cardStatus === "processing"}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Edit Parameters
+          </button>
+          <button
+            onClick={handleApprove}
+            disabled={busy || cardStatus === "processing"}
+            className="flex items-center justify-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 sm:ml-auto"
+          >
+            {cardStatus === "processing" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4" />
+            )}
+            Approve Test
+          </button>
         </div>
       )}
     </div>
@@ -757,6 +997,27 @@ export function ActionFeed({
     return rank[a.priority] - rank[b.priority];
   });
 
+  const renderCard = (rec: Recommendation) =>
+    rec.type === "ab_test" ? (
+      <ABTestCard
+        key={rec.id}
+        rec={rec}
+        busy={busy}
+        onApprove={onApprove}
+        onApproveAndExecute={onApproveAndExecute}
+        onReject={onReject}
+      />
+    ) : (
+      <TaskCard
+        key={rec.id}
+        rec={rec}
+        busy={busy}
+        onApprove={onApprove}
+        onApproveAndExecute={onApproveAndExecute}
+        onReject={onReject}
+      />
+    );
+
   if (loading) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-10 text-center shadow-sm">
@@ -808,16 +1069,7 @@ export function ActionFeed({
                 msIcon="wb_sunny"
                 color="text-amber-600"
               />
-              {morningTasks.map((rec) => (
-                <TaskCard
-                  key={rec.id}
-                  rec={rec}
-                  busy={busy}
-                  onApprove={onApprove}
-                  onApproveAndExecute={onApproveAndExecute}
-                  onReject={onReject}
-                />
-              ))}
+              {morningTasks.map((rec) => renderCard(rec))}
             </div>
           )}
 
@@ -829,46 +1081,19 @@ export function ActionFeed({
                 msIcon="shield"
                 color="text-slate-500"
               />
-              {eveningTasks.map((rec) => (
-                <TaskCard
-                  key={rec.id}
-                  rec={rec}
-                  busy={busy}
-                  onApprove={onApprove}
-                  onApproveAndExecute={onApproveAndExecute}
-                  onReject={onReject}
-                />
-              ))}
+              {eveningTasks.map((rec) => renderCard(rec))}
             </div>
           )}
 
           {otherTasks.length > 0 && (
             <div className="space-y-3">
-              {otherTasks.map((rec) => (
-                <TaskCard
-                  key={rec.id}
-                  rec={rec}
-                  busy={busy}
-                  onApprove={onApprove}
-                  onApproveAndExecute={onApproveAndExecute}
-                  onReject={onReject}
-                />
-              ))}
+              {otherTasks.map((rec) => renderCard(rec))}
             </div>
           )}
         </>
       ) : (
         /* Flat view */
-        sorted.map((rec) => (
-          <TaskCard
-            key={rec.id}
-            rec={rec}
-            busy={busy}
-            onApprove={onApprove}
-            onApproveAndExecute={onApproveAndExecute}
-            onReject={onReject}
-          />
-        ))
+        sorted.map((rec) => renderCard(rec))
       )}
 
       {/* Recently completed */}

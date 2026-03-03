@@ -26,6 +26,46 @@ class RecommendationEngineTest(unittest.TestCase):
         self.assertEqual(rec["type"], "budget_optimization")
         self.assertTrue(hasattr(rec["createdAt"], "isoformat"))
 
+    def test_normalize_ab_test_task_builds_clone_execution_plan(self):
+        now = datetime.now(timezone.utc)
+        rec = RecommendationEngine._normalize_recommendation(
+            {
+                "type": "AB_TEST_AUDIENCE",
+                "entityLevel": "adset",
+                "proposed_action": {
+                    "action": "BUILD_AB_TEST_AUDIENCE",
+                    "entity_id": "adset-1",
+                },
+                "test_setup": {
+                    "control_adset_id": "adset-1",
+                    "variable_to_change": "targeting",
+                    "variant_settings": {"custom_audiences": ["lookalike_purchase_3pct"], "interests": []},
+                    "recommended_test_budget": 50,
+                },
+            },
+            now,
+        )
+        self.assertEqual(rec["type"], "ab_test")
+        self.assertEqual(rec["executionPlan"]["action"], "clone_adset_ab_test")
+        self.assertEqual(rec["executionPlan"]["targetId"], "adset-1")
+        self.assertIn("testSetup", rec["suggestedContent"])
+
+    def test_reactive_breakdown_injects_targeting_optimization(self):
+        engine = RecommendationEngine(db=MagicMock())
+        features = {
+            "campaigns": [{"id": "cmp-1", "aggregates": {}, "insights": []}],
+            "breakdownSummary": {
+                "age": [
+                    {"age": "25-34", "campaignId": "cmp-1", "spend": 60, "purchases": 4},
+                    {"age": "18-24", "campaignId": "cmp-1", "spend": 40, "purchases": 1},
+                ],
+                "gender": [],
+                "placement": [],
+            },
+        }
+        injected = engine._inject_reactive_tasks(features)
+        self.assertTrue(any(task.get("type") == "TARGETING_OPTIMIZATION" for task in injected))
+
 
 if __name__ == "__main__":
     unittest.main()

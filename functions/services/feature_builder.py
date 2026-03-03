@@ -26,10 +26,13 @@ class FeatureBuilder:
         for campaign_doc in base_ref.collection("campaigns").stream():
             campaign_data = {"id": campaign_doc.id, **(campaign_doc.to_dict() or {})}
             insights = self._load_campaign_insights(campaign_doc.reference, date_from, date_to)
+            adsets = self._load_campaign_adsets(campaign_doc.reference)
             campaign_data["insights"] = insights
             campaign_data["aggregates"] = self._aggregate_insights(insights)
+            campaign_data["adsets"] = adsets
             campaigns.append(campaign_data)
 
+        breakdowns = self._load_breakdowns(base_ref, date_from)
         return {
             "userId": user_id,
             "accountId": account_id,
@@ -39,7 +42,8 @@ class FeatureBuilder:
             "kpiUpdatedAt": self._serialize_ts(account_data.get("kpiUpdatedAt")),
             "dateRange": {"from": date_from, "to": date_to},
             "campaigns": campaigns,
-            "breakdowns": self._load_breakdowns(base_ref, date_from),
+            "breakdowns": breakdowns,
+            "breakdownSummary": self._summarize_breakdowns(breakdowns),
             "generatedAt": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -61,6 +65,15 @@ class FeatureBuilder:
                 payload[key] = self._serialize_ts(value)
             insights.append(payload)
         return insights
+
+    def _load_campaign_adsets(self, campaign_ref) -> list[dict[str, Any]]:
+        adsets: list[dict[str, Any]] = []
+        for adset_doc in campaign_ref.collection("adsets").stream():
+            payload = {"id": adset_doc.id, **(adset_doc.to_dict() or {})}
+            for key, value in list(payload.items()):
+                payload[key] = self._serialize_ts(value)
+            adsets.append(payload)
+        return adsets
 
     def _load_breakdowns(self, base_ref, date_from: str) -> list[dict[str, Any]]:
         """Load latest breakdown snapshots for coarse audience context."""
@@ -92,6 +105,8 @@ class FeatureBuilder:
                 "roas": 0.0,
                 "ctr": 0.0,
                 "cpi": 0.0,
+                "cpa": 0.0,
+                "cpm": 0.0,
                 "frequency": 0.0,
                 "daysWithData": 0,
             }
@@ -106,11 +121,37 @@ class FeatureBuilder:
             "frequency": sum(float(x.get("frequency", 0) or 0) for x in insights),
             "daysWithData": len(insights),
         }
+        non_zero_cpa = [float(x.get("cpa", 0) or 0) for x in insights if float(x.get("cpa", 0) or 0) > 0]
         totals["roas"] = round(totals["purchaseValue"] / totals["spend"], 4) if totals["spend"] > 0 else 0.0
         totals["ctr"] = round((totals["clicks"] / totals["impressions"]) * 100, 4) if totals["impressions"] > 0 else 0.0
         totals["cpi"] = round(totals["spend"] / totals["installs"], 4) if totals["installs"] > 0 else 0.0
+        totals["cpa"] = round(totals["spend"] / totals["purchases"], 4) if totals["purchases"] > 0 else (
+            round(sum(non_zero_cpa) / len(non_zero_cpa), 4) if non_zero_cpa else 0.0
+        )
+        totals["cpm"] = round((totals["spend"] / totals["impressions"]) * 1000, 4) if totals["impressions"] > 0 else 0.0
         totals["frequency"] = round(totals["frequency"] / totals["daysWithData"], 4) if totals["daysWithData"] > 0 else 0.0
         return totals
+
+    @staticmethod
+    def _summarize_breakdowns(breakdowns: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+        """Build compact breakdown summary for faster deterministic recommendation logic."""
+        summary: dict[str, list[dict[str, Any]]] = {"age": [], "gender": [], "placement": []}
+        for doc in breakdowns:
+            data = doc.get("data") if isinstance(doc, dict) else []
+            if not isinstance(data, list):
+                continue
+            for row in data[:500]:
+                if not isinstance(row, dict):
+                    continue
+                if row.get("age"):
+                    summary["age"].append(row)
+                if row.get("gender"):
+                    summary["gender"].append(row)
+                if row.get("platform_position"):
+                    summary["placement"].append(row)
+        for key in summary:
+            summary[key] = summary[key][:200]
+        return summary
 
     @staticmethod
     def _serialize_ts(value: Any) -> Any:

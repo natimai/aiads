@@ -5,9 +5,10 @@ import {
   preflightCampaignDraft,
   publishCampaignDraft,
   regenerateCampaignDraftBlock,
+  updateCampaignDraftBlock,
 } from "../services/api";
 import { useAccounts } from "../contexts/AccountContext";
-import type { CampaignBuilderInputs } from "../types";
+import type { DraftBlockType } from "../types";
 
 export function useCampaignDraft(draftId?: string, accountIdOverride?: string) {
   const { selectedAccountId, accounts } = useAccounts();
@@ -27,9 +28,28 @@ export function useCreateCampaignDraft(accountIdOverride?: string) {
   const accountId = accountIdOverride ?? selectedAccountId ?? accounts[0]?.id;
 
   return useMutation({
-    mutationFn: async (inputs: CampaignBuilderInputs) => {
+    mutationFn: async (payload: {
+      objective: "lead" | "sales" | string;
+      offerProduct: string;
+      targetGeo: string;
+      budget: number;
+      language: string;
+      campaignName?: string;
+      pageId?: string;
+      destinationUrl?: string;
+    }) => {
       if (!accountId) throw new Error("No account selected");
-      return createCampaignDraft(accountId, inputs);
+      return createCampaignDraft({
+        accountId,
+        objective: payload.objective,
+        offerProduct: payload.offerProduct,
+        targetGeo: payload.targetGeo,
+        budget: payload.budget,
+        language: payload.language,
+        campaignName: payload.campaignName,
+        pageId: payload.pageId,
+        destinationUrl: payload.destinationUrl,
+      });
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["campaignDraft", accountId, data.draftId] });
@@ -46,16 +66,37 @@ export function useRegenerateCampaignBlock(accountIdOverride?: string) {
   return useMutation({
     mutationFn: async (payload: {
       draftId: string;
-      blockType: "campaignPlan" | "audiencePlan" | "creativePlan" | "reasoning";
-      instruction?: string;
+      blockType: DraftBlockType;
+      userInstructions?: string;
     }) => {
       if (!accountId) throw new Error("No account selected");
       return regenerateCampaignDraftBlock(
         accountId,
         payload.draftId,
         payload.blockType,
-        payload.instruction
+        payload.userInstructions
       );
+    },
+    onSuccess: (draft) => {
+      queryClient.setQueryData(["campaignDraft", accountId, draft.id], draft);
+      queryClient.invalidateQueries({ queryKey: ["campaignDraft", accountId, draft.id] });
+    },
+  });
+}
+
+export function useUpdateCampaignBlock(accountIdOverride?: string) {
+  const queryClient = useQueryClient();
+  const { selectedAccountId, accounts } = useAccounts();
+  const accountId = accountIdOverride ?? selectedAccountId ?? accounts[0]?.id;
+
+  return useMutation({
+    mutationFn: async (payload: {
+      draftId: string;
+      blockType: DraftBlockType;
+      value: Record<string, unknown> | string;
+    }) => {
+      if (!accountId) throw new Error("No account selected");
+      return updateCampaignDraftBlock(accountId, payload.draftId, payload.blockType, payload.value);
     },
     onSuccess: (draft) => {
       queryClient.setQueryData(["campaignDraft", accountId, draft.id], draft);

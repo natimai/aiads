@@ -79,6 +79,16 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
           </div>
         </div>
 
+        <div className="flex items-center justify-center border-b border-slate-800 py-3">
+          <NavLink
+            to="/campaign-builder"
+            className="group relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/30 to-teal-500/20 text-emerald-300 ring-1 ring-emerald-500/30 transition-all hover:from-emerald-500/40 hover:to-teal-500/30"
+          >
+            <MSIcon name="add_circle" size={22} filled />
+            <Tooltip label="Create Campaign" />
+          </NavLink>
+        </div>
+
         {/* Primary nav */}
         <nav className="flex flex-1 flex-col items-center gap-1 py-4">
           {navItems.map((item) => (
@@ -156,6 +166,16 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
               <X className="h-4 w-4" />
             </button>
           )}
+        </div>
+
+        <div className="border-b border-slate-800 px-3 py-3">
+          <NavLink
+            to="/campaign-builder"
+            className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-3 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-emerald-600 hover:to-teal-600"
+          >
+            <MSIcon name="add_circle" size={18} filled className="text-white" />
+            Create Campaign
+          </NavLink>
         </div>
 
         {/* Nav (mobile) */}

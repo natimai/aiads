@@ -228,6 +228,13 @@ def _review_recommendation(request, user_id: str, recommendation_id: str, status
             new_plan["deltaPct"] = round(delta, 2)
         if "desiredStatus" in modifications and modifications["desiredStatus"] in ("active", "paused"):
             new_plan["desiredStatus"] = modifications["desiredStatus"]
+        if "recommendedTestBudget" in modifications:
+            try:
+                new_plan["recommendedTestBudget"] = max(1, int(float(modifications["recommendedTestBudget"])))
+            except (TypeError, ValueError):
+                pass
+        if "variantSettings" in modifications and isinstance(modifications["variantSettings"], dict):
+            new_plan["variantSettings"] = modifications["variantSettings"]
         review_data["executionPlan"] = new_plan
 
         new_content = dict(original_content)
@@ -235,6 +242,8 @@ def _review_recommendation(request, user_id: str, recommendation_id: str, status
             new_content["creativeCopy"] = str(modifications["creativeCopy"])[:2000]
         if "audienceSuggestions" in modifications and isinstance(modifications["audienceSuggestions"], list):
             new_content["audienceSuggestions"] = [str(s)[:200] for s in modifications["audienceSuggestions"][:10]]
+        if "testSetup" in modifications and isinstance(modifications["testSetup"], dict):
+            new_content["testSetup"] = modifications["testSetup"]
         review_data["suggestedContent"] = new_content
 
     rec_ref.update(review_data)

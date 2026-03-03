@@ -77,6 +77,7 @@ def _do_sync(db, user_id: str, account_id: str) -> dict:
     now = datetime.now(timezone.utc)
     today = now.strftime("%Y-%m-%d")
     start_date = (now - timedelta(days=90)).strftime("%Y-%m-%d")
+    breakdown_start = (now - timedelta(days=6)).strftime("%Y-%m-%d")
 
     base_ref = (
         db.collection("users")
@@ -96,6 +97,32 @@ def _do_sync(db, user_id: str, account_id: str) -> dict:
         campaign_map[meta_id] = c.get("name", "")
         c["lastSynced"] = now
         batch.set(base_ref.collection("campaigns").document(meta_id), c, merge=True)
+        count += 1
+        if count >= 450:
+            batch.commit()
+            batch = db.batch()
+            count = 0
+    if count > 0:
+        batch.commit()
+
+    adsets = api.get_adsets()
+    batch = db.batch()
+    count = 0
+    adset_count = 0
+    for adset in adsets:
+        adset_id = adset.get("metaAdsetId")
+        campaign_id = adset.get("campaignId")
+        if not adset_id or not campaign_id:
+            continue
+        adset["lastSynced"] = now
+        adset_ref = (
+            base_ref.collection("campaigns")
+            .document(campaign_id)
+            .collection("adsets")
+            .document(adset_id)
+        )
+        batch.set(adset_ref, adset, merge=True)
+        adset_count += 1
         count += 1
         if count >= 450:
             batch.commit()
@@ -178,8 +205,38 @@ def _do_sync(db, user_id: str, account_id: str) -> dict:
 
     base_ref.update({"kpiSummary": kpi_summary, "kpiUpdatedAt": now})
 
+    breakdown_count = 0
+    for breakdown_type in ("age", "gender", "placement"):
+        try:
+            breakdown_rows = api.get_insights_with_breakdowns(
+                breakdown_type=breakdown_type,
+                date_from=breakdown_start,
+                date_to=today,
+                level="adset",
+            )
+            base_ref.collection("breakdowns").document(f"{today}_{breakdown_type}").set(
+                {
+                    "type": breakdown_type,
+                    "date": today,
+                    "dateFrom": breakdown_start,
+                    "data": breakdown_rows,
+                    "lastUpdated": now,
+                },
+                merge=True,
+            )
+            breakdown_count += len(breakdown_rows)
+        except Exception as exc:
+            logger.warning(
+                "Account %s: failed syncing %s breakdowns: %s",
+                account_id,
+                breakdown_type,
+                exc,
+            )
+
     return {
         "campaigns": len(campaigns),
+        "adsets": adset_count,
         "insights": insight_count,
+        "breakdowns": breakdown_count,
         "kpiSummary": kpi_summary,
     }

@@ -182,7 +182,7 @@ function AuthenticatedApp() {
           { to: "/campaigns", icon: "campaign", label: "Campaigns" },
           { to: "/alerts", icon: "notifications", label: "Alerts" },
           { to: "/ai-insights", icon: "psychology", label: "Insights" },
-          { to: "/campaign-builder", icon: "build", label: "Builder" },
+          { to: "/campaign-builder", icon: "build", label: "Create" },
           { to: "/settings", icon: "settings", label: "Settings" },
         ].map((item) => (
           <NavLink

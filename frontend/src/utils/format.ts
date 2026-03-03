@@ -1,4 +1,5 @@
 export function formatCurrency(value: number, currency = "USD"): string {
+  const safeValue = Number.isFinite(value) ? value : 0;
   const symbols: Record<string, string> = {
     USD: "$",
     EUR: "€",
@@ -6,17 +7,19 @@ export function formatCurrency(value: number, currency = "USD"): string {
     ILS: "₪",
   };
   const symbol = symbols[currency] ?? `${currency} `;
-  return `${symbol}${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${symbol}${safeValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export function formatNumber(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-  return value.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  const safeValue = Number.isFinite(value) ? value : 0;
+  if (safeValue >= 1_000_000) return `${(safeValue / 1_000_000).toFixed(1)}M`;
+  if (safeValue >= 1_000) return `${(safeValue / 1_000).toFixed(1)}K`;
+  return safeValue.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
 export function formatPercent(value: number): string {
-  return `${value.toFixed(2)}%`;
+  const safeValue = Number.isFinite(value) ? value : 0;
+  return `${safeValue.toFixed(2)}%`;
 }
 
 export function formatDelta(current: number, previous: number): { text: string; direction: "up" | "down" | "flat" } {
@@ -29,7 +32,8 @@ export function formatDelta(current: number, previous: number): { text: string; 
 }
 
 export function formatROAS(value: number): string {
-  return `${value.toFixed(2)}x`;
+  const safeValue = Number.isFinite(value) ? value : 0;
+  return `${safeValue.toFixed(2)}x`;
 }
 
 export function cn(...classes: (string | boolean | undefined | null)[]): string {

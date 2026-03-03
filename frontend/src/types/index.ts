@@ -3,12 +3,28 @@ export interface MetaAccount {
   accountName: string;
   currency: string;
   businessName?: string;
+  vertical?: AccountVertical;
+  primaryObjective?: string;
   isActive: boolean;
   isManagedByPlatform: boolean;
   tokenExpiry?: string;
   kpiSummary?: KPISummary;
   kpiUpdatedAt?: string;
 }
+
+export type AccountVertical = "LEAD_GEN" | "ECOMMERCE" | "APP_INSTALLS";
+
+export type DashboardMetricKey =
+  | "spend"
+  | "leads"
+  | "cpl"
+  | "ctr"
+  | "cpm"
+  | "purchases"
+  | "cpa"
+  | "roas"
+  | "installs"
+  | "cpi";
 
 export interface KPISummary {
   date: string;
@@ -145,9 +161,13 @@ export interface AIInsight {
 export type RecommendationType =
   | "budget_optimization"
   | "audience_optimization"
+  | "audience_discovery"
+  | "targeting_optimization"
   | "creative_optimization"
   | "ab_test"
   | "campaign_build"
+  | "monitor_launch"
+  | "ghost_draft"
   | "audience_build"
   | "creative_copy";
 
@@ -167,6 +187,7 @@ export type BatchType =
   | "EVENING_CHECK"
   | "LAUNCH_WATCH"
   | "GHOST_DRAFT"
+  | "PROACTIVE_DRAFT"
   | "";
 
 export interface TasksResponse {
@@ -205,11 +226,14 @@ export interface Recommendation {
   };
   actionsDraft: string[];
   executionPlan?: {
-    action?: "adjust_budget" | "set_status" | "none";
+    action?: "adjust_budget" | "set_status" | "clone_adset_ab_test" | "none";
     targetLevel?: "campaign" | "adset" | "ad" | "account";
     targetId?: string;
     deltaPct?: number;
     desiredStatus?: "active" | "paused";
+    variableToChange?: string;
+    variantSettings?: Record<string, unknown>;
+    recommendedTestBudget?: number;
   };
   metadata?: {
     draftId?: string;
@@ -220,6 +244,16 @@ export interface Recommendation {
     creativeCopy?: string;
     campaignPlan?: { name?: string; objective?: string; targeting?: string };
     audienceSuggestions?: string[];
+    testSetup?: {
+      controlAdsetId?: string;
+      variableToChange?: string;
+      variantSettings?: Record<string, unknown>;
+      recommendedTestBudget?: number;
+    };
+    abTest?: {
+      control?: Record<string, unknown>;
+      variant?: Record<string, unknown>;
+    };
   };
   metricsSnapshot?: Record<string, number>;
   uiDisplayText?: string;
@@ -256,6 +290,28 @@ export interface CampaignBuilderInputs {
   pageId?: string;
   destinationUrl?: string;
   brandVoice?: string;
+}
+
+export type DraftBlockType =
+  | "STRATEGY"
+  | "AUDIENCE"
+  | "CREATIVE"
+  | "REASONING"
+  | "campaignPlan"
+  | "audiencePlan"
+  | "creativePlan"
+  | "reasoning";
+
+export interface GenerateDraftRequest {
+  accountId: string;
+  objective: "lead" | "sales" | string;
+  offerProduct: string;
+  targetGeo: string;
+  budget: number;
+  language: string;
+  campaignName?: string;
+  pageId?: string;
+  destinationUrl?: string;
 }
 
 export interface CampaignPlanBlock {
@@ -358,6 +414,9 @@ export interface RecommendationModifications {
   desiredStatus?: "active" | "paused";
   creativeCopy?: string;
   audienceSuggestions?: string[];
+  recommendedTestBudget?: number;
+  variantSettings?: Record<string, unknown>;
+  testSetup?: Record<string, unknown>;
 }
 
 export interface RecommendationExecution {
@@ -387,7 +446,7 @@ export interface RollbackPreview {
 export interface ExecutePreview {
   canExecute: boolean;
   reason?: string;
-  action?: "adjust_budget" | "set_status";
+  action?: "adjust_budget" | "set_status" | "clone_adset_ab_test";
   targetLevel?: "campaign" | "adset" | "ad" | "account";
   targetId?: string;
   deltaPct?: number;
@@ -396,6 +455,10 @@ export interface ExecutePreview {
   diffBudget?: number;
   currentStatus?: string;
   desiredStatus?: string;
+  controlAdsetId?: string;
+  recommendedTestBudget?: number;
+  variableToChange?: string;
+  variantSettings?: Record<string, unknown>;
   isNoop?: boolean;
 }
 

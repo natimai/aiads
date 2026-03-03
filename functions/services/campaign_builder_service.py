@@ -11,7 +11,28 @@ from services.ai_analyzer import AIAnalyzer
 logger = logging.getLogger(__name__)
 
 DEFAULT_OBJECTIVE = "OUTCOME_SALES"
+BUDGET_SAFETY_ERROR = "Budget exceeds safety limits. Please edit the budget block."
 ALLOWED_BLOCK_TYPES = {"campaignPlan", "audiencePlan", "creativePlan", "reasoning"}
+BLOCK_TYPE_ALIASES = {
+    "campaignplan": "campaignPlan",
+    "campaign_plan": "campaignPlan",
+    "campaign": "campaignPlan",
+    "setup": "campaignPlan",
+    "strategy": "campaignPlan",
+    "strategysetup": "campaignPlan",
+    "audienceplan": "audiencePlan",
+    "audience_plan": "audiencePlan",
+    "audience": "audiencePlan",
+    "creativeplan": "creativePlan",
+    "creative_plan": "creativePlan",
+    "creative": "creativePlan",
+    "reasoning": "reasoning",
+    "strategy_note": "reasoning",
+}
+
+
+class ValidationError(ValueError):
+    """User-facing validation errors that should block publish."""
 
 
 class CampaignBuilderService:
@@ -82,6 +103,7 @@ class CampaignBuilderService:
         instruction: str = "",
     ) -> dict[str, Any]:
         self._ensure_account_exists(user_id, account_id)
+        block_type = self._normalize_block_type(block_type)
         if block_type not in ALLOWED_BLOCK_TYPES:
             raise ValueError(f"Unsupported blockType: {block_type}")
 
@@ -107,6 +129,58 @@ class CampaignBuilderService:
         next_blocks = self._normalize_blocks(next_blocks, inputs)
         validation = self._validate_blocks(next_blocks, inputs)
 
+        update = {
+            "blocks": next_blocks,
+            "validation": validation,
+            "status": "ready_for_publish" if validation["isValid"] else "draft",
+            "updatedAt": datetime.now(timezone.utc),
+        }
+        draft_ref.update(update)
+
+        merged = {**draft, **update, "id": draft_id}
+        return self._serialize(merged)
+
+    def update_block(
+        self,
+        *,
+        user_id: str,
+        account_id: str,
+        draft_id: str,
+        block_type: str,
+        value: Any,
+    ) -> dict[str, Any]:
+        """Persist manual block edits from UI without invoking AI regeneration."""
+        self._ensure_account_exists(user_id, account_id)
+        block_type = self._normalize_block_type(block_type)
+        if block_type not in ALLOWED_BLOCK_TYPES:
+            raise ValueError(f"Unsupported blockType: {block_type}")
+
+        draft_ref = self._draft_ref(user_id, account_id, draft_id)
+        draft_doc = draft_ref.get()
+        if not draft_doc.exists:
+            raise ValueError("Draft not found")
+
+        draft = draft_doc.to_dict() or {}
+        blocks = draft.get("blocks", {})
+        if not isinstance(blocks, dict):
+            blocks = {}
+        inputs = draft.get("inputs", {})
+        if not isinstance(inputs, dict):
+            inputs = {}
+
+        next_blocks = dict(blocks)
+        if block_type == "reasoning":
+            next_blocks[block_type] = str(value or "").strip()
+        else:
+            if not isinstance(value, dict):
+                raise ValueError(f"{block_type} payload must be an object")
+            current = next_blocks.get(block_type, {})
+            if not isinstance(current, dict):
+                current = {}
+            next_blocks[block_type] = {**current, **value}
+
+        next_blocks = self._normalize_blocks(next_blocks, inputs)
+        validation = self._validate_blocks(next_blocks, inputs)
         update = {
             "blocks": next_blocks,
             "validation": validation,
@@ -198,8 +272,6 @@ class CampaignBuilderService:
         safety = self.preflight(user_id=user_id, account_id=account_id, draft_id=draft_id)
         if safety.get("errors"):
             raise ValueError("Preflight failed")
-        if safety.get("requiresExplicitConfirm") and not confirm_high_budget:
-            raise ValueError("High budget requires explicit confirmation")
 
         blocks = draft.get("blocks", {})
         inputs = draft.get("inputs", {})
@@ -208,10 +280,37 @@ class CampaignBuilderService:
         creative_plan = blocks.get("creativePlan", {})
 
         publish_ids: dict[str, Any] = {}
-        page_id = str(inputs.get("pageId") or "").strip()
-        destination_url = str(inputs.get("destinationUrl") or "").strip()
+        account_ref = (
+            self.db.collection("users")
+            .document(user_id)
+            .collection("metaAccounts")
+            .document(account_id)
+        )
+        account_doc = account_ref.get()
+        account_data = account_doc.to_dict() if account_doc.exists else {}
+        proposed_budget = float(campaign_plan.get("dailyBudget", 0) or 0)
+        self._enforce_publish_budget_guardrail(
+            user_id=user_id,
+            account_id=account_id,
+            account_data=account_data if isinstance(account_data, dict) else {},
+            proposed_daily_budget=proposed_budget,
+        )
+
+        page_id = str(
+            inputs.get("pageId")
+            or account_data.get("defaultPageId")
+            or account_data.get("pageId")
+            or account_data.get("metaPageId")
+            or ""
+        ).strip()
+        destination_url = str(
+            inputs.get("destinationUrl")
+            or account_data.get("defaultDestinationUrl")
+            or account_data.get("websiteUrl")
+            or "https://example.com"
+        ).strip()
         if not page_id:
-            raise ValueError("pageId is required for publish")
+            raise ValueError("pageId is required for publish (set it in Step 1 advanced fields or account defaults)")
         if not destination_url:
             raise ValueError("destinationUrl is required for publish")
 
@@ -335,21 +434,21 @@ class CampaignBuilderService:
         now = datetime.now(timezone.utc)
         rec_ref.set(
             {
-                "type": "campaign_build",
+                "type": "ghost_draft",
                 "entityLevel": "account",
                 "entityId": account_id,
-                "title": f"הכנתי טיוטה לקמפיין {opportunity_theme}. רוצה לראות?",
-                "priority": "medium",
-                "confidence": 0.78,
+                "title": "Scale Opportunity: New AI Campaign Draft Ready",
+                "priority": "high",
+                "confidence": 0.84,
                 "expectedImpact": {
                     "metric": "roas",
                     "direction": "up",
-                    "magnitudePct": 12,
-                    "summary": "New launch opportunity based on recent account patterns",
+                    "magnitudePct": 15,
+                    "summary": "Fresh audience testing can sustain profitable scale while reducing fatigue.",
                 },
-                "why": f"Ghost draft created for opportunity theme: {opportunity_theme}",
-                "reasoning": f"Proactive draft generated from account trends and seasonality signal ({opportunity_theme}).",
-                "actionsDraft": ["Open draft", "Review audience", "Adjust budget", "Publish when ready"],
+                "why": "Profitable delivery is starting to fatigue; this is a proactive scale play.",
+                "reasoning": "Your current campaigns are profitable but fatiguing. I pre-built a fresh campaign targeting a new Broad Audience with Nano Banana creatives.",
+                "actionsDraft": ["Review AI Draft", "Adjust budget", "Validate audience", "Publish when ready"],
                 "status": "pending",
                 "executionPlan": {"action": "none", "targetLevel": "account", "targetId": account_id},
                 "suggestedContent": {
@@ -357,18 +456,38 @@ class CampaignBuilderService:
                     "audienceSuggestions": draft.get("blocks", {}).get("audiencePlan", {}).get("interests", [])[:6],
                 },
                 "metricsSnapshot": {},
-                "uiDisplayText": "טיוטה פרואקטיבית מוכנה. פתח, ערוך ופרסם בלחיצה.",
+                "uiDisplayText": "Review AI Draft",
                 "proposedAction": {"action": "MANUAL_REVIEW", "entity_id": account_id, "value": "open_draft"},
                 "createdAt": now,
                 "expiresAt": now + timedelta(hours=24),
                 "review": {},
                 "source": "campaign_builder_ghost",
-                "batchType": "GHOST_DRAFT",
+                "batchType": "PROACTIVE_DRAFT",
                 "metadata": {
                     "draftId": draft_id,
                     "opportunityTheme": opportunity_theme,
                 },
             }
+        )
+
+        self._write_task_record(
+            user_id=user_id,
+            account_id=account_id,
+            task_id=rec_ref.id,
+            payload={
+                "type": "GHOST_DRAFT",
+                "priority": "HIGH",
+                "status": "PENDING",
+                "title": "Scale Opportunity: New AI Campaign Draft Ready",
+                "reasoning": "Your current campaigns are profitable but fatiguing. I pre-built a fresh campaign targeting a new Broad Audience with Nano Banana creatives.",
+                "ui_display_text": "Review AI Draft",
+                "batchType": "PROACTIVE_DRAFT",
+                "metadata": {
+                    "draftId": draft_id,
+                    "opportunityTheme": opportunity_theme,
+                },
+                "source": "campaign_builder_ghost",
+            },
         )
         return draft_id, rec_ref.id
 
@@ -394,7 +513,7 @@ class CampaignBuilderService:
         now = datetime.now(timezone.utc)
         rec_ref.set(
             {
-                "type": "campaign_build",
+                "type": "monitor_launch",
                 "entityLevel": "campaign",
                 "entityId": campaign_id,
                 "title": f"Monitor Launch: {campaign_name}",
@@ -406,8 +525,8 @@ class CampaignBuilderService:
                     "magnitudePct": 0,
                     "summary": "Protect launch quality and budget during the first 24h",
                 },
-                "why": "Fresh launches are most vulnerable to review delays and spend anomalies.",
-                "reasoning": "Check review/delivery status, spend pacing, and early CPA/CPM behavior in the first 24h.",
+                "why": "This campaign was launched via AI Builder.",
+                "reasoning": "This campaign was launched via AI Builder. Monitor the first 24 hours for CPM spikes and initial conversions.",
                 "actionsDraft": [
                     "Check Meta review status",
                     "Verify delivery starts",
@@ -425,7 +544,7 @@ class CampaignBuilderService:
                     ],
                 },
                 "metricsSnapshot": {},
-                "uiDisplayText": "24h launch watch: review status, pacing, and early efficiency signals.",
+                "uiDisplayText": "Monitor launch performance over the first 24 hours.",
                 "proposedAction": {
                     "action": "MANUAL_REVIEW",
                     "entity_id": campaign_id,
@@ -443,7 +562,100 @@ class CampaignBuilderService:
                 },
             }
         )
+
+        self._write_task_record(
+            user_id=user_id,
+            account_id=account_id,
+            task_id=rec_ref.id,
+            payload={
+                "type": "MONITOR_LAUNCH",
+                "priority": "HIGH",
+                "status": "PENDING",
+                "title": f"Monitor Launch: {campaign_name}",
+                "reasoning": "This campaign was launched via AI Builder. Monitor the first 24 hours for CPM spikes and initial conversions.",
+                "batchType": "LAUNCH_WATCH",
+                "metadata": {
+                    "draftId": draft_id,
+                    "campaignId": campaign_id,
+                    "watchWindowHours": 24,
+                },
+                "source": "campaign_builder",
+            },
+        )
         return rec_ref.id
+
+    def _write_task_record(
+        self,
+        *,
+        user_id: str,
+        account_id: str,
+        task_id: str,
+        payload: dict[str, Any],
+    ) -> None:
+        now = datetime.now(timezone.utc)
+        tasks_ref = (
+            self.db.collection("users")
+            .document(user_id)
+            .collection("metaAccounts")
+            .document(account_id)
+            .collection("tasks")
+            .document(task_id)
+        )
+        task_payload = {
+            "createdAt": now,
+            "updatedAt": now,
+            **payload,
+        }
+        tasks_ref.set(task_payload, merge=True)
+
+    def _enforce_publish_budget_guardrail(
+        self,
+        *,
+        user_id: str,
+        account_id: str,
+        account_data: dict[str, Any],
+        proposed_daily_budget: float,
+    ) -> None:
+        if proposed_daily_budget <= 0:
+            raise ValidationError(BUDGET_SAFETY_ERROR)
+
+        max_cap = self._extract_max_daily_spend_cap(account_data)
+        avg_spend = self._compute_account_avg_daily_spend(user_id, account_id)
+        over_absolute_limit = proposed_daily_budget > 1500.0
+        over_cap_limit = bool(max_cap and proposed_daily_budget > max_cap)
+        over_average_limit = bool(avg_spend and proposed_daily_budget > (avg_spend * 3.0))
+
+        if over_absolute_limit or over_cap_limit or over_average_limit:
+            logger.warning(
+                "Publish blocked by budget guardrail for %s/%s: proposed=%s, avg_spend=%s, max_cap=%s",
+                user_id,
+                account_id,
+                proposed_daily_budget,
+                avg_spend,
+                max_cap,
+            )
+            raise ValidationError(BUDGET_SAFETY_ERROR)
+
+    @staticmethod
+    def _extract_max_daily_spend_cap(account_data: dict[str, Any]) -> float:
+        if not isinstance(account_data, dict):
+            return 0.0
+        candidates = [
+            account_data.get("maxDailySpendCap"),
+            account_data.get("max_daily_spend_cap"),
+            ((account_data.get("kpiTargets") or {}) if isinstance(account_data.get("kpiTargets"), dict) else {}).get("maxDailySpendCap"),
+            ((account_data.get("kpiTargets") or {}) if isinstance(account_data.get("kpiTargets"), dict) else {}).get("max_daily_spend_cap"),
+            ((account_data.get("kpi_targets") or {}) if isinstance(account_data.get("kpi_targets"), dict) else {}).get("maxDailySpendCap"),
+            ((account_data.get("kpi_targets") or {}) if isinstance(account_data.get("kpi_targets"), dict) else {}).get("max_daily_spend_cap"),
+        ]
+        for value in candidates:
+            try:
+                cap = float(value or 0)
+                if cap > 0:
+                    return cap
+            except (TypeError, ValueError):
+                continue
+        return 0.0
 
     def _build_context(self, *, user_id: str, account_id: str, inputs: dict[str, Any]) -> dict[str, Any]:
         account_ref = (
@@ -543,6 +755,30 @@ class CampaignBuilderService:
         if not budgets:
             return 0.0
         return round(sum(budgets) / len(budgets), 4)
+
+    def _compute_account_avg_daily_spend(self, user_id: str, account_id: str) -> float:
+        insights_ref = (
+            self.db.collection("users")
+            .document(user_id)
+            .collection("metaAccounts")
+            .document(account_id)
+            .collection("insights")
+        )
+        spends: list[float] = []
+        try:
+            for doc in insights_ref.stream():
+                payload = doc.to_dict() or {}
+                spend = float(payload.get("spend", 0) or 0)
+                if spend > 0:
+                    spends.append(spend)
+        except Exception:
+            spends = []
+
+        if spends:
+            return round(sum(spends) / len(spends), 4)
+
+        # Fallback when account-level insights are not populated yet.
+        return self._compute_account_avg_daily_budget(user_id, account_id)
 
     def _load_campaign_signal(self, campaign_doc) -> dict[str, Any]:
         """Load a compact last-7-days signal for AI context without huge payloads."""
@@ -684,6 +920,11 @@ class CampaignBuilderService:
         countries = geo.get("countries", []) if isinstance(geo.get("countries"), list) else []
         age = audience_plan.get("ageRange", {}) if isinstance(audience_plan.get("ageRange"), dict) else {}
         genders = audience_plan.get("genders", ["all"])
+        interests = (
+            audience_plan.get("interests", [])
+            if isinstance(audience_plan.get("interests"), list)
+            else []
+        )
 
         gender_map = {"male": 1, "female": 2}
         meta_genders = [gender_map[g.lower()] for g in genders if isinstance(g, str) and g.lower() in gender_map]
@@ -695,7 +936,18 @@ class CampaignBuilderService:
         }
         if meta_genders:
             payload["genders"] = meta_genders
+        if interests:
+            payload["interests"] = [{"name": str(i)} for i in interests[:10] if str(i).strip()]
         return payload
+
+    @staticmethod
+    def _normalize_block_type(block_type: str) -> str:
+        raw = str(block_type or "").strip()
+        if raw in ALLOWED_BLOCK_TYPES:
+            return raw
+        key = raw.replace("-", "_").replace(" ", "_").strip("_").lower()
+        mapped = BLOCK_TYPE_ALIASES.get(key)
+        return mapped or raw
 
     @staticmethod
     def _to_minor_units(major: float) -> int:

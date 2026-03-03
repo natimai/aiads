@@ -3,11 +3,13 @@ import { CampaignTable } from "../components/dashboard/CampaignTable";
 import { useCampaigns } from "../hooks/useCampaigns";
 import { useAccounts } from "../contexts/AccountContext";
 import { useEffect } from "react";
+import { inferAccountVertical } from "../utils/metricsConfig";
 
 export default function Campaigns() {
   const { accountId } = useParams();
   const { setSelectedAccountId, selectedAccount } = useAccounts();
   const { data: campaigns, isLoading } = useCampaigns(true);
+  const vertical = inferAccountVertical(selectedAccount, campaigns ?? []);
 
   useEffect(() => {
     if (accountId) {
@@ -28,6 +30,7 @@ export default function Campaigns() {
         campaigns={campaigns ?? []}
         currency={selectedAccount?.currency ?? "USD"}
         loading={isLoading}
+        vertical={vertical}
       />
     </div>
   );

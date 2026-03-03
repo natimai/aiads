@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CampaignTable } from "../components/dashboard/CampaignTable";
 import { PerformanceChart } from "../components/dashboard/PerformanceChart";
 import { SpendDistribution } from "../components/dashboard/SpendDistribution";
@@ -16,12 +16,22 @@ import {
 import { useAccounts } from "../contexts/AccountContext";
 import { useDateRange } from "../contexts/DateRangeContext";
 import { formatDateDisplay } from "../utils/dates";
-import { formatCurrency, formatNumber, formatPercent, formatROAS } from "../utils/format";
+import {
+  formatSummaryMetric,
+  getMetricsForVertical,
+  inferAccountVertical,
+  summaryMetricTrend,
+} from "../utils/metricsConfig";
 import { syncAllAccounts } from "../services/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { Database, Loader2, Brain, X, WifiOff } from "lucide-react";
-import { Link } from "react-router-dom";
-import type { RecommendationModifications, Campaign, KPISummary } from "../types";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import type {
+  AccountVertical,
+  RecommendationModifications,
+  Campaign,
+  KPISummary,
+} from "../types";
 
 /* ─── Material Symbol helper ──────────────────────────────────── */
 function MS({
@@ -63,17 +73,21 @@ function KpiGrid({
   summary,
   currency,
   loading,
+  vertical,
 }: {
   summary?: KPISummary;
   currency: string;
   loading: boolean;
+  vertical: AccountVertical;
 }) {
+  const metrics = getMetricsForVertical(vertical);
+
   if (loading || !summary) {
     return (
-      <div className="grid grid-cols-2 gap-3">
-        {[0, 1, 2, 3].map((i) => (
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {metrics.map((metric) => (
           <div
-            key={i}
+            key={metric.key}
             className="h-32 animate-pulse rounded-xl border border-slate-100 bg-slate-50"
           />
         ))}
@@ -81,64 +95,17 @@ function KpiGrid({
     );
   }
 
-  const hasRoas = (summary.roas ?? 0) > 0;
-  const hasLeads = (summary.totalLeads ?? 0) > 0;
-
-  const tiles: KpiTile[] = [
-    {
-      label: "Spend",
-      value: formatCurrency(summary.totalSpend, currency),
-      icon: "payments",
-      iconBg: "bg-indigo-50",
-      iconColor: "text-indigo-600",
-      trendUp: null,
-    },
-    hasRoas
-      ? {
-          label: "ROAS",
-          value: formatROAS(summary.roas),
-          icon: "trending_up",
-          iconBg: "bg-emerald-50",
-          iconColor: "text-emerald-600",
-          trendUp: summary.roas > 2,
-        }
-      : hasLeads
-      ? {
-          label: "CPL",
-          value: formatCurrency(summary.avgCostPerLead ?? 0, currency),
-          icon: "person_add",
-          iconBg: "bg-emerald-50",
-          iconColor: "text-emerald-600",
-          trendUp: null,
-        }
-      : {
-          label: "CPM",
-          value: formatCurrency(summary.avgCPM, currency),
-          icon: "visibility",
-          iconBg: "bg-emerald-50",
-          iconColor: "text-emerald-600",
-          trendUp: null,
-        },
-    {
-      label: "CTR",
-      value: formatPercent(summary.avgCTR),
-      icon: "ads_click",
-      iconBg: "bg-blue-50",
-      iconColor: "text-blue-600",
-      trendUp: summary.avgCTR > 1,
-    },
-    {
-      label: "Impressions",
-      value: formatNumber(summary.totalImpressions),
-      icon: "bar_chart",
-      iconBg: "bg-amber-50",
-      iconColor: "text-amber-600",
-      trendUp: null,
-    },
-  ];
+  const tiles: KpiTile[] = metrics.map((metric) => ({
+    label: metric.label,
+    value: formatSummaryMetric(summary, metric.key, currency),
+    icon: metric.icon,
+    iconBg: metric.iconBg,
+    iconColor: metric.iconColor,
+    trendUp: summaryMetricTrend(summary, metric.key),
+  }));
 
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {tiles.map((tile) => (
         <div
           key={tile.label}
@@ -260,6 +227,8 @@ function TopMovers({ campaigns, loading }: { campaigns: Campaign[]; loading: boo
 
 /* ─── Dashboard page ──────────────────────────────────────────── */
 export default function Dashboard() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { selectedAccount, accounts } = useAccounts();
   const { dateRange } = useDateRange();
   const { data: campaigns, isLoading } = useCampaigns();
@@ -274,6 +243,23 @@ export default function Dashboard() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  useEffect(() => {
+    const state = location.state as { toast?: { type?: string; message?: string } } | null;
+    if (!state?.toast?.message) return;
+    setToast({
+      type: state.toast.type === "error" ? "error" : "success",
+      message: state.toast.message,
+    });
+    navigate(location.pathname, { replace: true, state: {} });
+  }, [location.pathname, location.state, navigate]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3200);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -362,6 +348,7 @@ export default function Dashboard() {
   })();
 
   const currency = selectedAccount?.currency ?? "USD";
+  const accountVertical = inferAccountVertical(selectedAccount, campaigns ?? []);
   const recommendations = tasksData?.tasks ?? [];
   const recommendationsByCampaign = recommendations.reduce(
     (acc, rec) => {
@@ -425,6 +412,17 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {toast && (
+        <div
+          className={`rounded-xl border px-4 py-2.5 text-sm ${
+            toast.type === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-rose-200 bg-rose-50 text-rose-700"
+          }`}
+        >
+          {toast.message}
+        </div>
+      )}
       {/* ── Large greeting headline ──────────────────────────────── */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -501,10 +499,10 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── 70/30 split ─────────────────────────────────────────── */}
-      <div className="flex flex-col gap-5 xl:flex-row">
+      {/* ── Responsive split ─────────────────────────────────────── */}
+      <div className="flex flex-col gap-5 lg:flex-row">
         {/* LEFT: Task Inbox (70%) */}
-        <div className="min-w-0 xl:w-[70%]">
+        <div className="min-w-0 lg:w-[70%]">
           <ActionFeed
             recommendations={recommendations}
             groups={tasksData?.groups}
@@ -517,14 +515,19 @@ export default function Dashboard() {
         </div>
 
         {/* RIGHT: Context sidebar (30%) */}
-        <div className="space-y-4 xl:w-[30%]">
-          {/* 2×2 KPI grid */}
+        <div className="space-y-4 lg:w-[30%]">
+          {/* Dynamic KPI grid */}
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
               <MS name="bar_chart" size={14} className="text-indigo-500" />
-              Performance
+              Performance · {accountVertical.split("_").join(" ")}
             </h3>
-            <KpiGrid summary={currentSummary} currency={currency} loading={isLoading} />
+            <KpiGrid
+              summary={currentSummary}
+              currency={currency}
+              loading={isLoading}
+              vertical={accountVertical}
+            />
           </div>
 
           {/* Top Movers */}
@@ -567,6 +570,7 @@ export default function Dashboard() {
         currency={currency}
         loading={isLoading}
         recommendationsByCampaign={recommendationsByCampaign}
+        vertical={accountVertical}
       />
 
       {/* Full Analytics Modal */}

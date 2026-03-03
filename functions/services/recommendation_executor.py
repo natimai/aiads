@@ -83,6 +83,44 @@ def execute_recommendation(user_id: str, account_id: str, recommendation: dict, 
             "executedAt": datetime.now(timezone.utc),
         }
 
+    if action == "clone_adset_ab_test":
+        if target_level != "adset":
+            raise ValueError("clone_adset_ab_test requires targetLevel=adset")
+        variant_settings = execution_plan.get("variantSettings") or {}
+        if not isinstance(variant_settings, dict):
+            variant_settings = {}
+        recommended_budget = int(execution_plan.get("recommendedTestBudget", 50) or 50)
+        if recommended_budget <= 0:
+            raise ValueError("clone_adset_ab_test requires recommendedTestBudget > 0")
+
+        clone_result = api.clone_adset_for_ab_test(
+            control_adset_id=target_id,
+            variant_settings=variant_settings,
+            recommended_test_budget=recommended_budget,
+            status="ACTIVE",
+        )
+        variant_adset_id = str(clone_result.get("variantAdsetId") or "")
+        if variant_adset_id:
+            _sync_ab_test_variant_firestore(
+                user_id=user_id,
+                account_id=account_id,
+                control_adset_id=target_id,
+                variant_adset_id=variant_adset_id,
+                variant_settings=variant_settings,
+                recommended_budget=recommended_budget,
+            )
+        return {
+            "action": action,
+            "targetLevel": target_level,
+            "targetId": target_id,
+            "controlAdsetId": target_id,
+            "variantAdsetId": variant_adset_id,
+            "recommendedTestBudget": recommended_budget,
+            "variableToChange": str(execution_plan.get("variableToChange") or "targeting"),
+            "variantSettings": variant_settings,
+            "executedAt": datetime.now(timezone.utc),
+        }
+
     raise ValueError(f"Unsupported execution action: {action}")
 
 
@@ -143,6 +181,24 @@ def execute_preview(user_id: str, account_id: str, recommendation: dict, policy:
             "diffBudget": int(new_budget - current_budget),
         }
 
+    if action == "clone_adset_ab_test":
+        variant_settings = execution_plan.get("variantSettings") or {}
+        if not isinstance(variant_settings, dict):
+            return {"canExecute": False, "reason": "variantSettings must be an object"}
+        recommended_budget = int(execution_plan.get("recommendedTestBudget", 50) or 50)
+        if recommended_budget <= 0:
+            return {"canExecute": False, "reason": "recommendedTestBudget must be > 0"}
+        return {
+            "canExecute": True,
+            "action": "clone_adset_ab_test",
+            "targetLevel": target_level,
+            "targetId": target_id,
+            "controlAdsetId": target_id,
+            "recommendedTestBudget": recommended_budget,
+            "variableToChange": str(execution_plan.get("variableToChange") or "targeting"),
+            "variantSettings": variant_settings,
+        }
+
     return {"canExecute": False, "reason": f"Unsupported execution action: {action}"}
 
 
@@ -197,6 +253,20 @@ def rollback_recommendation(user_id: str, account_id: str, recommendation: dict,
             "rolledBackAt": datetime.now(timezone.utc),
         }
 
+    if action == "clone_adset_ab_test":
+        variant_adset_id = str(result.get("variantAdsetId") or "").strip()
+        if not variant_adset_id:
+            raise ValueError("Rollback requires variantAdsetId")
+        api.pause_adset(variant_adset_id)
+        _sync_status_firestore(user_id, account_id, "adset", variant_adset_id, "paused")
+        return {
+            "action": "rollback_status",
+            "targetLevel": "adset",
+            "targetId": variant_adset_id,
+            "restoredStatus": "paused",
+            "rolledBackAt": datetime.now(timezone.utc),
+        }
+
     raise ValueError(f"Rollback not supported for action: {action}")
 
 
@@ -244,6 +314,20 @@ def rollback_preview(user_id: str, account_id: str, recommendation: dict, policy
             "targetId": target_id,
             "currentStatus": current_status or "unknown",
             "restoredStatus": old_status,
+        }
+
+    if action == "clone_adset_ab_test":
+        variant_adset_id = str(result.get("variantAdsetId") or "").strip()
+        if not variant_adset_id:
+            raise ValueError("Rollback preview requires variantAdsetId")
+        current_status = _get_current_status(user_id, account_id, "adset", variant_adset_id)
+        return {
+            "canRollback": True,
+            "action": "rollback_status",
+            "targetLevel": "adset",
+            "targetId": variant_adset_id,
+            "currentStatus": current_status or "unknown",
+            "restoredStatus": "paused",
         }
 
     raise ValueError(f"Rollback preview not supported for action: {action}")
@@ -344,4 +428,35 @@ def _sync_status_firestore(user_id: str, account_id: str, target_level: str, tar
             "status": "ACTIVE" if desired_status == "active" else "PAUSED",
             "lastSynced": datetime.now(timezone.utc),
         }
+    )
+
+
+def _sync_ab_test_variant_firestore(
+    *,
+    user_id: str,
+    account_id: str,
+    control_adset_id: str,
+    variant_adset_id: str,
+    variant_settings: dict,
+    recommended_budget: int,
+) -> None:
+    control_ref = _doc_ref(user_id, account_id, "adset", control_adset_id)
+    if not control_ref:
+        return
+    parent = control_ref.parent
+    variant_ref = parent.document(variant_adset_id)
+    control_doc = control_ref.get()
+    control_data = control_doc.to_dict() if control_doc.exists else {}
+    variant_ref.set(
+        {
+            **(control_data or {}),
+            "metaAdsetId": variant_adset_id,
+            "name": f"{(control_data or {}).get('name', 'AdSet')} | AB Variant",
+            "status": "ACTIVE",
+            "dailyBudget": int(recommended_budget),
+            "abTestSourceAdsetId": control_adset_id,
+            "abTestVariantSettings": variant_settings,
+            "lastSynced": datetime.now(timezone.utc),
+        },
+        merge=True,
     )

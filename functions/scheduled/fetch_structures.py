@@ -66,14 +66,14 @@ def run_fetch_structures():
                     meta_adset_id = adset.get("metaAdsetId")
                     if not meta_adset_id:
                         continue
-                    campaign_id = adset.get("campaignId", "unknown")
-
-                    for campaign in campaigns:
-                        if campaign.get("metaCampaignId"):
-                            campaign_id_for_adset = campaign["metaCampaignId"]
-                            break
-                    else:
-                        campaign_id_for_adset = campaigns[0]["metaCampaignId"] if campaigns else "unknown"
+                    campaign_id_for_adset = str(adset.get("campaignId") or "")
+                    if not campaign_id_for_adset:
+                        for campaign in campaigns:
+                            if campaign.get("metaCampaignId"):
+                                campaign_id_for_adset = campaign["metaCampaignId"]
+                                break
+                    if not campaign_id_for_adset:
+                        continue
 
                     adset_ref = (
                         base_ref.collection("campaigns")

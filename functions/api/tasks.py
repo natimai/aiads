@@ -5,7 +5,13 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from google.cloud.firestore_v1.base_query import FieldFilter
+try:
+    from google.cloud.firestore_v1.base_query import FieldFilter
+except Exception:  # pragma: no cover - local/unit-test fallback
+    class FieldFilter:  # type: ignore[override]
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
 
 from api.accounts import _cors_response, verify_auth
 from utils.firestore_helpers import get_db
@@ -13,6 +19,10 @@ from utils.firestore_helpers import get_db
 logger = logging.getLogger(__name__)
 
 PRIORITY_RANK = {"high": 0, "medium": 1, "low": 2}
+TYPE_MAP = {
+    "MONITOR_LAUNCH": "monitor_launch",
+    "GHOST_DRAFT": "ghost_draft",
+}
 
 
 def handle_tasks(request):
@@ -52,22 +62,46 @@ def _get_tasks(request, user_id: str):
     )
 
     all_tasks: list[dict] = []
+    seen: set[tuple[str, str]] = set()
     for account_doc in managed_accounts:
         account_data = account_doc.to_dict() or {}
         rec_ref = accounts_ref.document(account_doc.id).collection("recommendations")
-        query = (
-            rec_ref.where(filter=FieldFilter("status", "==", status_filter))
-            .order_by("createdAt", direction="DESCENDING")
-            .limit(limit)
-        )
+        query = rec_ref.order_by("createdAt", direction="DESCENDING").limit(limit)
         for rec_doc in query.stream():
-            task = {
-                "id": rec_doc.id,
-                "accountId": account_doc.id,
-                "accountName": account_data.get("accountName", ""),
-                **_serialize_doc(rec_doc.to_dict() or {}),
-            }
+            key = (account_doc.id, rec_doc.id)
+            if key in seen:
+                continue
+            task = _normalize_task(
+                {
+                    "id": rec_doc.id,
+                    "accountId": account_doc.id,
+                    "accountName": account_data.get("accountName", ""),
+                    **_serialize_doc(rec_doc.to_dict() or {}),
+                }
+            )
+            if status_filter != "all" and task.get("status") != status_filter:
+                continue
             all_tasks.append(task)
+            seen.add(key)
+
+        tasks_ref = accounts_ref.document(account_doc.id).collection("tasks")
+        task_query = tasks_ref.order_by("createdAt", direction="DESCENDING").limit(limit)
+        for task_doc in task_query.stream():
+            key = (account_doc.id, task_doc.id)
+            if key in seen:
+                continue
+            task = _normalize_task(
+                {
+                    "id": task_doc.id,
+                    "accountId": account_doc.id,
+                    "accountName": account_data.get("accountName", ""),
+                    **_serialize_doc(task_doc.to_dict() or {}),
+                }
+            )
+            if status_filter != "all" and task.get("status") != status_filter:
+                continue
+            all_tasks.append(task)
+            seen.add(key)
 
     # Sort: priority first, then most recent
     all_tasks.sort(
@@ -107,6 +141,58 @@ def _get_tasks(request, user_id: str):
         },
     }
     return _cors_response(json.dumps(payload, default=str), 200)
+
+
+def _normalize_task(task: dict) -> dict:
+    normalized = dict(task)
+
+    raw_type = str(normalized.get("type") or "").strip()
+    mapped_type = TYPE_MAP.get(raw_type.upper(), raw_type.lower())
+    normalized["type"] = mapped_type or "campaign_build"
+
+    raw_priority = str(normalized.get("priority") or "").strip().lower()
+    normalized["priority"] = raw_priority if raw_priority in PRIORITY_RANK else "medium"
+
+    raw_status = str(normalized.get("status") or "").strip().lower()
+    if not raw_status:
+        raw_status = "pending"
+    normalized["status"] = raw_status
+
+    if not normalized.get("uiDisplayText") and normalized.get("ui_display_text"):
+        normalized["uiDisplayText"] = normalized.get("ui_display_text")
+
+    if not normalized.get("entityLevel"):
+        normalized["entityLevel"] = "campaign" if normalized.get("entityId") else "account"
+    if not normalized.get("entityId"):
+        metadata = normalized.get("metadata", {}) if isinstance(normalized.get("metadata"), dict) else {}
+        normalized["entityId"] = str(metadata.get("campaignId") or normalized.get("accountId") or "")
+
+    if not isinstance(normalized.get("expectedImpact"), dict):
+        normalized["expectedImpact"] = {
+            "summary": str(normalized.get("reasoning") or ""),
+        }
+    if not isinstance(normalized.get("actionsDraft"), list):
+        normalized["actionsDraft"] = []
+    if not isinstance(normalized.get("metricsSnapshot"), dict):
+        normalized["metricsSnapshot"] = {}
+    if not isinstance(normalized.get("executionPlan"), dict):
+        normalized["executionPlan"] = {"action": "none", "targetLevel": "account", "targetId": normalized.get("accountId", "")}
+    if not isinstance(normalized.get("review"), dict):
+        normalized["review"] = {}
+    if normalized.get("confidence") is None:
+        normalized["confidence"] = 0.8
+    if not normalized.get("title"):
+        normalized["title"] = "Action required"
+    if not normalized.get("reasoning"):
+        normalized["reasoning"] = str(normalized.get("why") or normalized.get("uiDisplayText") or "")
+    if not normalized.get("why"):
+        normalized["why"] = normalized["reasoning"]
+    if not normalized.get("batchType"):
+        if normalized["type"] == "ghost_draft":
+            normalized["batchType"] = "PROACTIVE_DRAFT"
+        elif normalized["type"] == "monitor_launch":
+            normalized["batchType"] = "LAUNCH_WATCH"
+    return normalized
 
 
 def _serialize_doc(data: dict) -> dict:

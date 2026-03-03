@@ -1,6 +1,6 @@
 """Scheduled function: Fetch demographic and placement breakdowns every 6 hours."""
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from services.meta_api import MetaAPIService
 from services.meta_auth import get_decrypted_token
 from utils.firestore_helpers import get_db, get_all_active_users
@@ -9,11 +9,13 @@ logger = logging.getLogger(__name__)
 
 
 def run_fetch_breakdowns():
-    """Fetch breakdowns (age, gender, platform, placement, device, hourly) for all accounts."""
+    """Fetch breakdowns (age, gender, placement) for all accounts."""
     db = get_db()
     users = get_all_active_users(db, managed_only=True)
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    breakdown_types = ["demographic", "platform", "placement", "device", "hourly", "country"]
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    date_from = (now - timedelta(days=6)).strftime("%Y-%m-%d")
+    breakdown_types = ["age", "gender", "placement"]
 
     for user in users:
         user_id = user["id"]
@@ -35,8 +37,9 @@ def run_fetch_breakdowns():
                     try:
                         data = api.get_insights_with_breakdowns(
                             breakdown_type=breakdown_type,
-                            date_from=today,
+                            date_from=date_from,
                             date_to=today,
+                            level="adset",
                         )
 
                         doc_ref = breakdowns_ref.document(f"{today}_{breakdown_type}")
@@ -44,6 +47,7 @@ def run_fetch_breakdowns():
                             {
                                 "type": breakdown_type,
                                 "date": today,
+                                "dateFrom": date_from,
                                 "data": data,
                                 "lastUpdated": datetime.now(timezone.utc),
                             },

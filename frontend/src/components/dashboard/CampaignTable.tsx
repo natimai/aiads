@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -8,18 +8,29 @@ import {
   Search,
   Layers,
 } from "lucide-react";
-import { formatCurrency, formatNumber, formatPercent } from "../../utils/format";
+import { formatCurrency } from "../../utils/format";
 import { useCampaignAction } from "../../hooks/useCampaigns";
-import type { Campaign, AdSet } from "../../types";
+import {
+  formatInsightMetric,
+  getMetricsForVertical,
+  metricSortValue,
+} from "../../utils/metricsConfig";
+import type {
+  AccountVertical,
+  Campaign,
+  AdSet,
+  DashboardMetricKey,
+} from "../../types";
 
 interface CampaignTableProps {
   campaigns: Campaign[];
   currency?: string;
   loading?: boolean;
   recommendationsByCampaign?: Record<string, number>;
+  vertical: AccountVertical;
 }
 
-type SortKey = "name" | "status" | "spend" | "leads" | "costPerLead" | "ctr" | "cpm" | "impressions" | "clicks";
+type SortKey = "name" | "status" | DashboardMetricKey;
 type SortDir = "asc" | "desc";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -35,12 +46,24 @@ export function CampaignTable({
   currency = "USD",
   loading,
   recommendationsByCampaign = {},
+  vertical,
 }: CampaignTableProps) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<SortKey>("spend");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [search, setSearch] = useState("");
   const campaignAction = useCampaignAction();
+
+  const metricColumns = getMetricsForVertical(vertical);
+  const columns: Array<{ key: SortKey; label: string; align?: "right" }> = [
+    { key: "name" as SortKey, label: "Campaign" },
+    { key: "status" as SortKey, label: "Status" },
+    ...metricColumns.map((metric) => ({
+      key: metric.key as SortKey,
+      label: metric.label,
+      align: "right" as const,
+    })),
+  ];
 
   const toggleExpand = (id: string) => {
     setExpandedIds((prev) => {
@@ -59,18 +82,14 @@ export function CampaignTable({
     }
   };
 
-  const getInsightValue = (c: Campaign, key: string): number => {
-    const insights = c.todayInsights;
-    if (!insights) return 0;
-    return (insights as unknown as Record<string, number>)[key] ?? 0;
-  };
-
   const filtered = campaigns.filter((c) =>
     c.name.toLowerCase().includes(search.toLowerCase())
   );
 
   const sorted = [...filtered].sort((a, b) => {
-    let aVal: string | number, bVal: string | number;
+    let aVal: string | number;
+    let bVal: string | number;
+
     if (sortKey === "name") {
       aVal = a.name.toLowerCase();
       bVal = b.name.toLowerCase();
@@ -78,9 +97,10 @@ export function CampaignTable({
       aVal = a.status;
       bVal = b.status;
     } else {
-      aVal = getInsightValue(a, sortKey);
-      bVal = getInsightValue(b, sortKey);
+      aVal = metricSortValue(a.todayInsights, sortKey);
+      bVal = metricSortValue(b.todayInsights, sortKey);
     }
+
     const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
     return sortDir === "asc" ? cmp : -cmp;
   });
@@ -91,7 +111,7 @@ export function CampaignTable({
         <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="flex gap-4">
-              {Array.from({ length: 8 }).map((_, j) => (
+              {Array.from({ length: 6 }).map((_, j) => (
                 <div key={j} className="h-6 flex-1 rounded bg-slate-100 skeleton" />
               ))}
             </div>
@@ -101,30 +121,20 @@ export function CampaignTable({
     );
   }
 
-  const columns: { key: SortKey; label: string; align?: "right" }[] = [
-    { key: "name", label: "Campaign" },
-    { key: "status", label: "Status" },
-    { key: "spend", label: "Spend", align: "right" },
-    { key: "leads", label: "Leads", align: "right" },
-    { key: "costPerLead", label: "CPL", align: "right" },
-    { key: "ctr", label: "CTR", align: "right" },
-    { key: "cpm", label: "CPM", align: "right" },
-    { key: "impressions", label: "Impr.", align: "right" },
-    { key: "clicks", label: "Clicks", align: "right" },
-  ];
+  const expandedRowColspan = columns.length + 2; // expand toggle + dynamic columns + actions
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-3">
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-sm font-semibold text-slate-800">Campaigns ({sorted.length})</h3>
-        <div className="relative">
+        <div className="relative w-full sm:w-auto">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search campaigns..."
-            className="rounded-lg border border-slate-200 bg-white py-1.5 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+            className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 sm:w-64"
           />
         </div>
       </div>
@@ -137,7 +147,7 @@ export function CampaignTable({
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`cursor-pointer px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-600 transition-colors ${
+                  className={`cursor-pointer px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 transition-colors hover:text-slate-600 ${
                     col.align === "right" ? "text-right" : "text-left"
                   }`}
                   onClick={() => handleSort(col.key)}
@@ -160,24 +170,36 @@ export function CampaignTable({
               const hasAdsets = (campaign.adsets?.length ?? 0) > 0;
 
               return (
-                <>
+                <Fragment key={campaign.id}>
                   <tr
-                    key={campaign.id}
-                    className={`border-b border-slate-100 transition-colors hover:bg-slate-50 ${isExpanded ? "bg-indigo-50/30" : ""}`}
+                    className={`border-b border-slate-100 transition-colors hover:bg-slate-50 ${
+                      isExpanded ? "bg-indigo-50/30" : ""
+                    }`}
                   >
                     <td className="px-2 py-3">
                       <button
                         onClick={() => toggleExpand(campaign.id)}
-                        className={`rounded p-0.5 transition-colors ${hasAdsets ? "text-slate-400 hover:text-slate-600" : "cursor-default text-slate-200"}`}
+                        className={`rounded p-0.5 transition-colors ${
+                          hasAdsets
+                            ? "text-slate-400 hover:text-slate-600"
+                            : "cursor-default text-slate-200"
+                        }`}
                         disabled={!hasAdsets}
                         title={hasAdsets ? "Show ad sets" : "No ad sets available"}
                       >
-                        {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        {isExpanded ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
                       </button>
                     </td>
+
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-slate-800">{campaign.name}</span>
+                        <span className="max-w-[18rem] truncate font-medium text-slate-800">
+                          {campaign.name}
+                        </span>
                         {(recommendationsByCampaign[campaign.id] ?? 0) > 0 && (
                           <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-medium text-indigo-700">
                             {recommendationsByCampaign[campaign.id]} AI
@@ -191,42 +213,39 @@ export function CampaignTable({
                         )}
                       </div>
                       {campaign.accountName && (
-                        <div className="mt-0.5 text-[11px] text-slate-400">{campaign.accountName}</div>
+                        <div className="mt-0.5 text-[11px] text-slate-400">
+                          {campaign.accountName}
+                        </div>
                       )}
                     </td>
+
                     <td className="px-3 py-3">
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_COLORS[campaign.status] ?? "bg-slate-100 text-slate-500"}`}>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                          STATUS_COLORS[campaign.status] ?? "bg-slate-100 text-slate-500"
+                        }`}
+                      >
                         {campaign.status}
                       </span>
                     </td>
-                    <td className="px-3 py-3 text-right font-mono text-sm text-slate-700">
-                      {insights ? formatCurrency(insights.spend, currency) : "—"}
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono text-sm text-slate-700">
-                      {insights?.leads ? formatNumber(insights.leads) : "—"}
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono text-sm text-slate-700">
-                      {insights?.costPerLead ? formatCurrency(insights.costPerLead, currency) : "—"}
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono text-sm text-slate-700">
-                      {insights ? formatPercent(insights.ctr) : "—"}
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono text-sm text-slate-700">
-                      {insights ? formatCurrency(insights.cpm, currency) : "—"}
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono text-sm text-slate-700">
-                      {insights ? formatNumber(insights.impressions) : "—"}
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono text-sm text-slate-700">
-                      {insights ? formatNumber(insights.clicks) : "—"}
-                    </td>
+
+                    {metricColumns.map((metric) => (
+                      <td
+                        key={`${campaign.id}-${metric.key}`}
+                        className="px-3 py-3 text-right font-mono text-sm text-slate-700"
+                      >
+                        {formatInsightMetric(insights, metric.key, currency)}
+                      </td>
+                    ))}
+
                     <td className="px-3 py-3 text-right">
                       <button
                         onClick={() =>
                           campaignAction.mutate({
                             accountId: campaign.accountId ?? "",
                             campaignId: campaign.id,
-                            action: campaign.status === "ACTIVE" ? "pause" : "resume",
+                            action:
+                              campaign.status === "ACTIVE" ? "pause" : "resume",
                           })
                         }
                         className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
@@ -240,14 +259,15 @@ export function CampaignTable({
                       </button>
                     </td>
                   </tr>
+
                   {isExpanded && hasAdsets && (
-                    <tr key={`${campaign.id}-expanded`} className="border-b border-slate-100 bg-indigo-50/20">
-                      <td colSpan={11} className="px-0 py-0">
+                    <tr className="border-b border-slate-100 bg-indigo-50/20">
+                      <td colSpan={expandedRowColspan} className="px-0 py-0">
                         <AdSetsTable adsets={campaign.adsets!} currency={currency} />
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>
@@ -265,8 +285,8 @@ export function CampaignTable({
 
 function AdSetsTable({ adsets, currency }: { adsets: AdSet[]; currency: string }) {
   return (
-    <div className="border-l-4 border-indigo-200 ml-8 mr-2 my-2 rounded-lg border border-slate-100 bg-indigo-50/30 overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-100">
+    <div className="my-2 ml-8 mr-2 overflow-hidden rounded-lg border border-slate-100 border-l-4 border-indigo-200 bg-indigo-50/30">
+      <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2">
         <Layers className="h-3.5 w-3.5 text-indigo-400" />
         <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
           Ad Sets ({adsets.length})
@@ -275,27 +295,50 @@ function AdSetsTable({ adsets, currency }: { adsets: AdSet[]; currency: string }
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-slate-100">
-            <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-slate-400">Name</th>
-            <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-slate-400">Status</th>
-            <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-slate-400">Optimization</th>
-            <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-slate-400">Bid Strategy</th>
-            <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider text-slate-400">Daily Budget</th>
-            <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider text-slate-400">Ads</th>
+            <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-slate-400">
+              Name
+            </th>
+            <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-slate-400">
+              Status
+            </th>
+            <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-slate-400">
+              Optimization
+            </th>
+            <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-slate-400">
+              Bid Strategy
+            </th>
+            <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider text-slate-400">
+              Daily Budget
+            </th>
+            <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider text-slate-400">
+              Ads
+            </th>
           </tr>
         </thead>
         <tbody>
           {adsets.map((adset) => (
-            <tr key={adset.id} className="border-b border-slate-100 hover:bg-white/60 transition-colors last:border-b-0">
+            <tr
+              key={adset.id}
+              className="border-b border-slate-100 transition-colors last:border-b-0 hover:bg-white/60"
+            >
               <td className="px-4 py-2 text-slate-700">{adset.name}</td>
               <td className="px-4 py-2">
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_COLORS[adset.status] ?? "bg-slate-100 text-slate-500"}`}>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                    STATUS_COLORS[adset.status] ?? "bg-slate-100 text-slate-500"
+                  }`}
+                >
                   {adset.status}
                 </span>
               </td>
-              <td className="px-4 py-2 text-[12px] text-slate-500">{adset.optimizationGoal ?? "—"}</td>
-              <td className="px-4 py-2 text-[12px] text-slate-500">{adset.bidStrategy ?? "—"}</td>
+              <td className="px-4 py-2 text-[12px] text-slate-500">
+                {adset.optimizationGoal ?? "—"}
+              </td>
+              <td className="px-4 py-2 text-[12px] text-slate-500">
+                {adset.bidStrategy ?? "—"}
+              </td>
               <td className="px-4 py-2 text-right font-mono text-[12px] text-slate-700">
-                {adset.dailyBudget > 0 ? formatCurrency(adset.dailyBudget, currency) : "—"}
+                {formatCurrency(adset.dailyBudget, currency)}
               </td>
               <td className="px-4 py-2 text-right text-[12px] text-slate-500">
                 {adset.ads?.length ?? 0}

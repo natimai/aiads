@@ -37,9 +37,13 @@ import type { Recommendation, RecommendationStatus, RecommendationType } from ".
 const TYPE_LABELS: Record<RecommendationType, string> = {
   budget_optimization: "Budget",
   audience_optimization: "Audience",
+  audience_discovery: "Audience Discovery",
+  targeting_optimization: "Targeting Optimization",
   creative_optimization: "Creative",
   ab_test: "A/B Test",
   campaign_build: "New Campaign",
+  monitor_launch: "Launch Watch",
+  ghost_draft: "Ghost Draft",
   audience_build: "New Audience",
   creative_copy: "Ad Copy",
 };
@@ -47,9 +51,13 @@ const TYPE_LABELS: Record<RecommendationType, string> = {
 const TYPE_ICONS: Record<RecommendationType, React.ElementType> = {
   budget_optimization: BarChart3,
   audience_optimization: Users,
+  audience_discovery: Users,
+  targeting_optimization: Target,
   creative_optimization: Palette,
   ab_test: TestTube,
   campaign_build: Megaphone,
+  monitor_launch: Sparkles,
+  ghost_draft: Megaphone,
   audience_build: Target,
   creative_copy: FileText,
 };
@@ -289,7 +297,7 @@ export default function AIInsights() {
 
           {/* Filters — Type */}
           <div className="flex flex-wrap gap-2">
-            {(["all", "budget_optimization", "audience_optimization", "creative_optimization", "ab_test", "campaign_build", "audience_build", "creative_copy"] as const).map((type) => (
+            {(["all", "budget_optimization", "audience_optimization", "audience_discovery", "targeting_optimization", "creative_optimization", "ab_test", "campaign_build", "audience_build", "creative_copy"] as const).map((type) => (
               <button
                 key={type}
                 onClick={() => setTypeFilter(type)}

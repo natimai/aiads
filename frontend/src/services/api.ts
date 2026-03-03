@@ -17,6 +17,8 @@ import type {
   ReportConfig,
   TasksResponse,
   CampaignBuilderInputs,
+  DraftBlockType,
+  GenerateDraftRequest,
   CampaignDraft,
   DraftSafety,
   PublishDraftResult,
@@ -175,12 +177,24 @@ export async function triggerAIAnalysis(
 // ---------- AI Campaign Builder ----------
 
 export async function createCampaignDraft(
-  accountId: string,
-  inputs: CampaignBuilderInputs
+  request: GenerateDraftRequest
 ): Promise<{ draftId: string; draft: CampaignDraft }> {
+  const objectiveRaw = String(request.objective || "sales").toLowerCase();
+  const objective =
+    objectiveRaw === "lead" || objectiveRaw === "leads" ? "OUTCOME_LEADS" : "OUTCOME_SALES";
   return apiFetch("/api/ai/campaign-builder/drafts", {
     method: "POST",
-    body: JSON.stringify({ accountId, inputs }),
+    body: JSON.stringify({
+      accountId: request.accountId,
+      objective,
+      offer: request.offerProduct,
+      targetGeo: request.targetGeo,
+      budget: request.budget,
+      language: request.language,
+      campaignName: request.campaignName,
+      pageId: request.pageId,
+      destinationUrl: request.destinationUrl,
+    }),
   });
 }
 
@@ -194,14 +208,30 @@ export async function getCampaignDraft(accountId: string, draftId: string): Prom
 export async function regenerateCampaignDraftBlock(
   accountId: string,
   draftId: string,
-  blockType: "campaignPlan" | "audiencePlan" | "creativePlan" | "reasoning",
-  instruction?: string
+  blockType: DraftBlockType,
+  userInstructions?: string
 ): Promise<CampaignDraft> {
   const data = await apiFetch<{ draft: CampaignDraft }>(
     `/api/ai/campaign-builder/drafts/${draftId}/regenerate`,
     {
       method: "POST",
-      body: JSON.stringify({ accountId, blockType, instruction }),
+      body: JSON.stringify({ accountId, blockType, userInstructions }),
+    }
+  );
+  return data.draft;
+}
+
+export async function updateCampaignDraftBlock(
+  accountId: string,
+  draftId: string,
+  blockType: DraftBlockType,
+  value: Record<string, unknown> | string
+): Promise<CampaignDraft> {
+  const data = await apiFetch<{ draft: CampaignDraft }>(
+    `/api/ai/campaign-builder/drafts/${draftId}/update`,
+    {
+      method: "POST",
+      body: JSON.stringify({ accountId, blockType, value }),
     }
   );
   return data.draft;
