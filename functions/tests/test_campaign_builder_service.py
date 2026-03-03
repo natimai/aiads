@@ -128,6 +128,72 @@ class CampaignBuilderServiceTest(unittest.TestCase):
                 proposed_daily_budget=450,
             )
 
+    def test_prompt_section_format_matches_priority_hierarchy(self):
+        user_section = self.service._format_user_request_section(
+            {
+                "offer": "Car Insurance",
+                "objective": "OUTCOME_LEADS",
+                "language": "עברית",
+                "country": "IL",
+            }
+        )
+        account_section = self.service._format_account_context_section(
+            {"peerBenchmark": {"accountsCompared": 3, "medianCTR": 1.2}}
+        )
+
+        self.assertIn("=== USER REQUEST (HIGHEST PRIORITY) ===", user_section)
+        self.assertIn("Product/Offer: Car Insurance", user_section)
+        self.assertIn("Language: עברית", user_section)
+        self.assertIn("=== ACCOUNT CONTEXT (SECONDARY - USE ONLY FOR TONE/METRICS) ===", account_section)
+        self.assertIn("Account Benchmarks:", account_section)
+
+    def test_regenerate_normalizes_offer_from_legacy_inputs(self):
+        fake_ref = MagicMock()
+        fake_doc = MagicMock()
+        fake_doc.exists = True
+        fake_doc.to_dict.return_value = {
+            "inputs": {
+                "offerProduct": "Car Insurance",
+                "objective": "OUTCOME_LEADS",
+                "country": "IL",
+                "language": "עברית",
+                "dailyBudget": 100,
+                "campaignName": "Car Insurance Leads",
+            },
+            "blocks": {
+                "campaignPlan": {
+                    "name": "Car Insurance Leads",
+                    "objective": "OUTCOME_LEADS",
+                    "dailyBudget": 100,
+                    "buyingType": "AUCTION",
+                    "budgetType": "daily",
+                },
+                "audiencePlan": {"geo": {"countries": ["IL"]}, "interests": ["ביטוח רכב"]},
+                "creativePlan": {"primaryTexts": ["A"], "headlines": ["B"], "angles": ["C"], "cta": "LEARN_MORE"},
+                "reasoning": "Initial strategy",
+            },
+        }
+        fake_ref.get.return_value = fake_doc
+
+        self.service._ensure_account_exists = MagicMock()
+        self.service._build_context = MagicMock(return_value={})
+        self.service._draft_ref = MagicMock(return_value=fake_ref)
+        self.service.ai.regenerate_campaign_builder_block = MagicMock(
+            return_value={"creativePlan": {"primaryTexts": ["חדש"], "headlines": ["כותרת"]}}
+        )
+
+        self.service.regenerate_block(
+            user_id="u1",
+            account_id="a1",
+            draft_id="d1",
+            block_type="CREATIVE",
+            instruction="כתוב בעברית",
+        )
+
+        build_context_inputs = self.service._build_context.call_args.kwargs["inputs"]
+        self.assertEqual(build_context_inputs["offer"], "Car Insurance")
+        self.assertEqual(build_context_inputs["language"], "עברית")
+
 
 if __name__ == "__main__":
     unittest.main()

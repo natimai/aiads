@@ -1,6 +1,7 @@
 """AI Campaign Builder service: draft generation, regeneration, preflight safety, and publish."""
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from statistics import median
@@ -13,6 +14,14 @@ logger = logging.getLogger(__name__)
 DEFAULT_OBJECTIVE = "OUTCOME_SALES"
 BUDGET_SAFETY_ERROR = "Budget exceeds safety limits. Please edit the budget block."
 ALLOWED_BLOCK_TYPES = {"campaignPlan", "audiencePlan", "creativePlan", "reasoning"}
+CAMPAIGN_BUILDER_STRICT_RULES = (
+    "RULE 1 (PRODUCT IS KING): You MUST write the campaign specifically for the PRODUCT/OFFER provided by the user. "
+    "DO NOT write generic marketing copy. DO NOT talk about 'ROAS' or 'Performance' unless the product is a B2B marketing service.",
+    "RULE 2 (LANGUAGE): If the LANGUAGE is set to 'עברית' (Hebrew) or any other language, ALL fields inside creative_plan "
+    "(primary texts, headlines) MUST be 100% in that language. No English exceptions.",
+    "RULE 3 (AUDIENCE LOGIC): The interests must directly relate to the specific product/offer. "
+    "Do not suggest 'Online Shopping' for an Insurance campaign.",
+)
 BLOCK_TYPE_ALIASES = {
     "campaignplan": "campaignPlan",
     "campaign_plan": "campaignPlan",
@@ -50,6 +59,7 @@ class CampaignBuilderService:
         opportunity_theme: str = "",
     ) -> tuple[str, dict[str, Any]]:
         self._ensure_account_exists(user_id, account_id)
+        inputs = self._normalize_inputs(inputs)
         context = self._build_context(user_id=user_id, account_id=account_id, inputs=inputs)
         blocks = self.ai.generate_campaign_builder_draft(context)
         blocks = self._normalize_blocks(blocks, inputs)
@@ -113,8 +123,8 @@ class CampaignBuilderService:
             raise ValueError("Draft not found")
 
         draft = draft_doc.to_dict() or {}
-        inputs = draft.get("inputs", {})
         blocks = draft.get("blocks", {})
+        inputs = self._normalize_inputs(draft.get("inputs", {}), blocks=blocks)
         context = self._build_context(user_id=user_id, account_id=account_id, inputs=inputs)
 
         regenerated = self.ai.regenerate_campaign_builder_block(
@@ -130,6 +140,7 @@ class CampaignBuilderService:
         validation = self._validate_blocks(next_blocks, inputs)
 
         update = {
+            "inputs": inputs,
             "blocks": next_blocks,
             "validation": validation,
             "status": "ready_for_publish" if validation["isValid"] else "draft",
@@ -164,9 +175,7 @@ class CampaignBuilderService:
         blocks = draft.get("blocks", {})
         if not isinstance(blocks, dict):
             blocks = {}
-        inputs = draft.get("inputs", {})
-        if not isinstance(inputs, dict):
-            inputs = {}
+        inputs = self._normalize_inputs(draft.get("inputs", {}), blocks=blocks)
 
         next_blocks = dict(blocks)
         if block_type == "reasoning":
@@ -182,6 +191,7 @@ class CampaignBuilderService:
         next_blocks = self._normalize_blocks(next_blocks, inputs)
         validation = self._validate_blocks(next_blocks, inputs)
         update = {
+            "inputs": inputs,
             "blocks": next_blocks,
             "validation": validation,
             "status": "ready_for_publish" if validation["isValid"] else "draft",
@@ -658,6 +668,7 @@ class CampaignBuilderService:
         return 0.0
 
     def _build_context(self, *, user_id: str, account_id: str, inputs: dict[str, Any]) -> dict[str, Any]:
+        normalized_inputs = self._normalize_inputs(inputs)
         account_ref = (
             self.db.collection("users")
             .document(user_id)
@@ -682,6 +693,10 @@ class CampaignBuilderService:
                 }
             )
 
+        benchmark_snapshot = self._build_benchmark_snapshot(user_id, account_id)
+        user_request_text = self._format_user_request_section(normalized_inputs)
+        account_context_text = self._format_account_context_section(benchmark_snapshot)
+
         return {
             "account": {
                 "id": account_id,
@@ -689,9 +704,18 @@ class CampaignBuilderService:
                 "currency": account_data.get("currency", "USD"),
                 "kpiSummary": account_data.get("kpiSummary", {}),
             },
-            "inputs": inputs,
+            "inputs": normalized_inputs,
             "campaigns": campaigns[:200],
-            "benchmarkSnapshot": self._build_benchmark_snapshot(user_id, account_id),
+            "benchmarkSnapshot": benchmark_snapshot,
+            "promptPolicy": {
+                "priorityOrder": "USER_REQUEST_OVER_ACCOUNT_BENCHMARKS",
+                "strictRules": list(CAMPAIGN_BUILDER_STRICT_RULES),
+            },
+            "promptSections": {
+                "userRequestText": user_request_text,
+                "accountContextText": account_context_text,
+                "fullPromptContext": f"{user_request_text}\n\n{account_context_text}",
+            },
             "generatedAt": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -859,10 +883,14 @@ class CampaignBuilderService:
         }
 
     def _normalize_blocks(self, blocks: dict[str, Any], inputs: dict[str, Any]) -> dict[str, Any]:
-        campaign_name = str(inputs.get("campaignName") or "AI Campaign Launch")
-        objective = str(inputs.get("objective") or DEFAULT_OBJECTIVE)
-        budget = float(inputs.get("dailyBudget", 100) or 100)
-        country = str(inputs.get("country") or "US")
+        normalized_inputs = self._normalize_inputs(inputs, blocks=blocks)
+        campaign_name = str(normalized_inputs.get("campaignName") or "AI Campaign Launch")
+        objective = str(normalized_inputs.get("objective") or DEFAULT_OBJECTIVE)
+        budget = float(normalized_inputs.get("dailyBudget", 100) or 100)
+        country = str(normalized_inputs.get("country") or "US")
+        language = str(normalized_inputs.get("language") or "en")
+        offer = str(normalized_inputs.get("offer") or campaign_name).strip()
+        is_hebrew = self._is_hebrew_language(language)
 
         campaign_plan = blocks.get("campaignPlan") if isinstance(blocks.get("campaignPlan"), dict) else {}
         audience_plan = blocks.get("audiencePlan") if isinstance(blocks.get("audiencePlan"), dict) else {}
@@ -879,34 +907,35 @@ class CampaignBuilderService:
         audience_plan["geo"] = geo
         audience_plan.setdefault("ageRange", {"min": 21, "max": 55})
         audience_plan.setdefault("genders", ["all"])
-        audience_plan.setdefault("interests", ["Online shopping", "Performance marketing"])
-        audience_plan.setdefault("lookalikeHints", ["1% purchasers", "3% high-value customers"])
+        audience_plan.setdefault("interests", self._default_interests_from_offer(offer, is_hebrew))
+        audience_plan.setdefault(
+            "lookalikeHints",
+            ["1% רוכשים", "3% רוכשים בעלי ערך גבוה"] if is_hebrew else ["1% purchasers", "3% high-value purchasers"],
+        )
 
         creative_plan.setdefault(
             "angles",
-            [
-                "Direct response with strong CTA",
-                "Problem-solution narrative",
-                "Social proof and urgency",
-            ],
+            self._default_angles_from_offer(offer, is_hebrew),
         )
         creative_plan.setdefault(
             "primaryTexts",
-            [
-                "Ready to improve results this week? Start with our proven offer today.",
-                "לקוחות חכמים כבר עברו למודל שעובד. הגיע הזמן להצטרף.",
-                "Limited-time launch offer. Get better performance starting now.",
-            ],
+            self._default_primary_texts_from_offer(offer, is_hebrew),
         )
         creative_plan.setdefault(
             "headlines",
-            ["Scale Results Faster", "Offer Ends Soon", "Built for Better ROAS"],
+            self._default_headlines_from_offer(offer, is_hebrew),
         )
         creative_plan.setdefault("cta", "LEARN_MORE")
 
         reasoning = blocks.get("reasoning")
         if not isinstance(reasoning, str) or not reasoning.strip():
-            reasoning = "Draft generated from selected account performance and internal benchmark comparison."
+            if is_hebrew:
+                reasoning = f"הטיוטה נבנתה עבור ההצעה '{offer}' לפי בקשת המשתמש, עם שימוש בנתוני החשבון כהקשר משני בלבד."
+            else:
+                reasoning = (
+                    f"This draft is built specifically for '{offer}' from the user request, "
+                    "with account benchmarks used only as secondary context."
+                )
 
         return {
             "campaignPlan": campaign_plan,
@@ -914,6 +943,120 @@ class CampaignBuilderService:
             "creativePlan": creative_plan,
             "reasoning": reasoning,
         }
+
+    def _normalize_inputs(self, inputs: dict[str, Any], *, blocks: dict[str, Any] | None = None) -> dict[str, Any]:
+        payload = dict(inputs or {}) if isinstance(inputs, dict) else {}
+        blocks = blocks or {}
+
+        def _pick(*keys: str) -> Any:
+            for key in keys:
+                value = payload.get(key)
+                if value is not None and str(value).strip():
+                    return value
+            return ""
+
+        objective = str(_pick("objective") or DEFAULT_OBJECTIVE).strip()
+        language = str(_pick("language", "lang", "locale") or "en").strip()
+        country = str(_pick("country", "targetGeo", "geo", "target_geo") or "US").strip()
+        campaign_name = str(_pick("campaignName", "name") or "AI Campaign Launch").strip()
+        offer = str(_pick("offer", "offerProduct", "product", "productOffer") or "").strip()
+
+        if not offer and isinstance(blocks, dict):
+            campaign_plan = blocks.get("campaignPlan", {}) if isinstance(blocks.get("campaignPlan"), dict) else {}
+            offer = str(campaign_plan.get("name") or campaign_name).strip()
+
+        daily_budget_raw = payload.get("dailyBudget", payload.get("budget", 0))
+        try:
+            daily_budget = float(daily_budget_raw or 0)
+        except (TypeError, ValueError):
+            daily_budget = 0.0
+
+        return {
+            "objective": objective,
+            "offer": offer,
+            "country": country or "US",
+            "language": language or "en",
+            "dailyBudget": daily_budget,
+            "campaignName": campaign_name or "AI Campaign Launch",
+            "pageId": str(payload.get("pageId") or "").strip(),
+            "destinationUrl": str(payload.get("destinationUrl") or "").strip(),
+            "brandVoice": str(payload.get("brandVoice") or "").strip(),
+        }
+
+    @staticmethod
+    def _is_hebrew_language(language: str) -> bool:
+        normalized = str(language or "").strip().lower()
+        return (
+            normalized.startswith("he")
+            or "hebrew" in normalized
+            or "עברית" in str(language or "").strip()
+        )
+
+    @staticmethod
+    def _default_interests_from_offer(offer: str, is_hebrew: bool) -> list[str]:
+        base = str(offer or "המוצר").strip() if is_hebrew else str(offer or "the offer").strip()
+        if is_hebrew:
+            return [base, f"{base} השוואת מחירים", f"{base} פתרונות", f"{base} המלצות"]
+        return [base, f"{base} comparison", f"{base} solutions", f"{base} reviews"]
+
+    @staticmethod
+    def _default_angles_from_offer(offer: str, is_hebrew: bool) -> list[str]:
+        if is_hebrew:
+            return [
+                f"פתרון ברור ופשוט עבור {offer}",
+                f"למה {offer} משתלם יותר עכשיו",
+                f"הוכחה חברתית + קריאה לפעולה ממוקדת",
+            ]
+        return [
+            f"Clear value proposition for {offer}",
+            f"Why {offer} is the smarter choice right now",
+            "Social proof with a direct CTA",
+        ]
+
+    @staticmethod
+    def _default_primary_texts_from_offer(offer: str, is_hebrew: bool) -> list[str]:
+        if is_hebrew:
+            return [
+                f"מחפשים {offer}? קבלו הצעה מהירה ומדויקת שמתאימה לכם.",
+                f"{offer} בתנאים טובים יותר מתחיל כאן. בדקו זכאות תוך דקות.",
+                f"רוצים לשלם פחות על {offer}? השאירו פרטים ונחזור אליכם היום.",
+            ]
+        return [
+            f"Looking for {offer}? Get a fast, tailored quote today.",
+            f"Find the right {offer} option in minutes with transparent terms.",
+            f"Ready to compare {offer} options and save? Start now.",
+        ]
+
+    @staticmethod
+    def _default_headlines_from_offer(offer: str, is_hebrew: bool) -> list[str]:
+        if is_hebrew:
+            return [
+                f"{offer} שמותאם לכם",
+                f"מצאו {offer} משתלם",
+                "בדקו זכאות עכשיו",
+            ]
+        return [
+            f"Get Better {offer}",
+            f"Compare {offer} Options",
+            "Check Eligibility Today",
+        ]
+
+    def _format_user_request_section(self, inputs: dict[str, Any]) -> str:
+        return (
+            "=== USER REQUEST (HIGHEST PRIORITY) ===\n"
+            f"Product/Offer: {inputs.get('offer') or ''}\n"
+            f"Objective: {inputs.get('objective') or DEFAULT_OBJECTIVE}\n"
+            f"Language: {inputs.get('language') or 'en'}\n"
+            f"Target Geo: {inputs.get('country') or 'US'}"
+        )
+
+    @staticmethod
+    def _format_account_context_section(benchmark_snapshot: dict[str, Any]) -> str:
+        benchmark_text = json.dumps(benchmark_snapshot or {}, ensure_ascii=False, default=str)
+        return (
+            "=== ACCOUNT CONTEXT (SECONDARY - USE ONLY FOR TONE/METRICS) ===\n"
+            f"Account Benchmarks: {benchmark_text}"
+        )
 
     def _build_targeting_payload(self, audience_plan: dict[str, Any]) -> dict[str, Any]:
         geo = audience_plan.get("geo", {}) if isinstance(audience_plan.get("geo"), dict) else {}

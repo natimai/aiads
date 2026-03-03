@@ -353,7 +353,26 @@ Data:
     def generate_campaign_builder_draft(self, context: dict) -> dict:
         """Generate campaign builder blocks for a new draft."""
         compact_context = json.dumps(context, default=str)
+        prompt_sections = context.get("promptSections", {}) if isinstance(context.get("promptSections"), dict) else {}
+        user_request_text = str(prompt_sections.get("userRequestText") or "").strip()
+        account_context_text = str(prompt_sections.get("accountContextText") or "").strip()
+        strict_rules = self._campaign_builder_strict_rules(context)
+        if not user_request_text:
+            user_request_text = self._fallback_campaign_builder_user_request(context)
+        if not account_context_text:
+            account_context_text = self._fallback_campaign_builder_account_context(context)
         prompt = f"""You are an expert Meta ads strategist. Build a launch-ready campaign draft.
+
+STRICT PRIORITY HIERARCHY:
+- USER REQUEST is the highest priority and must override benchmark context.
+- ACCOUNT CONTEXT is secondary and should only influence tone and numeric calibration.
+
+STRICT RULES:
+{strict_rules}
+
+{user_request_text}
+
+{account_context_text}
 
 Return ONLY valid JSON with this exact shape:
 {{
@@ -382,7 +401,7 @@ Return ONLY valid JSON with this exact shape:
 }}
 
 Rules:
-- Use selected account performance and peer benchmark.
+- Follow the strict hierarchy and strict rules above.
 - Prioritize clear direct-response messaging.
 - Use language from input (if provided).
 - Never return markdown.
@@ -405,14 +424,38 @@ Data:
         """Regenerate a single campaign builder block while preserving others."""
         compact_context = json.dumps(context, default=str)
         compact_blocks = json.dumps(current_blocks, default=str)
+        prompt_sections = context.get("promptSections", {}) if isinstance(context.get("promptSections"), dict) else {}
+        user_request_text = str(prompt_sections.get("userRequestText") or "").strip()
+        account_context_text = str(prompt_sections.get("accountContextText") or "").strip()
+        strict_rules = self._campaign_builder_strict_rules(context)
+        if not user_request_text:
+            user_request_text = self._fallback_campaign_builder_user_request(context)
+        if not account_context_text:
+            account_context_text = self._fallback_campaign_builder_account_context(context)
         prompt = f"""You are an expert Meta ads strategist.
 Regenerate only this block: {block_type}
+
+STRICT PRIORITY HIERARCHY:
+- USER REQUEST is the highest priority and must override benchmark context.
+- ACCOUNT CONTEXT is secondary and should only influence tone and numeric calibration.
+
+STRICT RULES:
+{strict_rules}
+
+{user_request_text}
+
+{account_context_text}
 
 Current blocks:
 {compact_blocks}
 
 Extra instruction:
 {instruction or "N/A"}
+
+Regeneration guardrails:
+- Preserve product/offer relevance and language consistency from USER REQUEST.
+- If block_type is creativePlan, all primaryTexts/headlines must stay in the requested language.
+- If block_type is audiencePlan, interests must map directly to the user product/offer.
 
 Return ONLY valid JSON with exactly one top-level key named "{block_type}".
 Do not include any other keys.
@@ -427,6 +470,42 @@ Data:
         if block_type not in parsed:
             return {}
         return {block_type: parsed.get(block_type)}
+
+    @staticmethod
+    def _campaign_builder_strict_rules(context: dict) -> str:
+        policy = context.get("promptPolicy", {}) if isinstance(context, dict) else {}
+        raw_rules = policy.get("strictRules", []) if isinstance(policy, dict) else []
+        if isinstance(raw_rules, list):
+            cleaned = [str(rule).strip() for rule in raw_rules if str(rule).strip()]
+            if cleaned:
+                return "\n".join(f"- {rule}" for rule in cleaned)
+        return (
+            "- RULE 1 (PRODUCT IS KING): You MUST write the campaign specifically for the PRODUCT/OFFER provided by the user. "
+            "DO NOT write generic marketing copy. DO NOT talk about 'ROAS' or 'Performance' unless the product is a B2B marketing service.\n"
+            "- RULE 2 (LANGUAGE): If the LANGUAGE is set to 'עברית' (Hebrew) or any other language, ALL fields inside creative_plan "
+            "(primary texts, headlines) MUST be 100% in that language. No English exceptions.\n"
+            "- RULE 3 (AUDIENCE LOGIC): The interests must directly relate to the specific product/offer. "
+            "Do not suggest 'Online Shopping' for an Insurance campaign."
+        )
+
+    @staticmethod
+    def _fallback_campaign_builder_user_request(context: dict) -> str:
+        inputs = context.get("inputs", {}) if isinstance(context, dict) else {}
+        return (
+            "=== USER REQUEST (HIGHEST PRIORITY) ===\n"
+            f"Product/Offer: {inputs.get('offer', '')}\n"
+            f"Objective: {inputs.get('objective', 'OUTCOME_SALES')}\n"
+            f"Language: {inputs.get('language', 'en')}\n"
+            f"Target Geo: {inputs.get('country', 'US')}"
+        )
+
+    @staticmethod
+    def _fallback_campaign_builder_account_context(context: dict) -> str:
+        benchmarks = context.get("benchmarkSnapshot", {}) if isinstance(context, dict) else {}
+        return (
+            "=== ACCOUNT CONTEXT (SECONDARY - USE ONLY FOR TONE/METRICS) ===\n"
+            f"Account Benchmarks: {json.dumps(benchmarks, ensure_ascii=False, default=str)}"
+        )
 
     @staticmethod
     def _parse_creative_copy_json(text: str) -> list[dict]:
