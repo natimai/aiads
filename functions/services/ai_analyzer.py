@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import json
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -350,6 +351,176 @@ Data:
         raw = self._generate(prompt, model=self.pro_model)
         return self._parse_recommendation_json(raw, max_items=max_items)
 
+    def generate_strategy_plan(
+        self,
+        context: dict,
+        *,
+        current_blocks: dict | None = None,
+        instruction: str = "",
+    ) -> dict:
+        """Agent 1: Media Strategist - campaign plan and strategy reasoning only."""
+        compact_context = json.dumps(context, default=str)
+        compact_blocks = json.dumps(current_blocks or {}, default=str)
+        strict_rules, user_request_text, account_context_text = self._campaign_builder_prompt_sections(context)
+        prompt = f"""You are a Senior Meta Ads Strategist.
+Analyze the user's brief and output ONLY campaign planning JSON.
+
+{user_request_text}
+
+{account_context_text}
+
+Rules:
+- Output ONLY valid JSON with top-level keys: "campaignPlan" and "reasoning".
+- Do NOT output audiencePlan or creativePlan.
+- Focus on objective selection, campaign naming convention, and budget structure.
+- USER REQUEST is higher priority than benchmark context.
+- Follow these strict rules:
+{strict_rules}
+
+Current blocks (for continuity, if provided):
+{compact_blocks}
+
+Extra instruction:
+{instruction or "N/A"}
+
+Expected JSON shape:
+{{
+  "campaignPlan": {{
+    "name": "string",
+    "objective": "OUTCOME_LEADS | OUTCOME_SALES | ...",
+    "buyingType": "AUCTION",
+    "budgetType": "daily",
+    "dailyBudget": 0
+  }},
+  "reasoning": "short strategy reasoning"
+}}
+
+Data:
+{compact_context}
+"""
+        raw = self._generate(prompt, model=self.pro_model)
+        parsed = self._parse_json_dict(raw)
+        result: dict[str, Any] = {}
+        campaign_plan = parsed.get("campaignPlan")
+        if isinstance(campaign_plan, dict):
+            result["campaignPlan"] = campaign_plan
+        reasoning = parsed.get("reasoning") or parsed.get("strategyReasoning")
+        if isinstance(reasoning, str) and reasoning.strip():
+            result["reasoning"] = reasoning.strip()
+        return result
+
+    def generate_audience_plan(
+        self,
+        context: dict,
+        *,
+        current_blocks: dict | None = None,
+        instruction: str = "",
+    ) -> dict:
+        """Agent 2: Audience Expert - audience plan only."""
+        compact_context = json.dumps(context, default=str)
+        compact_blocks = json.dumps(current_blocks or {}, default=str)
+        strict_rules, user_request_text, account_context_text = self._campaign_builder_prompt_sections(context)
+        prompt = f"""You are an elite Meta Ads Audience Specialist.
+Output ONLY the audiencePlan JSON block.
+
+{user_request_text}
+
+{account_context_text}
+
+Rules:
+- Output ONLY valid JSON with one top-level key: "audiencePlan".
+- Rule 1: Extract 3-5 hyper-specific Meta Interests relevant to the product/offer.
+- Rule 2: Interests must be short categories (1-4 words). NO full sentences. NO pasted user brief text.
+- Rule 3: Suggest realistic Custom Audience hints (for example: "Website Visitors 30D", "Engaged Leads 90D").
+- USER REQUEST is higher priority than benchmark context.
+- Follow these strict rules:
+{strict_rules}
+
+Current blocks (for continuity, if provided):
+{compact_blocks}
+
+Extra instruction:
+{instruction or "N/A"}
+
+Expected JSON shape:
+{{
+  "audiencePlan": {{
+    "name": "string",
+    "geo": {{"countries": ["US"]}},
+    "ageRange": {{"min": 21, "max": 55}},
+    "genders": ["all"],
+    "interests": ["Vehicle insurance", "Automobile", "Family"],
+    "lookalikeHints": ["Website Visitors 30D", "Leads 90D"]
+  }}
+}}
+
+Data:
+{compact_context}
+"""
+        raw = self._generate(prompt, model=self.pro_model)
+        parsed = self._parse_json_dict(raw)
+        audience_plan = parsed.get("audiencePlan")
+        if isinstance(audience_plan, dict):
+            return {"audiencePlan": audience_plan}
+        return {}
+
+    def generate_creative_plan(
+        self,
+        context: dict,
+        *,
+        current_blocks: dict | None = None,
+        instruction: str = "",
+    ) -> dict:
+        """Agent 3: Direct Response Copywriter - creative plan only."""
+        compact_context = json.dumps(context, default=str)
+        compact_blocks = json.dumps(current_blocks or {}, default=str)
+        strict_rules, user_request_text, account_context_text = self._campaign_builder_prompt_sections(context)
+        prompt = f"""You are a ruthless Direct Response Copywriter.
+Output ONLY the creativePlan JSON block.
+
+{user_request_text}
+
+{account_context_text}
+
+Rules:
+- Output ONLY valid JSON with one top-level key: "creativePlan".
+- Rule 1 (STRICT LANGUAGE): Write 100% in the requested language.
+- Rule 2 (SPECIFICITY): Use the specific product and brand details from the brief. Avoid generic placeholders.
+- Rule 3 (COPY STRUCTURE): Provide 3 primary texts:
+  1) Pain-point focused
+  2) Benefit-driven (price/speed)
+  3) Short & punchy
+- Provide scroll-stopping hooks/angles and concise headlines.
+- USER REQUEST is higher priority than benchmark context.
+- Follow these strict rules:
+{strict_rules}
+
+Current blocks (for continuity, if provided):
+{compact_blocks}
+
+Extra instruction:
+{instruction or "N/A"}
+
+Expected JSON shape:
+{{
+  "creativePlan": {{
+    "angles": ["angle 1", "angle 2", "angle 3"],
+    "primaryTexts": ["text 1", "text 2", "text 3"],
+    "headlines": ["headline 1", "headline 2", "headline 3"],
+    "cta": "LEARN_MORE"
+  }}
+}}
+
+Data:
+{compact_context}
+"""
+        raw = self._generate(prompt, model=self.pro_model)
+        parsed = self._parse_json_dict(raw)
+        creative_plan = parsed.get("creativePlan")
+        if isinstance(creative_plan, dict):
+            return {"creativePlan": creative_plan}
+        return {}
+
     def generate_campaign_builder_draft(self, context: dict) -> dict:
         """Generate campaign builder blocks for a new draft."""
         compact_context = json.dumps(context, default=str)
@@ -476,6 +647,17 @@ Data:
         if block_type not in parsed:
             return {}
         return {block_type: parsed.get(block_type)}
+
+    def _campaign_builder_prompt_sections(self, context: dict) -> tuple[str, str, str]:
+        prompt_sections = context.get("promptSections", {}) if isinstance(context.get("promptSections"), dict) else {}
+        user_request_text = str(prompt_sections.get("userRequestText") or "").strip()
+        account_context_text = str(prompt_sections.get("accountContextText") or "").strip()
+        strict_rules = self._campaign_builder_strict_rules(context)
+        if not user_request_text:
+            user_request_text = self._fallback_campaign_builder_user_request(context)
+        if not account_context_text:
+            account_context_text = self._fallback_campaign_builder_account_context(context)
+        return strict_rules, user_request_text, account_context_text
 
     @staticmethod
     def _campaign_builder_strict_rules(context: dict) -> str:

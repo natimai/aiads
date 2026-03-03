@@ -76,7 +76,7 @@ class CampaignBuilderServiceTest(unittest.TestCase):
         self.service._ensure_account_exists = MagicMock()
         self.service._build_context = MagicMock(return_value={})
         self.service._draft_ref = MagicMock(return_value=fake_ref)
-        self.service.ai.regenerate_campaign_builder_block = MagicMock(
+        self.service.ai.generate_audience_plan = MagicMock(
             return_value={
                 "audiencePlan": {
                     "geo": {"countries": ["CA"]},
@@ -99,6 +99,36 @@ class CampaignBuilderServiceTest(unittest.TestCase):
         self.assertEqual(result["blocks"]["creativePlan"]["headlines"], ["B"])
         self.assertEqual(result["blocks"]["audiencePlan"]["geo"]["countries"], ["CA"])
         fake_ref.update.assert_called_once()
+
+    def test_generate_full_draft_via_agents_uses_sequential_context(self):
+        self.service.ai.generate_strategy_plan = MagicMock(
+            return_value={
+                "campaignPlan": {
+                    "name": "Insurance IL",
+                    "objective": "OUTCOME_LEADS",
+                    "buyingType": "AUCTION",
+                    "budgetType": "daily",
+                    "dailyBudget": 100,
+                },
+                "reasoning": "Strategy first",
+            }
+        )
+        self.service.ai.generate_audience_plan = MagicMock(
+            return_value={"audiencePlan": {"interests": ["Vehicle insurance"], "geo": {"countries": ["IL"]}}}
+        )
+        self.service.ai.generate_creative_plan = MagicMock(
+            return_value={"creativePlan": {"primaryTexts": ["טקסט"], "headlines": ["כותרת"], "angles": ["הוק"], "cta": "LEARN_MORE"}}
+        )
+
+        blocks = self.service._generate_full_draft_via_agents(context={"inputs": {"offer": "ביטוח רכב"}})
+
+        self.assertIn("campaignPlan", blocks)
+        self.assertIn("audiencePlan", blocks)
+        self.assertIn("creativePlan", blocks)
+        audience_current_blocks = self.service.ai.generate_audience_plan.call_args.kwargs["current_blocks"]
+        creative_current_blocks = self.service.ai.generate_creative_plan.call_args.kwargs["current_blocks"]
+        self.assertIn("campaignPlan", audience_current_blocks)
+        self.assertIn("audiencePlan", creative_current_blocks)
 
     def test_budget_guardrail_blocks_over_absolute_limit(self):
         with self.assertRaises(ValidationError):
@@ -179,7 +209,7 @@ class CampaignBuilderServiceTest(unittest.TestCase):
         self.service._ensure_account_exists = MagicMock()
         self.service._build_context = MagicMock(return_value={})
         self.service._draft_ref = MagicMock(return_value=fake_ref)
-        self.service.ai.regenerate_campaign_builder_block = MagicMock(
+        self.service.ai.generate_creative_plan = MagicMock(
             return_value={"creativePlan": {"primaryTexts": ["חדש"], "headlines": ["כותרת"]}}
         )
 

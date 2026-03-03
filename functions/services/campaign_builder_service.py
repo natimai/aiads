@@ -66,12 +66,7 @@ class CampaignBuilderService:
         self._ensure_account_exists(user_id, account_id)
         inputs = self._normalize_inputs(inputs)
         context = self._build_context(user_id=user_id, account_id=account_id, inputs=inputs)
-        blocks = self.ai.generate_campaign_builder_draft(context)
-        blocks = self._repair_initial_full_draft_blocks_with_llm(
-            context=context,
-            blocks=blocks,
-            inputs=inputs,
-        )
+        blocks = self._generate_full_draft_via_agents(context=context)
         blocks = self._normalize_blocks(blocks, inputs)
         validation = self._validate_blocks(blocks, inputs)
         status = "ready_for_publish" if validation["isValid"] else "draft"
@@ -137,15 +132,23 @@ class CampaignBuilderService:
         inputs = self._normalize_inputs(draft.get("inputs", {}), blocks=blocks)
         context = self._build_context(user_id=user_id, account_id=account_id, inputs=inputs)
 
-        regenerated = self.ai.regenerate_campaign_builder_block(
-            context,
+        next_blocks = dict(blocks)
+        regenerated = self._regenerate_block_via_agent(
+            context=context,
             current_blocks=blocks,
             block_type=block_type,
             instruction=instruction,
         )
-
-        next_blocks = dict(blocks)
-        next_blocks[block_type] = regenerated.get(block_type, blocks.get(block_type))
+        if block_type == "campaignPlan":
+            next_blocks["campaignPlan"] = regenerated.get("campaignPlan", blocks.get("campaignPlan"))
+            if isinstance(regenerated.get("reasoning"), str) and regenerated.get("reasoning", "").strip():
+                next_blocks["reasoning"] = regenerated.get("reasoning")
+        elif block_type == "reasoning":
+            next_blocks["reasoning"] = regenerated.get("reasoning", blocks.get("reasoning"))
+            if isinstance(regenerated.get("campaignPlan"), dict):
+                next_blocks["campaignPlan"] = regenerated.get("campaignPlan")
+        else:
+            next_blocks[block_type] = regenerated.get(block_type, blocks.get(block_type))
         next_blocks = self._normalize_blocks(next_blocks, inputs)
         validation = self._validate_blocks(next_blocks, inputs)
 
@@ -967,6 +970,65 @@ class CampaignBuilderService:
             "creativePlan": creative_plan,
             "reasoning": reasoning,
         }
+
+    def _generate_full_draft_via_agents(self, *, context: dict[str, Any]) -> dict[str, Any]:
+        """
+        Multi-agent sequential chain:
+        1) Media Strategist -> campaignPlan + reasoning
+        2) Audience Expert -> audiencePlan
+        3) DR Copywriter -> creativePlan
+        """
+        blocks: dict[str, Any] = {}
+
+        strategy_payload = self.ai.generate_strategy_plan(context)
+        if isinstance(strategy_payload.get("campaignPlan"), dict):
+            blocks["campaignPlan"] = strategy_payload["campaignPlan"]
+        if isinstance(strategy_payload.get("reasoning"), str):
+            blocks["reasoning"] = strategy_payload["reasoning"]
+
+        audience_payload = self.ai.generate_audience_plan(
+            context,
+            current_blocks=blocks,
+        )
+        if isinstance(audience_payload.get("audiencePlan"), dict):
+            blocks["audiencePlan"] = audience_payload["audiencePlan"]
+
+        creative_payload = self.ai.generate_creative_plan(
+            context,
+            current_blocks=blocks,
+        )
+        if isinstance(creative_payload.get("creativePlan"), dict):
+            blocks["creativePlan"] = creative_payload["creativePlan"]
+
+        return blocks
+
+    def _regenerate_block_via_agent(
+        self,
+        *,
+        context: dict[str, Any],
+        current_blocks: dict[str, Any],
+        block_type: str,
+        instruction: str,
+    ) -> dict[str, Any]:
+        if block_type in {"campaignPlan", "reasoning"}:
+            return self.ai.generate_strategy_plan(
+                context,
+                current_blocks=current_blocks,
+                instruction=instruction,
+            )
+        if block_type == "audiencePlan":
+            return self.ai.generate_audience_plan(
+                context,
+                current_blocks=current_blocks,
+                instruction=instruction,
+            )
+        if block_type == "creativePlan":
+            return self.ai.generate_creative_plan(
+                context,
+                current_blocks=current_blocks,
+                instruction=instruction,
+            )
+        return {}
 
     def _repair_initial_full_draft_blocks_with_llm(
         self,
