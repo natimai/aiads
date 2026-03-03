@@ -981,25 +981,24 @@ class CampaignBuilderService:
         regenerate only those blocks via LLM (same robust path as manual regenerate).
         """
         candidate = dict(blocks) if isinstance(blocks, dict) else {}
+        if not candidate:
+            # Avoid multi-call repair when the model returned nothing;
+            # normalization fallback will build a valid draft quickly.
+            return candidate
         offer = str(inputs.get("offer") or "").strip()
         language = str(inputs.get("language") or "en")
         is_hebrew = self._is_hebrew_language(language)
 
-        missing_or_invalid: list[str] = []
-        if not isinstance(candidate.get("campaignPlan"), dict):
-            missing_or_invalid.append("campaignPlan")
+        blocks_to_repair: list[str] = []
         if self._audience_block_needs_regen(candidate.get("audiencePlan"), offer):
-            missing_or_invalid.append("audiencePlan")
+            blocks_to_repair.append("audiencePlan")
         if self._creative_block_needs_regen(candidate.get("creativePlan"), offer, is_hebrew):
-            missing_or_invalid.append("creativePlan")
-        if not str(candidate.get("reasoning") or "").strip():
-            missing_or_invalid.append("reasoning")
+            blocks_to_repair.append("creativePlan")
 
-        if not missing_or_invalid:
+        if not blocks_to_repair:
             return candidate
 
         instructions = {
-            "campaignPlan": "Generate a complete campaignPlan only. Keep objective and budget coherent with the user request.",
             "audiencePlan": (
                 "Generate an audiencePlan only. Interests must be short Meta targeting categories (1-4 words each), "
                 "not full sentences and not a pasted user brief."
@@ -1008,10 +1007,10 @@ class CampaignBuilderService:
                 "Generate a creativePlan only. DO NOT parrot the raw user brief. "
                 "Write original, concise, native-language copy. Avoid mixed-language output."
             ),
-            "reasoning": "Generate a short reasoning string that references the user brief first and benchmarks second.",
         }
 
-        for block_type in missing_or_invalid:
+        # Keep generation latency bounded: repair up to 2 blocks (audience + creative).
+        for block_type in blocks_to_repair[:2]:
             try:
                 regenerated = self.ai.regenerate_campaign_builder_block(
                     context,
@@ -1067,11 +1066,15 @@ class CampaignBuilderService:
 
     @staticmethod
     def _is_hebrew_language(language: str) -> bool:
-        normalized = str(language or "").strip().lower()
+        raw = str(language or "").strip()
+        normalized = raw.lower()
+        has_hebrew_chars = bool(re.search(r"[\u0590-\u05FF]", raw))
         return (
             normalized.startswith("he")
             or "hebrew" in normalized
-            or "עברית" in str(language or "").strip()
+            or "עברית" in raw
+            or "עבר" in raw
+            or has_hebrew_chars
         )
 
     @staticmethod

@@ -252,6 +252,21 @@ class CampaignBuilderServiceTest(unittest.TestCase):
         self.assertEqual(repaired["creativePlan"]["headlines"], ["ביטוח רכב משתלם"])
         self.assertEqual(repaired["audiencePlan"]["interests"], ["ביטוח רכב", "רכב", "משפחה"])
 
+    def test_initial_full_draft_skips_repair_when_model_returns_empty_payload(self):
+        self.service.ai.regenerate_campaign_builder_block = MagicMock(return_value={"creativePlan": {"headlines": ["X"]}})
+        repaired = self.service._repair_initial_full_draft_blocks_with_llm(
+            context={},
+            blocks={},
+            inputs={"offer": "ביטוח", "language": "עברית"},
+        )
+        self.assertEqual(repaired, {})
+        self.service.ai.regenerate_campaign_builder_block.assert_not_called()
+
+    def test_hebrew_language_detection_handles_common_typos(self):
+        self.assertTrue(self.service._is_hebrew_language("עברית"))
+        self.assertTrue(self.service._is_hebrew_language("עבירת"))
+        self.assertTrue(self.service._is_hebrew_language("he"))
+
 
 if __name__ == "__main__":
     unittest.main()
