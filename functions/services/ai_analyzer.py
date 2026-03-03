@@ -370,6 +370,11 @@ STRICT PRIORITY HIERARCHY:
 STRICT RULES:
 {strict_rules}
 
+FULL_DRAFT HARD RULES:
+- RULE 4 (NO PARROTING): DO NOT copy and paste the raw Product/Offer text into output fields. Write original copy.
+- RULE 5 (STRICT LANGUAGE ENFORCEMENT): The ENTIRE creative_plan output must be written natively in the requested language.
+- INTERESTS FORMAT: audiencePlan.interests must contain short Meta targeting categories (1-4 words each), not sentences.
+
 {user_request_text}
 
 {account_context_text}
@@ -456,6 +461,7 @@ Regeneration guardrails:
 - Preserve product/offer relevance and language consistency from USER REQUEST.
 - If block_type is creativePlan, all primaryTexts/headlines must stay in the requested language.
 - If block_type is audiencePlan, interests must map directly to the user product/offer.
+- If block_type is audiencePlan, interests must be short Meta categories (1-4 words), never full-sentence brief text.
 
 Return ONLY valid JSON with exactly one top-level key named "{block_type}".
 Do not include any other keys.
@@ -485,7 +491,9 @@ Data:
             "- RULE 2 (LANGUAGE): If the LANGUAGE is set to 'עברית' (Hebrew) or any other language, ALL fields inside creative_plan "
             "(primary texts, headlines) MUST be 100% in that language. No English exceptions.\n"
             "- RULE 3 (AUDIENCE LOGIC): The interests must directly relate to the specific product/offer. "
-            "Do not suggest 'Online Shopping' for an Insurance campaign."
+            "Do not suggest 'Online Shopping' for an Insurance campaign. Interests must be short valid Meta categories.\n"
+            "- RULE 4 (NO PARROTING): DO NOT copy and paste the raw Product/Offer text into output fields. Write original concise copy.\n"
+            "- RULE 5 (STRICT LANGUAGE ENFORCEMENT): The ENTIRE creative_plan output must be in the requested language, with no mixed-language wrappers."
         )
 
     @staticmethod

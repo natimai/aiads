@@ -1,6 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
+import re
 
 from services.campaign_builder_service import CampaignBuilderService, ValidationError
 
@@ -193,6 +194,63 @@ class CampaignBuilderServiceTest(unittest.TestCase):
         build_context_inputs = self.service._build_context.call_args.kwargs["inputs"]
         self.assertEqual(build_context_inputs["offer"], "Car Insurance")
         self.assertEqual(build_context_inputs["language"], "עברית")
+
+    def test_normalize_blocks_fallback_does_not_parrot_raw_brief(self):
+        raw_brief = "ביטוח רכב לנהגים צעירים\nמחיר טוב ושירות מהיר\nלידים חמים"
+        blocks = self.service._normalize_blocks(
+            {},
+            {
+                "offer": raw_brief,
+                "objective": "OUTCOME_LEADS",
+                "language": "עברית",
+                "country": "IL",
+                "campaignName": "Lead Gen",
+                "dailyBudget": 120,
+            },
+        )
+
+        texts = blocks["creativePlan"]["primaryTexts"] + blocks["creativePlan"]["headlines"]
+        self.assertTrue(texts)
+        self.assertTrue(all(not re.search(r"[A-Za-z]", t) for t in texts))
+        self.assertTrue(all(raw_brief not in t for t in texts))
+        self.assertTrue(all("\n" not in i for i in blocks["audiencePlan"]["interests"]))
+
+    def test_initial_full_draft_repairs_bad_creative_and_audience_with_llm(self):
+        offer = "ביטוח רכב לנהגים צעירים עם כיסוי מלא והצעת מחיר מהירה אונליין"
+        bad_blocks = {
+            "campaignPlan": {"name": "X", "objective": "OUTCOME_LEADS", "dailyBudget": 100},
+            "audiencePlan": {"interests": [offer]},
+            "creativePlan": {
+                "primaryTexts": [f"Looking for {offer}?"],
+                "headlines": ["Best Offer"],
+            },
+            "reasoning": "ok",
+        }
+
+        def regen_side_effect(_context, *, current_blocks, block_type, instruction):
+            if block_type == "audiencePlan":
+                return {"audiencePlan": {"interests": ["ביטוח רכב", "רכב", "משפחה"], "geo": {"countries": ["IL"]}}}
+            if block_type == "creativePlan":
+                return {
+                    "creativePlan": {
+                        "primaryTexts": ["השאירו פרטים וקבלו הצעת מחיר מהירה."],
+                        "headlines": ["ביטוח רכב משתלם"],
+                    }
+                }
+            return {block_type: current_blocks.get(block_type)}
+
+        self.service.ai.regenerate_campaign_builder_block = MagicMock(side_effect=regen_side_effect)
+        repaired = self.service._repair_initial_full_draft_blocks_with_llm(
+            context={},
+            blocks=bad_blocks,
+            inputs={"offer": offer, "language": "עברית"},
+        )
+
+        calls = [c.kwargs["block_type"] for c in self.service.ai.regenerate_campaign_builder_block.call_args_list]
+        self.assertIn("audiencePlan", calls)
+        self.assertIn("creativePlan", calls)
+        self.assertEqual(repaired["creativePlan"]["headlines"], ["ביטוח רכב משתלם"])
+        self.assertEqual(repaired["audiencePlan"]["interests"], ["ביטוח רכב", "רכב", "משפחה"])
 
 
 if __name__ == "__main__":
