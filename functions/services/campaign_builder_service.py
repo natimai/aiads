@@ -938,11 +938,11 @@ class CampaignBuilderService:
         )
         creative_plan.setdefault(
             "primaryTexts",
-            self._default_primary_texts(is_hebrew),
+            self._default_primary_texts(offer, is_hebrew),
         )
         creative_plan.setdefault(
             "headlines",
-            self._default_headlines(is_hebrew),
+            self._default_headlines(offer, is_hebrew),
         )
         creative_plan.setdefault("cta", "LEARN_MORE")
 
@@ -971,7 +971,7 @@ class CampaignBuilderService:
         Multi-agent sequential chain:
         1) Media Strategist -> campaignPlan + reasoning
         2) Audience Expert -> audiencePlan
-        3) DR Copywriter -> creativePlan
+        3) DR Copywriter -> creativePlan (with retry on failure)
         """
         blocks: dict[str, Any] = {}
 
@@ -988,12 +988,27 @@ class CampaignBuilderService:
         if isinstance(audience_payload.get("audiencePlan"), dict):
             blocks["audiencePlan"] = audience_payload["audiencePlan"]
 
-        creative_payload = self.ai.generate_creative_plan(
-            context,
-            current_blocks=blocks,
-        )
-        if isinstance(creative_payload.get("creativePlan"), dict):
-            blocks["creativePlan"] = creative_payload["creativePlan"]
+        # Creative agent with retry — this is the most critical block.
+        creative_plan = None
+        for attempt in range(2):
+            try:
+                creative_payload = self.ai.generate_creative_plan(
+                    context,
+                    current_blocks=blocks,
+                )
+                if isinstance(creative_payload.get("creativePlan"), dict):
+                    cp = creative_payload["creativePlan"]
+                    if cp.get("primaryTexts") and cp.get("headlines"):
+                        creative_plan = cp
+                        break
+                logger.warning("Creative agent attempt %d returned incomplete plan", attempt + 1)
+            except Exception:
+                logger.warning("Creative agent attempt %d failed", attempt + 1, exc_info=True)
+
+        if creative_plan is not None:
+            blocks["creativePlan"] = creative_plan
+        else:
+            logger.error("Creative agent failed after all attempts — no creativePlan in blocks")
 
         return blocks
 
@@ -1155,31 +1170,33 @@ class CampaignBuilderService:
         ]
 
     @staticmethod
-    def _default_primary_texts(is_hebrew: bool) -> list[str]:
+    def _default_primary_texts(offer: str, is_hebrew: bool) -> list[str]:
+        """Offer-aware placeholder texts — used only as last resort."""
         if is_hebrew:
             return [
-                "רוצים פתרון שמתאים בדיוק לצרכים שלכם? התחילו עכשיו בתהליך קצר ופשוט.",
-                "בדקו זכאות וקבלו הצעה מותאמת תוך דקות, בלי התחייבות.",
-                "השאירו פרטים ונחזור אליכם עם אפשרויות ברורות ומשתלמות.",
+                f"מחפשים {offer}? השאירו פרטים ונחזור עם הצעה מותאמת.",
+                f"קבלו הצעת מחיר ל{offer} — תהליך מהיר ובלי התחייבות.",
+                f"{offer} — גלו למה אלפי לקוחות כבר בחרו בנו.",
             ]
         return [
-            "Get a tailored option in minutes with a simple, guided flow.",
-            "See clear choices and move forward with confidence today.",
-            "Start now to receive a fast, relevant recommendation.",
+            f"Looking for {offer}? Get a personalized quote in minutes.",
+            f"Compare {offer} options and choose the best fit for you.",
+            f"{offer} — find out why thousands already trust us.",
         ]
 
     @staticmethod
-    def _default_headlines(is_hebrew: bool) -> list[str]:
+    def _default_headlines(offer: str, is_hebrew: bool) -> list[str]:
+        """Offer-aware placeholder headlines — used only as last resort."""
         if is_hebrew:
             return [
-                "פתרון שמותאם לכם",
-                "השוו ובחרו נכון",
-                "בדקו זכאות עכשיו",
+                f"{offer} — התחילו עכשיו",
+                f"הצעה מיוחדת ל{offer}",
+                f"{offer} במחיר משתלם",
             ]
         return [
-            "Find Your Best Option",
-            "Compare and Choose Smart",
-            "Check Eligibility Today",
+            f"{offer} — Get Started",
+            f"Best {offer} Deal",
+            f"{offer} — Act Now",
         ]
 
     @staticmethod

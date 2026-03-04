@@ -62,12 +62,12 @@ class AIAnalyzer:
         self.flash_model = os.environ.get("GEMINI_FLASH_MODEL", self.FLASH_MODEL)
         self.pro_model = os.environ.get("GEMINI_PRO_MODEL", self.PRO_MODEL)
 
-    def _get_model(self, model_name: str):
+    def _get_model(self, model_name: str, *, system_instruction: str | None = None):
         import google.generativeai as genai
         genai.configure(api_key=self.api_key)
         return genai.GenerativeModel(
             model_name,
-            system_instruction=SYSTEM_PROMPT,
+            system_instruction=system_instruction if system_instruction is not None else SYSTEM_PROMPT,
         )
 
     def daily_summary(self, campaign_data: dict) -> str:
@@ -362,8 +362,12 @@ Data:
         compact_context = json.dumps(context, default=str)
         compact_blocks = json.dumps(current_blocks or {}, default=str)
         strict_rules, user_request_text, account_context_text = self._campaign_builder_prompt_sections(context)
-        prompt = f"""You are a Senior Meta Ads Strategist.
-Analyze the user's brief and output ONLY campaign planning JSON.
+        system = (
+            "You are a Senior Meta Ads Strategist. "
+            "You analyze campaign briefs and output structured campaign planning JSON. "
+            "Output ONLY valid JSON. No markdown, no intro text."
+        )
+        prompt = f"""Analyze the user's brief and output ONLY campaign planning JSON.
 
 {user_request_text}
 
@@ -398,7 +402,7 @@ Expected JSON shape:
 Data:
 {compact_context}
 """
-        raw = self._generate(prompt, model=self.pro_model)
+        raw = self._generate(prompt, model=self.pro_model, system_instruction=system)
         parsed = self._parse_json_dict(raw)
         result: dict[str, Any] = {}
         campaign_plan = parsed.get("campaignPlan") or parsed.get("campaign_plan")
@@ -430,8 +434,12 @@ Data:
         compact_context = json.dumps(context, default=str)
         compact_blocks = json.dumps(current_blocks or {}, default=str)
         strict_rules, user_request_text, account_context_text = self._campaign_builder_prompt_sections(context)
-        prompt = f"""You are an elite Meta Ads Audience Specialist.
-Output ONLY the audiencePlan JSON block.
+        system = (
+            "You are an elite Meta Ads Audience Specialist. "
+            "You build precise audience targeting plans based on the product/offer brief. "
+            "Output ONLY valid JSON. No markdown, no intro text."
+        )
+        prompt = f"""Output ONLY the audiencePlan JSON block.
 
 {user_request_text}
 
@@ -467,7 +475,7 @@ Expected JSON shape:
 Data:
 {compact_context}
 """
-        raw = self._generate(prompt, model=self.pro_model)
+        raw = self._generate(prompt, model=self.pro_model, system_instruction=system)
         parsed = self._parse_json_dict(raw)
         audience_plan = parsed.get("audiencePlan") or parsed.get("audience_plan")
         if isinstance(audience_plan, dict):
@@ -510,24 +518,41 @@ Data:
         compact_context = json.dumps(context, default=str)
         compact_blocks = json.dumps(current_blocks or {}, default=str)
         strict_rules, user_request_text, account_context_text = self._campaign_builder_prompt_sections(context)
-        prompt = f"""You are a ruthless Direct Response Copywriter.
-Output ONLY the creativePlan JSON block.
+
+        # Extract the offer for explicit injection into the prompt.
+        inputs = context.get("inputs", {}) if isinstance(context.get("inputs"), dict) else {}
+        offer = str(inputs.get("offer") or "").strip()
+        language = str(inputs.get("language") or "en").strip()
+
+        system = (
+            "You are a ruthless Direct Response Copywriter for Meta Ads. "
+            "You write highly specific, product-led ad copy that converts. "
+            "You NEVER use generic filler like 'solution', 'service', 'tailored option', or 'check eligibility'. "
+            "Every word must sell the SPECIFIC product the user gave you. "
+            "Output ONLY valid JSON. No markdown, no intro text."
+        )
+
+        prompt = f"""Write ad copy for this SPECIFIC product/offer:
+
+PRODUCT/OFFER: "{offer}"
+LANGUAGE: {language}
 
 {user_request_text}
 
 {account_context_text}
 
-Rules:
-- Output ONLY valid JSON with one top-level key: "creativePlan".
-- Rule 1 (STRICT LANGUAGE): Write 100% in the requested language.
-- Rule 2 (SPECIFICITY): Use the specific product and brand details from the brief. Avoid generic placeholders.
-- Rule 3 (COPY STRUCTURE): Provide 3 primary texts:
-  1) Pain-point focused
-  2) Benefit-driven (price/speed)
-  3) Short & punchy
-- Provide scroll-stopping hooks/angles and concise headlines.
+CRITICAL RULES:
+- RULE 1 (PRODUCT NAME IN COPY): You MUST mention the specific product/brand name "{offer}" (or a clear reference to it) in EVERY primary text and headline. DO NOT use generic words like "solution", "service", "option", or "product".
+- RULE 2 (STRICT LANGUAGE): Write 100% in {language}. No mixed languages.
+- RULE 3 (NO GENERIC COPY): If your output could apply to ANY product, it is WRONG. The copy must ONLY make sense for "{offer}".
+- RULE 4 (COPY STRUCTURE): Provide exactly 3 primary texts:
+  1) Pain-point focused — what problem does "{offer}" solve?
+  2) Benefit-driven — specific benefit of "{offer}" (price, speed, coverage, etc.)
+  3) Short & punchy — urgency or social proof specific to "{offer}"
+- RULE 5 (HEADLINES): Each headline must reference "{offer}" or its core benefit directly.
 - USER REQUEST is higher priority than benchmark context.
-- Follow these strict rules:
+
+Additional strict rules:
 {strict_rules}
 
 Current blocks (for continuity, if provided):
@@ -536,7 +561,7 @@ Current blocks (for continuity, if provided):
 Extra instruction:
 {instruction or "N/A"}
 
-Expected JSON shape:
+Output ONLY valid JSON with this exact shape:
 {{
   "creativePlan": {{
     "angles": ["angle 1", "angle 2", "angle 3"],
@@ -549,14 +574,14 @@ Expected JSON shape:
 Data:
 {compact_context}
 """
-        raw = self._generate(prompt, model=self.pro_model)
+        raw = self._generate(prompt, model=self.pro_model, system_instruction=system)
         parsed = self._parse_json_dict(raw)
         creative_plan = parsed.get("creativePlan") or parsed.get("creative_plan")
         if isinstance(creative_plan, dict):
             primary_texts = creative_plan.get("primaryTexts") or creative_plan.get("primary_texts")
             headlines = creative_plan.get("headlines")
             angles = creative_plan.get("angles") or creative_plan.get("hooks")
-            return {
+            result = {
                 "creativePlan": {
                     "angles": angles if isinstance(angles, list) else [],
                     "primaryTexts": primary_texts if isinstance(primary_texts, list) else [],
@@ -564,6 +589,12 @@ Data:
                     "cta": creative_plan.get("cta") or creative_plan.get("call_to_action") or "LEARN_MORE",
                 }
             }
+            # Validate the creative plan has actual content
+            if result["creativePlan"]["primaryTexts"] and result["creativePlan"]["headlines"]:
+                return result
+            logger.warning("Creative agent returned empty primaryTexts or headlines")
+        else:
+            logger.warning("Creative agent failed to return a valid creativePlan. Raw: %s", raw[:500])
         return {}
 
     def generate_campaign_builder_draft(self, context: dict) -> dict:
@@ -630,7 +661,11 @@ Rules:
 Data:
 {compact_context}
 """
-        raw = self._generate(prompt, model=self.pro_model)
+        system = (
+            "You are an expert Meta ads strategist. You build launch-ready campaign drafts. "
+            "Output ONLY valid JSON. No markdown, no intro text."
+        )
+        raw = self._generate(prompt, model=self.pro_model, system_instruction=system)
         parsed = self._parse_json_dict(raw)
         return parsed if isinstance(parsed, dict) else {}
 
@@ -685,7 +720,11 @@ Do not include any other keys.
 Data:
 {compact_context}
 """
-        raw = self._generate(prompt, model=self.flash_model)
+        system = (
+            "You are an expert Meta ads strategist. "
+            "Output ONLY valid JSON. No markdown, no intro text."
+        )
+        raw = self._generate(prompt, model=self.flash_model, system_instruction=system)
         parsed = self._parse_json_dict(raw)
         if not isinstance(parsed, dict):
             return {}
@@ -800,14 +839,14 @@ Data:
 
         return "\n".join(lines)
 
-    def _generate(self, prompt: str, model: str | None = None) -> str:
+    def _generate(self, prompt: str, model: str | None = None, *, system_instruction: str | None = None) -> str:
         """Call Gemini API and return the response text."""
         if not self.api_key:
             return "_AI analysis unavailable: Gemini API key not configured._"
 
         model_name = model or self.pro_model
         try:
-            gemini_model = self._get_model(model_name)
+            gemini_model = self._get_model(model_name, system_instruction=system_instruction)
             response = gemini_model.generate_content(
                 prompt,
                 generation_config={
