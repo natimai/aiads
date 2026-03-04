@@ -401,10 +401,20 @@ Data:
         raw = self._generate(prompt, model=self.pro_model)
         parsed = self._parse_json_dict(raw)
         result: dict[str, Any] = {}
-        campaign_plan = parsed.get("campaignPlan")
+        campaign_plan = parsed.get("campaignPlan") or parsed.get("campaign_plan")
         if isinstance(campaign_plan, dict):
-            result["campaignPlan"] = campaign_plan
-        reasoning = parsed.get("reasoning") or parsed.get("strategyReasoning")
+            result["campaignPlan"] = {
+                "name": campaign_plan.get("name"),
+                "objective": campaign_plan.get("objective"),
+                "buyingType": campaign_plan.get("buyingType") or campaign_plan.get("buying_type"),
+                "budgetType": campaign_plan.get("budgetType") or campaign_plan.get("budget_type"),
+                "dailyBudget": campaign_plan.get("dailyBudget") or campaign_plan.get("daily_budget"),
+            }
+        reasoning = (
+            parsed.get("reasoning")
+            or parsed.get("strategyReasoning")
+            or parsed.get("strategy_reasoning")
+        )
         if isinstance(reasoning, str) and reasoning.strip():
             result["reasoning"] = reasoning.strip()
         return result
@@ -459,9 +469,34 @@ Data:
 """
         raw = self._generate(prompt, model=self.pro_model)
         parsed = self._parse_json_dict(raw)
-        audience_plan = parsed.get("audiencePlan")
+        audience_plan = parsed.get("audiencePlan") or parsed.get("audience_plan")
         if isinstance(audience_plan, dict):
-            return {"audiencePlan": audience_plan}
+            geo = audience_plan.get("geo") if isinstance(audience_plan.get("geo"), dict) else {}
+            countries = (
+                geo.get("countries")
+                if isinstance(geo.get("countries"), list)
+                else audience_plan.get("countries")
+            )
+            age_range = audience_plan.get("ageRange") or audience_plan.get("age_range") or {}
+            lookalikes = (
+                audience_plan.get("lookalikeHints")
+                or audience_plan.get("lookalike_hints")
+                or audience_plan.get("customAudiences")
+                or audience_plan.get("custom_audiences")
+            )
+            return {
+                "audiencePlan": {
+                    "name": audience_plan.get("name"),
+                    "geo": {"countries": countries if isinstance(countries, list) else ["US"]},
+                    "ageRange": {
+                        "min": age_range.get("min", 21) if isinstance(age_range, dict) else 21,
+                        "max": age_range.get("max", 55) if isinstance(age_range, dict) else 55,
+                    },
+                    "genders": audience_plan.get("genders") if isinstance(audience_plan.get("genders"), list) else ["all"],
+                    "interests": audience_plan.get("interests") if isinstance(audience_plan.get("interests"), list) else [],
+                    "lookalikeHints": lookalikes if isinstance(lookalikes, list) else [],
+                }
+            }
         return {}
 
     def generate_creative_plan(
@@ -516,9 +551,19 @@ Data:
 """
         raw = self._generate(prompt, model=self.pro_model)
         parsed = self._parse_json_dict(raw)
-        creative_plan = parsed.get("creativePlan")
+        creative_plan = parsed.get("creativePlan") or parsed.get("creative_plan")
         if isinstance(creative_plan, dict):
-            return {"creativePlan": creative_plan}
+            primary_texts = creative_plan.get("primaryTexts") or creative_plan.get("primary_texts")
+            headlines = creative_plan.get("headlines")
+            angles = creative_plan.get("angles") or creative_plan.get("hooks")
+            return {
+                "creativePlan": {
+                    "angles": angles if isinstance(angles, list) else [],
+                    "primaryTexts": primary_texts if isinstance(primary_texts, list) else [],
+                    "headlines": headlines if isinstance(headlines, list) else [],
+                    "cta": creative_plan.get("cta") or creative_plan.get("call_to_action") or "LEARN_MORE",
+                }
+            }
         return {}
 
     def generate_campaign_builder_draft(self, context: dict) -> dict:

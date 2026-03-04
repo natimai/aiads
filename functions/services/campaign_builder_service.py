@@ -946,13 +946,8 @@ class CampaignBuilderService:
         )
         creative_plan.setdefault("cta", "LEARN_MORE")
 
-        # Strict language fallback guardrail (only enforce hard for Hebrew requests).
-        if is_hebrew:
-            primary_texts = creative_plan.get("primaryTexts", []) if isinstance(creative_plan.get("primaryTexts"), list) else []
-            headlines = creative_plan.get("headlines", []) if isinstance(creative_plan.get("headlines"), list) else []
-            if self._creative_has_language_mismatch(primary_texts + headlines):
-                creative_plan["primaryTexts"] = self._default_primary_texts(True)
-                creative_plan["headlines"] = self._default_headlines(True)
+        # Do not overwrite model output with generic templates when there is mixed language.
+        # We keep the generated copy for specificity and let explicit regenerate refine it.
 
         reasoning = blocks.get("reasoning")
         if not isinstance(reasoning, str) or not reasoning.strip():
