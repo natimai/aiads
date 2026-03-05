@@ -71,3 +71,11 @@
 .skeleton {
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
+
+/* Utility clamp used for card/list text truncation without plugin dependency */
+.clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

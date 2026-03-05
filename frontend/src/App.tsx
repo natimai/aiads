@@ -1,14 +1,28 @@
-import { lazy, Suspense, useState, useEffect } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Routes, Route, useLocation, NavLink } from "react-router-dom";
 import { onAuthStateChanged, type User } from "firebase/auth";
+import {
+  Brain,
+  Keyboard,
+  LayoutDashboard,
+  Layers3,
+  Menu,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  RefreshCw,
+  Sun,
+  WandSparkles,
+  X,
+} from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { auth } from "./services/firebase";
 import { Sidebar } from "./components/common/Sidebar";
 import { AccountSwitcher } from "./components/common/AccountSwitcher";
 import { DateRangePicker } from "./components/common/DateRangePicker";
 import { useAccountsQuery } from "./hooks/useAccounts";
 import { useKeyboardShortcuts, SHORTCUTS } from "./hooks/useKeyboardShortcuts";
-import { Keyboard, X, Menu } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useTheme } from "./contexts/ThemeContext";
 
 const Login = lazy(() => import("./pages/Login"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -25,7 +39,7 @@ const AccountSettings = lazy(() => import("./pages/AccountSettings"));
 function PageLoader() {
   return (
     <div className="flex h-64 items-center justify-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-700 border-t-accent-blue" />
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-700 border-t-indigo-400" />
     </div>
   );
 }
@@ -33,14 +47,12 @@ function PageLoader() {
 export default function App() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
 
-  useEffect(() => {
-    return onAuthStateChanged(auth, setUser);
-  }, []);
+  useEffect(() => onAuthStateChanged(auth, setUser), []);
 
   if (user === undefined) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100">
-        <div className="h-10 w-10 animate-spin rounded-full border-2 border-slate-200 border-t-accent-blue" />
+      <div className="flex min-h-screen items-center justify-center bg-[#040816]">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-slate-700 border-t-indigo-400" />
       </div>
     );
   }
@@ -59,104 +71,149 @@ export default function App() {
 function AuthenticatedApp() {
   useAccountsQuery();
   const queryClient = useQueryClient();
+  const location = useLocation();
+  const { theme, toggleTheme } = useTheme();
+  const { showHelp, setShowHelp } = useKeyboardShortcuts();
+
   const [refreshing, setRefreshing] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { showHelp, setShowHelp } = useKeyboardShortcuts();
-  const location = useLocation();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem("nati-sidebar-collapsed") === "1";
+  });
 
   useEffect(() => {
     setSidebarOpen(false);
   }, [location.pathname]);
 
+  useEffect(() => {
+    localStorage.setItem("nati-sidebar-collapsed", sidebarCollapsed ? "1" : "0");
+  }, [sidebarCollapsed]);
+
+  const routeTitle = useMemo(() => {
+    const path = location.pathname;
+    if (path.startsWith("/ai-insights")) return "Action Feed";
+    if (path.startsWith("/campaign-builder")) return "Campaign Builder";
+    if (path.startsWith("/campaigns")) return "Campaign Explorer";
+    if (path.startsWith("/alerts")) return "Alerts";
+    if (path.startsWith("/reports")) return "Reports";
+    if (path.startsWith("/creative-lab")) return "Creative Lab";
+    if (path.startsWith("/settings")) return "Settings";
+    return "Dashboard";
+  }, [location.pathname]);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await queryClient.invalidateQueries();
-    setTimeout(() => setRefreshing(false), 500);
+    setTimeout(() => setRefreshing(false), 450);
   };
 
+  const darkShell =
+    theme === "dark"
+      ? "bg-[#040816] text-slate-100"
+      : "bg-slate-100 text-slate-900";
+
+  const topbarSurface =
+    theme === "dark"
+      ? "border-slate-800/70 bg-[#070d1f]/80"
+      : "border-slate-200/80 bg-white/85";
+
+  const mobileNavSurface =
+    theme === "dark"
+      ? "border-slate-800 bg-[#070d1f]/95"
+      : "border-slate-200 bg-white/95";
+
   return (
-    <div className="flex min-h-screen bg-slate-100">
+    <div className={`min-h-screen ${darkShell}`}>
       {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm lg:hidden"
+        <button
+          className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm lg:hidden"
           onClick={() => setSidebarOpen(false)}
+          aria-label="Close navigation"
         />
       )}
 
-      <Sidebar mobileOpen={sidebarOpen} onMobileClose={() => setSidebarOpen(false)} />
+      <Sidebar
+        mobileOpen={sidebarOpen}
+        onMobileClose={() => setSidebarOpen(false)}
+        collapsed={sidebarCollapsed}
+      />
 
-      <main className="lg:ml-20 flex-1 min-w-0">
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200/60 bg-white/80 px-5 shadow-sm backdrop-blur-md">
-          {/* Left: hamburger (mobile) + search */}
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="lg:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors"
-            >
-              <Menu className="h-4 w-4" />
-            </button>
-            {/* Search bar */}
-            <div className="relative hidden md:block">
-              <span
-                className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 leading-none select-none"
-                style={{ fontSize: "18px" }}
+      <div
+        className={`min-h-screen transition-[padding-left] duration-300 ${
+          sidebarCollapsed ? "lg:pl-24" : "lg:pl-72"
+        }`}
+      >
+        <header
+          className={`sticky top-0 z-30 border-b px-4 py-3 backdrop-blur-xl sm:px-6 ${topbarSurface}`}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-700/70 text-slate-300 lg:hidden"
+                aria-label="Open menu"
               >
-                search
-              </span>
-              <input
-                type="search"
-                placeholder="Search campaigns, accounts…"
-                className="h-9 w-64 rounded-xl border border-slate-200 bg-slate-50/80 pl-9 pr-4 text-sm placeholder:text-slate-400 text-slate-700 focus:border-indigo-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
-              />
+                <Menu className="h-4 w-4" />
+              </button>
+
+              <button
+                onClick={() => setSidebarCollapsed((v) => !v)}
+                className="hidden min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-700/70 text-slate-300 transition-colors hover:bg-slate-800 lg:inline-flex"
+                aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              >
+                {sidebarCollapsed ? (
+                  <PanelLeftOpen className="h-4 w-4" />
+                ) : (
+                  <PanelLeftClose className="h-4 w-4" />
+                )}
+              </button>
+
+              <div className="min-w-0">
+                <p className="truncate text-base font-semibold">{routeTitle}</p>
+                <p className="truncate text-xs text-slate-400">
+                  Command surface for proactive Meta Ads operations
+                </p>
+              </div>
             </div>
-          </div>
 
-          {/* Right: account switcher + date picker + actions */}
-          <div className="flex items-center gap-2.5">
-            <AccountSwitcher />
-            <DateRangePicker />
+            <div className="flex items-center gap-2">
+              <div className="hidden md:block">
+                <AccountSwitcher />
+              </div>
+              <div className="hidden lg:block">
+                <DateRangePicker />
+              </div>
 
-            {/* Keyboard shortcuts — desktop only */}
-            <button
-              onClick={() => setShowHelp(true)}
-              className="hidden lg:flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-50"
-              title="Keyboard shortcuts (?)"
-            >
-              <Keyboard className="h-4 w-4" />
-            </button>
-
-            {/* Notifications bell with red badge */}
-            <button
-              className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-50"
-              title="Notifications"
-            >
-              <span
-                className="material-symbols-outlined leading-none select-none"
-                style={{ fontSize: "20px" }}
+              <button
+                onClick={toggleTheme}
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-700/70 text-slate-300 transition-colors hover:bg-slate-800"
+                title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+                aria-label="Toggle color theme"
               >
-                notifications
-              </span>
-              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />
-            </button>
+                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </button>
 
-            {/* Refresh */}
-            <button
-              onClick={handleRefresh}
-              className="hidden sm:flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-50"
-              title="Refresh all data (R)"
-            >
-              <span
-                className={`material-symbols-outlined leading-none select-none ${refreshing ? "animate-spin" : ""}`}
-                style={{ fontSize: "20px" }}
+              <button
+                onClick={() => setShowHelp(true)}
+                className="hidden min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-700/70 text-slate-300 transition-colors hover:bg-slate-800 md:inline-flex"
+                title="Keyboard shortcuts"
               >
-                sync
-              </span>
-            </button>
+                <Keyboard className="h-4 w-4" />
+              </button>
+
+              <button
+                onClick={handleRefresh}
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-700/70 text-slate-300 transition-colors hover:bg-slate-800"
+                title="Refresh all data"
+                aria-label="Refresh"
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              </button>
+            </div>
           </div>
         </header>
 
-        {/* Page content — extra bottom padding on mobile for bottom nav */}
-        <div className="p-5 pb-24 lg:pb-5">
+        <main className="px-4 pb-28 pt-4 sm:px-6 sm:pt-6 lg:pb-6">
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
@@ -172,65 +229,67 @@ function AuthenticatedApp() {
               <Route path="/settings/accounts" element={<AccountSettings />} />
             </Routes>
           </Suspense>
-        </div>
-      </main>
+        </main>
+      </div>
 
-      {/* ── Mobile bottom navigation bar (hidden on desktop) ──────── */}
-      <nav className="fixed bottom-0 inset-x-0 z-30 lg:hidden flex justify-around items-start border-t border-slate-100 bg-white/95 pt-3 pb-8 px-2 shadow-[0_-1px_8px_0_rgba(0,0,0,0.06)] backdrop-blur-sm">
-        {[
-          { to: "/", icon: "dashboard", label: "Home" },
-          { to: "/campaigns", icon: "campaign", label: "Campaigns" },
-          { to: "/alerts", icon: "notifications", label: "Alerts" },
-          { to: "/ai-insights", icon: "psychology", label: "Insights" },
-          { to: "/campaign-builder", icon: "build", label: "Create" },
-          { to: "/settings", icon: "settings", label: "Settings" },
-        ].map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === "/"}
-            className={({ isActive }) =>
-              `flex w-14 flex-col items-center gap-1 rounded-xl py-1.5 transition-colors ${
-                isActive ? "text-primary" : "text-slate-400 hover:text-slate-600"
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <span
-                  className="material-symbols-outlined leading-none select-none"
-                  style={{
-                    fontSize: "24px",
-                    fontVariationSettings: `'FILL' ${isActive ? 1 : 0}, 'wght' 400, 'GRAD' 0, 'opsz' 24`,
-                  }}
-                >
-                  {item.icon}
-                </span>
-                <span className="text-[10px] font-medium">{item.label}</span>
-              </>
-            )}
-          </NavLink>
-        ))}
+      <nav
+        className={`fixed inset-x-0 bottom-0 z-40 border-t px-3 pb-[max(env(safe-area-inset-bottom),10px)] pt-2 md:hidden ${mobileNavSurface}`}
+      >
+        <div className="grid grid-cols-4 gap-1.5">
+          {[
+            { to: "/ai-insights", label: "Feed", icon: Brain },
+            { to: "/", label: "Dashboard", icon: LayoutDashboard },
+            { to: "/campaigns", label: "Campaigns", icon: Layers3 },
+            { to: "/campaign-builder", label: "Builder", icon: WandSparkles },
+          ].map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === "/"}
+              className={({ isActive }) =>
+                `flex min-h-11 flex-col items-center justify-center rounded-xl text-[11px] font-medium transition-colors ${
+                  isActive
+                    ? "bg-indigo-500/20 text-indigo-200"
+                    : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+                }`
+              }
+            >
+              <item.icon className="h-4 w-4" />
+              <span>{item.label}</span>
+            </NavLink>
+          ))}
+        </div>
       </nav>
 
       {showHelp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowHelp(false)}>
-          <div className="w-80 rounded-xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-              <h3 className="text-sm font-semibold text-slate-900">Keyboard Shortcuts</h3>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm"
+          onClick={() => setShowHelp(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-slate-800 bg-[#0b1229] shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+              <h3 className="text-sm font-semibold text-slate-100">Keyboard Shortcuts</h3>
               <button
                 onClick={() => setShowHelp(false)}
-                className="rounded p-0.5 text-slate-400 hover:text-slate-600"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
+                aria-label="Close keyboard shortcuts"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="p-4 space-y-1.5">
-              {SHORTCUTS.map((s) => (
-                <div key={s.key} className="flex items-center justify-between">
-                  <span className="text-[13px] text-slate-600">{s.description}</span>
-                  <kbd className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-mono text-slate-700">
-                    {s.key}
+
+            <div className="space-y-2 p-4">
+              {SHORTCUTS.map((shortcut) => (
+                <div
+                  key={shortcut.key}
+                  className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2"
+                >
+                  <span className="text-xs text-slate-300">{shortcut.description}</span>
+                  <kbd className="rounded-md border border-slate-700 bg-slate-950 px-2 py-0.5 text-[11px] font-mono text-slate-200">
+                    {shortcut.key}
                   </kbd>
                 </div>
               ))}

@@ -1,9 +1,9 @@
 import { useParams } from "react-router-dom";
-import { CampaignTable } from "../components/dashboard/CampaignTable";
+import { useEffect } from "react";
 import { useCampaigns } from "../hooks/useCampaigns";
 import { useAccounts } from "../contexts/AccountContext";
-import { useEffect } from "react";
 import { inferAccountVertical } from "../utils/metricsConfig";
+import { CampaignExplorer } from "../components/campaigns/CampaignExplorer";
 
 export default function Campaigns() {
   const { accountId } = useParams();
@@ -19,14 +19,15 @@ export default function Campaigns() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-slate-900">Campaigns</h2>
-        <p className="text-sm text-slate-500">
-          {selectedAccount ? selectedAccount.accountName : "All Accounts"} · Detailed campaign view with drill-down
+      <div className="flex flex-col gap-2">
+        <h2 className="text-2xl font-semibold tracking-tight text-slate-100">Campaign Explorer</h2>
+        <p className="max-w-3xl text-sm text-slate-400">
+          Explore your full Meta account hierarchy in one view: Campaigns to Ad Sets to Ads.
+          Expand for targeting, location, budget, creative details, and fast status actions.
         </p>
       </div>
 
-      <CampaignTable
+      <CampaignExplorer
         campaigns={campaigns ?? []}
         currency={selectedAccount?.currency ?? "USD"}
         loading={isLoading}
