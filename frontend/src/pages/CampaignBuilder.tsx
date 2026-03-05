@@ -690,19 +690,31 @@ export default function CampaignBuilder() {
               <div className="space-y-2 text-sm text-slate-700">
                 <div>
                   <p className="mb-1 font-semibold">Primary Text Variations</p>
-                  <ul className="list-disc space-y-1 pl-5">
-                    {(draft.blocks.creativePlan.primaryTexts ?? []).map((text, idx) => (
-                      <li key={idx}>{text}</li>
-                    ))}
-                  </ul>
+                  {(draft.blocks.creativePlan.primaryTexts ?? []).filter((t) => String(t).trim()).length > 0 ? (
+                    <ul className="list-disc space-y-1 pl-5">
+                      {(draft.blocks.creativePlan.primaryTexts ?? []).map((text, idx) => (
+                        <li key={idx}>{text}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-amber-600">
+                      No primary texts generated. Click &quot;Regenerate&quot; to create new content.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <p className="mb-1 font-semibold">Headlines</p>
-                  <ul className="list-disc space-y-1 pl-5">
-                    {(draft.blocks.creativePlan.headlines ?? []).map((text, idx) => (
-                      <li key={idx}>{text}</li>
-                    ))}
-                  </ul>
+                  {(draft.blocks.creativePlan.headlines ?? []).filter((t) => String(t).trim()).length > 0 ? (
+                    <ul className="list-disc space-y-1 pl-5">
+                      {(draft.blocks.creativePlan.headlines ?? []).map((text, idx) => (
+                        <li key={idx}>{text}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-amber-600">
+                      No headlines generated. Click &quot;Regenerate&quot; to create new content.
+                    </p>
+                  )}
                 </div>
               </div>
             )}

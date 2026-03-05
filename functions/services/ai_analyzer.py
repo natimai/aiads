@@ -589,8 +589,12 @@ Data:
                     "cta": creative_plan.get("cta") or creative_plan.get("call_to_action") or "LEARN_MORE",
                 }
             }
-            # Validate the creative plan has actual content
-            if result["creativePlan"]["primaryTexts"] and result["creativePlan"]["headlines"]:
+            # Validate the creative plan has actual non-empty content
+            non_empty_texts = [t for t in result["creativePlan"]["primaryTexts"] if isinstance(t, str) and t.strip()]
+            non_empty_headlines = [h for h in result["creativePlan"]["headlines"] if isinstance(h, str) and h.strip()]
+            if non_empty_texts and non_empty_headlines:
+                result["creativePlan"]["primaryTexts"] = non_empty_texts
+                result["creativePlan"]["headlines"] = non_empty_headlines
                 return result
             logger.warning("Creative agent returned empty primaryTexts or headlines")
         else:

@@ -73,6 +73,7 @@ class CampaignBuilderService:
         context = self._build_context(user_id=user_id, account_id=account_id, inputs=inputs)
         blocks = self._generate_full_draft_via_agents(context=context)
         blocks = self._normalize_blocks(blocks, inputs)
+        blocks = self._run_art_director(blocks=blocks, context=context)
         validation = self._validate_blocks(blocks, inputs)
         status = "ready_for_publish" if validation["isValid"] else "draft"
 
@@ -951,6 +952,14 @@ class CampaignBuilderService:
         )
         creative_plan.setdefault("cta", "LEARN_MORE")
 
+        # Guard against creative fields that exist but are empty or all-whitespace
+        if not creative_plan.get("primaryTexts") or all(not str(t).strip() for t in creative_plan["primaryTexts"]):
+            creative_plan["primaryTexts"] = self._default_primary_texts(offer, is_hebrew)
+        if not creative_plan.get("headlines") or all(not str(h).strip() for h in creative_plan["headlines"]):
+            creative_plan["headlines"] = self._default_headlines(offer, is_hebrew)
+        if not creative_plan.get("angles") or all(not str(a).strip() for a in creative_plan["angles"]):
+            creative_plan["angles"] = self._default_angles(is_hebrew)
+
         # Do not overwrite model output with generic templates when there is mixed language.
         # We keep the generated copy for specificity and let explicit regenerate refine it.
 
@@ -1019,33 +1028,6 @@ class CampaignBuilderService:
         else:
             logger.error("Creative agent failed after all attempts — no creativePlan in blocks")
 
-        # Step 4: Art Director → image concepts + image generation
-        inputs = context.get("inputs", {}) if isinstance(context.get("inputs"), dict) else {}
-        offer = str(inputs.get("offer") or "").strip()
-        language = str(inputs.get("language") or "en").strip()
-        acct = context.get("account") if isinstance(context.get("account"), dict) else {}
-        account_id = str(acct.get("id") or "")
-        cp = blocks.get("creativePlan", {}) if isinstance(blocks.get("creativePlan"), dict) else {}
-        if cp:
-            try:
-                image_concepts = self.ai.generate_image_concepts(
-                    offer=offer,
-                    language=language,
-                    creative_plan=cp,
-                )
-                prompts = image_concepts.get("image_generation_prompts", [])
-                image_urls = self._generate_images_from_prompts(
-                    prompts=prompts,
-                    account_id=account_id,
-                )
-                blocks["imageConcepts"] = {
-                    "creative_concept_reasoning": image_concepts.get("creative_concept_reasoning", ""),
-                    "image_generation_prompts": prompts,
-                    "imageUrls": image_urls,
-                }
-            except Exception:
-                logger.warning("Art Director agent failed — skipping image concepts", exc_info=True)
-
         return blocks
 
     def _regenerate_block_via_agent(
@@ -1096,6 +1078,46 @@ class CampaignBuilderService:
                 }
             return {}
         return {}
+
+    def _run_art_director(self, *, blocks: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+        """Run Art Director to generate image concepts + images. Requires creativePlan in blocks."""
+        inputs = context.get("inputs", {}) if isinstance(context.get("inputs"), dict) else {}
+        offer = str(inputs.get("offer") or "").strip()
+        language = str(inputs.get("language") or "en").strip()
+        acct = context.get("account") if isinstance(context.get("account"), dict) else {}
+        account_id = str(acct.get("id") or "")
+
+        cp = blocks.get("creativePlan")
+        if not isinstance(cp, dict) or not cp:
+            logger.warning("Art Director skipped — no creativePlan available")
+            return blocks
+
+        primary_texts = cp.get("primaryTexts") or []
+        headlines = cp.get("headlines") or []
+        if not primary_texts and not headlines:
+            logger.warning("Art Director skipped — creativePlan has no texts or headlines")
+            return blocks
+
+        try:
+            image_concepts = self.ai.generate_image_concepts(
+                offer=offer,
+                language=language,
+                creative_plan=cp,
+            )
+            prompts = image_concepts.get("image_generation_prompts", [])
+            image_urls = self._generate_images_from_prompts(
+                prompts=prompts,
+                account_id=account_id,
+            )
+            blocks["imageConcepts"] = {
+                "creative_concept_reasoning": image_concepts.get("creative_concept_reasoning", ""),
+                "image_generation_prompts": prompts,
+                "imageUrls": image_urls,
+            }
+        except Exception:
+            logger.warning("Art Director agent failed — skipping image concepts", exc_info=True)
+
+        return blocks
 
     def _generate_images_from_prompts(
         self,
