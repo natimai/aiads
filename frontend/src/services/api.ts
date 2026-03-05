@@ -250,6 +250,21 @@ export async function updateCampaignDraftBlock(
   return data.draft;
 }
 
+export async function regenerateCampaignDraftImages(
+  accountId: string,
+  draftId: string,
+  userInstructions?: string
+): Promise<CampaignDraft> {
+  const data = await apiFetch<{ draft: CampaignDraft }>(
+    `/api/ai/campaign-builder/drafts/${draftId}/regenerate-images`,
+    {
+      method: "POST",
+      body: JSON.stringify({ accountId, userInstructions }),
+    }
+  );
+  return data.draft;
+}
+
 export async function preflightCampaignDraft(
   accountId: string,
   draftId: string

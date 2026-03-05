@@ -46,6 +46,9 @@ def handle_campaign_builder(request):
             if len(parts) == 2 and parts[1] == "preflight" and request.method == "POST":
                 return _preflight(request, user_id, draft_id)
 
+            if len(parts) == 2 and parts[1] == "regenerate-images" and request.method == "POST":
+                return _regenerate_images(request, user_id, draft_id)
+
             if len(parts) == 2 and parts[1] == "publish" and request.method == "POST":
                 return _publish(request, user_id, draft_id)
 
@@ -183,6 +186,24 @@ def _publish(request, user_id: str, draft_id: str):
         confirm_high_budget=confirm_high_budget,
     )
     return _cors_response(json.dumps(result))
+
+
+def _regenerate_images(request, user_id: str, draft_id: str):
+    payload = request.get_json(silent=True) or {}
+    account_id = payload.get("accountId")
+    instruction = payload.get("userInstructions", payload.get("instruction", ""))
+
+    if not account_id:
+        return _cors_response(json.dumps({"error": "accountId required"}), 400)
+
+    service = CampaignBuilderService(get_db())
+    draft = service.regenerate_images(
+        user_id=user_id,
+        account_id=account_id,
+        draft_id=draft_id,
+        instruction=str(instruction or ""),
+    )
+    return _cors_response(json.dumps({"draft": draft, "validation": draft.get("validation", {})}))
 
 
 def _coerce_generate_inputs(payload: dict) -> dict:

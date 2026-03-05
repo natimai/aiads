@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
+  ImageIcon,
   Loader2,
   Pencil,
   RefreshCw,
@@ -16,6 +17,7 @@ import {
   useCreateCampaignDraft,
   usePublishCampaignDraft,
   useRegenerateCampaignBlock,
+  useRegenerateCampaignImages,
   useUpdateCampaignBlock,
 } from "../hooks/useCampaignBuilder";
 import { useAccounts } from "../contexts/AccountContext";
@@ -117,6 +119,7 @@ export default function CampaignBuilder() {
 
   const createMutation = useCreateCampaignDraft(accountIdFromQuery);
   const regenerateMutation = useRegenerateCampaignBlock(accountIdFromQuery);
+  const regenerateImagesMutation = useRegenerateCampaignImages(accountIdFromQuery);
   const updateBlockMutation = useUpdateCampaignBlock(accountIdFromQuery);
   const publishMutation = usePublishCampaignDraft(accountIdFromQuery);
 
@@ -181,6 +184,7 @@ export default function CampaignBuilder() {
   const busy =
     createMutation.isPending ||
     regenerateMutation.isPending ||
+    regenerateImagesMutation.isPending ||
     updateBlockMutation.isPending ||
     publishMutation.isPending ||
     draftQuery.isLoading;
@@ -326,6 +330,18 @@ export default function CampaignBuilder() {
       setEditing((prev) => ({ ...prev, creative: false }));
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : "Failed saving creative block");
+    }
+  };
+
+  const handleRegenerateImages = async () => {
+    if (!activeDraftId) return;
+    setErrorMessage("");
+    try {
+      await regenerateImagesMutation.mutateAsync({
+        draftId: activeDraftId,
+      });
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : "Image regeneration failed");
     }
   };
 
@@ -690,6 +706,12 @@ export default function CampaignBuilder() {
                 </div>
               </div>
             )}
+
+            <ImageGallery
+              imageConcepts={draft.blocks.imageConcepts}
+              onRegenerate={handleRegenerateImages}
+              regenerating={regenerateImagesMutation.isPending}
+            />
           </BlockCard>
 
           <div className="hidden items-center justify-between md:flex">
@@ -751,6 +773,10 @@ export default function CampaignBuilder() {
               <p>
                 <span className="font-semibold">Creative Texts:</span>{" "}
                 {(draft.blocks.creativePlan.primaryTexts ?? []).length} variations
+              </p>
+              <p>
+                <span className="font-semibold">Images:</span>{" "}
+                {(draft.blocks.imageConcepts?.imageUrls ?? []).length} generated
               </p>
             </div>
           </div>
@@ -947,6 +973,86 @@ function RegeneratePrompt({
         {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <WandSparkles className="h-3.5 w-3.5" />}
         Regenerate Block
       </button>
+    </div>
+  );
+}
+
+function ImageGallery({
+  imageConcepts,
+  onRegenerate,
+  regenerating,
+}: {
+  imageConcepts?: {
+    creative_concept_reasoning?: string;
+    image_generation_prompts?: string[];
+    imageUrls?: string[];
+  };
+  onRegenerate: () => void;
+  regenerating: boolean;
+}) {
+  const urls = imageConcepts?.imageUrls ?? [];
+  const prompts = imageConcepts?.image_generation_prompts ?? [];
+  const reasoning = imageConcepts?.creative_concept_reasoning ?? "";
+
+  return (
+    <div className="mt-4 border-t border-slate-200 pt-4">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-1.5">
+          <ImageIcon className="h-4 w-4 text-indigo-600" />
+          <p className="text-sm font-semibold text-slate-800">AI Art Director — Image Concepts</p>
+        </div>
+        <button
+          onClick={onRegenerate}
+          disabled={regenerating}
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        >
+          {regenerating ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="h-3.5 w-3.5" />
+          )}
+          {regenerating ? "Generating..." : "Regenerate Images"}
+        </button>
+      </div>
+
+      {reasoning && (
+        <p className="mb-3 rounded-lg bg-indigo-50 p-2.5 text-xs text-indigo-700">
+          {reasoning}
+        </p>
+      )}
+
+      {urls.length > 0 ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {urls.map((url, idx) => (
+            <div key={idx} className="group relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+              <img
+                src={url}
+                alt={`AI concept ${idx + 1}`}
+                className="aspect-square w-full object-cover"
+                loading="lazy"
+              />
+              {prompts[idx] && (
+                <div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/70 to-transparent p-2.5 opacity-0 transition-opacity group-hover:opacity-100">
+                  <p className="line-clamp-3 text-xs text-white">{prompts[idx]}</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : prompts.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-xs text-slate-500">Image prompts generated (images pending):</p>
+          {prompts.map((p, idx) => (
+            <p key={idx} className="rounded-lg bg-slate-50 p-2 text-xs text-slate-600">
+              {idx + 1}. {p}
+            </p>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-slate-400">
+          No image concepts generated yet. Click "Regenerate Images" to create them.
+        </p>
+      )}
     </div>
   );
 }

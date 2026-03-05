@@ -9,12 +9,13 @@ from statistics import median
 from typing import Any
 
 from services.ai_analyzer import AIAnalyzer
+from services.nano_banana import NanaBananaArtDirector
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_OBJECTIVE = "OUTCOME_SALES"
 BUDGET_SAFETY_ERROR = "Budget exceeds safety limits. Please edit the budget block."
-ALLOWED_BLOCK_TYPES = {"campaignPlan", "audiencePlan", "creativePlan", "reasoning"}
+ALLOWED_BLOCK_TYPES = {"campaignPlan", "audiencePlan", "creativePlan", "reasoning", "imageConcepts"}
 CAMPAIGN_BUILDER_STRICT_RULES = (
     "RULE 1 (PRODUCT IS KING): You MUST write the campaign specifically for the PRODUCT/OFFER provided by the user. "
     "DO NOT write generic marketing copy. DO NOT talk about 'ROAS' or 'Performance' unless the product is a B2B marketing service.",
@@ -42,6 +43,9 @@ BLOCK_TYPE_ALIASES = {
     "creative": "creativePlan",
     "reasoning": "reasoning",
     "strategy_note": "reasoning",
+    "imageconcepts": "imageConcepts",
+    "image_concepts": "imageConcepts",
+    "images": "imageConcepts",
 }
 
 
@@ -53,6 +57,7 @@ class CampaignBuilderService:
     def __init__(self, db):
         self.db = db
         self.ai = AIAnalyzer()
+        self.art_director = NanaBananaArtDirector()
 
     def create_draft(
         self,
@@ -959,12 +964,16 @@ class CampaignBuilderService:
                     "with account benchmarks used only as secondary context."
                 )
 
-        return {
+        result = {
             "campaignPlan": campaign_plan,
             "audiencePlan": audience_plan,
             "creativePlan": creative_plan,
             "reasoning": reasoning,
         }
+        # Preserve imageConcepts through normalization if present
+        if isinstance(blocks.get("imageConcepts"), dict):
+            result["imageConcepts"] = blocks["imageConcepts"]
+        return result
 
     def _generate_full_draft_via_agents(self, *, context: dict[str, Any]) -> dict[str, Any]:
         """
@@ -1010,6 +1019,33 @@ class CampaignBuilderService:
         else:
             logger.error("Creative agent failed after all attempts — no creativePlan in blocks")
 
+        # Step 4: Art Director → image concepts + image generation
+        inputs = context.get("inputs", {}) if isinstance(context.get("inputs"), dict) else {}
+        offer = str(inputs.get("offer") or "").strip()
+        language = str(inputs.get("language") or "en").strip()
+        acct = context.get("account") if isinstance(context.get("account"), dict) else {}
+        account_id = str(acct.get("id") or "")
+        cp = blocks.get("creativePlan", {}) if isinstance(blocks.get("creativePlan"), dict) else {}
+        if cp:
+            try:
+                image_concepts = self.ai.generate_image_concepts(
+                    offer=offer,
+                    language=language,
+                    creative_plan=cp,
+                )
+                prompts = image_concepts.get("image_generation_prompts", [])
+                image_urls = self._generate_images_from_prompts(
+                    prompts=prompts,
+                    account_id=account_id,
+                )
+                blocks["imageConcepts"] = {
+                    "creative_concept_reasoning": image_concepts.get("creative_concept_reasoning", ""),
+                    "image_generation_prompts": prompts,
+                    "imageUrls": image_urls,
+                }
+            except Exception:
+                logger.warning("Art Director agent failed — skipping image concepts", exc_info=True)
+
         return blocks
 
     def _regenerate_block_via_agent(
@@ -1038,7 +1074,102 @@ class CampaignBuilderService:
                 current_blocks=current_blocks,
                 instruction=instruction,
             )
+        if block_type == "imageConcepts":
+            inputs = context.get("inputs", {}) if isinstance(context.get("inputs"), dict) else {}
+            offer = str(inputs.get("offer") or "").strip()
+            language = str(inputs.get("language") or "en").strip()
+            acct = context.get("account") if isinstance(context.get("account"), dict) else {}
+            account_id = str(acct.get("id") or "")
+            cp = current_blocks.get("creativePlan", {})
+            if isinstance(cp, dict) and cp:
+                image_concepts = self.ai.generate_image_concepts(
+                    offer=offer, language=language, creative_plan=cp,
+                )
+                prompts = image_concepts.get("image_generation_prompts", [])
+                image_urls = self._generate_images_from_prompts(prompts=prompts, account_id=account_id)
+                return {
+                    "imageConcepts": {
+                        "creative_concept_reasoning": image_concepts.get("creative_concept_reasoning", ""),
+                        "image_generation_prompts": prompts,
+                        "imageUrls": image_urls,
+                    }
+                }
+            return {}
         return {}
+
+    def _generate_images_from_prompts(
+        self,
+        *,
+        prompts: list[str],
+        account_id: str,
+    ) -> list[str]:
+        """Call Imagen 3 via NanaBananaArtDirector for each prompt and return signed URLs."""
+        urls: list[str] = []
+        for i, prompt_text in enumerate(prompts[:3]):
+            try:
+                image_bytes = self.art_director._call_imagen_api(prompt_text)
+                if not image_bytes:
+                    logger.warning("Imagen returned no bytes for Art Director prompt %d", i)
+                    continue
+                blob_path = f"creative_assets/{account_id}/campaign_builder/art_director_{i}.jpg"
+                url = self.art_director._upload_to_storage(image_bytes, blob_path)
+                if url:
+                    urls.append(url)
+            except Exception as exc:
+                logger.warning("Art Director image generation failed for prompt %d: %s", i, exc)
+        return urls
+
+    def regenerate_images(
+        self,
+        *,
+        user_id: str,
+        account_id: str,
+        draft_id: str,
+        instruction: str = "",
+    ) -> dict[str, Any]:
+        """Re-run ONLY the Art Director agent and fetch new image URLs."""
+        self._ensure_account_exists(user_id, account_id)
+        draft_ref = self._draft_ref(user_id, account_id, draft_id)
+        draft_doc = draft_ref.get()
+        if not draft_doc.exists:
+            raise ValueError("Draft not found")
+
+        draft = draft_doc.to_dict() or {}
+        blocks = draft.get("blocks", {})
+        inputs = self._normalize_inputs(draft.get("inputs", {}), blocks=blocks)
+        context = self._build_context(user_id=user_id, account_id=account_id, inputs=inputs)
+
+        creative_plan = blocks.get("creativePlan", {})
+        if not isinstance(creative_plan, dict) or not creative_plan:
+            raise ValueError("Creative plan must exist before generating images")
+
+        offer = str(inputs.get("offer") or "").strip()
+        language = str(inputs.get("language") or "en").strip()
+
+        image_concepts = self.ai.generate_image_concepts(
+            offer=offer, language=language, creative_plan=creative_plan,
+        )
+        prompts = image_concepts.get("image_generation_prompts", [])
+        image_urls = self._generate_images_from_prompts(prompts=prompts, account_id=account_id)
+
+        next_blocks = dict(blocks)
+        next_blocks["imageConcepts"] = {
+            "creative_concept_reasoning": image_concepts.get("creative_concept_reasoning", ""),
+            "image_generation_prompts": prompts,
+            "imageUrls": image_urls,
+        }
+
+        validation = self._validate_blocks(next_blocks, inputs)
+        update = {
+            "blocks": next_blocks,
+            "validation": validation,
+            "status": "ready_for_publish" if validation["isValid"] else "draft",
+            "updatedAt": datetime.now(timezone.utc),
+        }
+        draft_ref.update(update)
+
+        merged = {**draft, **update, "id": draft_id}
+        return self._serialize(merged)
 
     def _repair_initial_full_draft_blocks_with_llm(
         self,

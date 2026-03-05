@@ -5,6 +5,7 @@ import {
   preflightCampaignDraft,
   publishCampaignDraft,
   regenerateCampaignDraftBlock,
+  regenerateCampaignDraftImages,
   updateCampaignDraftBlock,
 } from "../services/api";
 import { useAccounts } from "../contexts/AccountContext";
@@ -74,6 +75,30 @@ export function useRegenerateCampaignBlock(accountIdOverride?: string) {
         accountId,
         payload.draftId,
         payload.blockType,
+        payload.userInstructions
+      );
+    },
+    onSuccess: (draft) => {
+      queryClient.setQueryData(["campaignDraft", accountId, draft.id], draft);
+      queryClient.invalidateQueries({ queryKey: ["campaignDraft", accountId, draft.id] });
+    },
+  });
+}
+
+export function useRegenerateCampaignImages(accountIdOverride?: string) {
+  const queryClient = useQueryClient();
+  const { selectedAccountId, accounts } = useAccounts();
+  const accountId = accountIdOverride ?? selectedAccountId ?? accounts[0]?.id;
+
+  return useMutation({
+    mutationFn: async (payload: {
+      draftId: string;
+      userInstructions?: string;
+    }) => {
+      if (!accountId) throw new Error("No account selected");
+      return regenerateCampaignDraftImages(
+        accountId,
+        payload.draftId,
         payload.userInstructions
       );
     },

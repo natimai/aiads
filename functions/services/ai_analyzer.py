@@ -597,6 +597,88 @@ Data:
             logger.warning("Creative agent failed to return a valid creativePlan. Raw: %s", raw[:500])
         return {}
 
+    def generate_image_concepts(
+        self,
+        offer: str,
+        language: str,
+        creative_plan: dict,
+    ) -> dict:
+        """Agent 4: Conceptual Art Director — generates dramatic image prompts with text overlays."""
+        primary_texts = creative_plan.get("primaryTexts") or creative_plan.get("primary_texts") or []
+        headlines = creative_plan.get("headlines") or []
+        angles = creative_plan.get("angles") or creative_plan.get("hooks") or []
+
+        copy_block = (
+            f"PRIMARY TEXTS:\n" + "\n".join(f"- {t}" for t in primary_texts) + "\n"
+            f"HEADLINES:\n" + "\n".join(f"- {h}" for h in headlines) + "\n"
+            f"ANGLES:\n" + "\n".join(f"- {a}" for a in angles)
+        )
+
+        system = (
+            "You are an elite Conceptual Art Director for Direct Response Meta Ads. "
+            "You do NOT generate generic, happy stock photos. You think in dramatic, "
+            "realistic 'moment of need' scenes that make the viewer stop scrolling. "
+            "Output ONLY valid JSON. No markdown, no intro text."
+        )
+
+        prompt = f"""Analyze the product/offer and the ad copy below, then generate 3 cinematic image prompts.
+
+PRODUCT/OFFER: "{offer}"
+LANGUAGE: {language}
+
+AD COPY:
+{copy_block}
+
+=== RULE 1 (DRAMATIC SITUATIONS & PAIN POINTS) ===
+Do NOT generate generic, happy stock photos. Analyze the user's product and identify the exact "moment of need" or pain point.
+Example: If the product is "24/7 Car Insurance", do NOT show a shiny car.
+Show a stressed driver at night in the rain next to a fender bender, looking lost while holding a phone.
+The image must evoke the EMOTION that makes someone click the ad.
+
+=== RULE 2 (TYPOGRAPHY / TEXT OVERLAY) ===
+You MUST extract a short, punchy 1-2 sentence hook from the generated ad copy to be explicitly written on the image.
+If the requested language is Hebrew ({language}), the text MUST be in Hebrew.
+Instruct the image model to render this text natively as a bold typography overlay on the image.
+The text overlay should be large, legible, and positioned so it does not obstruct the main subject.
+
+=== RULE 3 (VARIETY) ===
+Each of the 3 prompts must use a DIFFERENT visual concept:
+- Prompt 1: Close-up emotional moment (face/hands/detail that tells a story)
+- Prompt 2: Wide establishing shot (environment, context, atmosphere)
+- Prompt 3: Split-screen or before/after concept (contrast between pain and solution)
+
+=== OUTPUT ===
+Return ONLY valid JSON with this exact structure:
+{{
+  "creative_concept_reasoning": "Explanation of the pain point and why this visual scene works for the product.",
+  "image_generation_prompts": [
+    "Prompt 1: A cinematic shot of... typography overlay reads EXACTLY: '...'",
+    "Prompt 2: Close up POV of... typography overlay reads EXACTLY: '...'",
+    "Prompt 3: Split screen showing... typography overlay reads EXACTLY: '...'"
+  ]
+}}
+"""
+        raw = self._generate(prompt, model=self.pro_model, system_instruction=system)
+        parsed = self._parse_json_dict(raw)
+
+        reasoning = (
+            parsed.get("creative_concept_reasoning")
+            or parsed.get("creativeConceptReasoning")
+            or ""
+        )
+        prompts = (
+            parsed.get("image_generation_prompts")
+            or parsed.get("imageGenerationPrompts")
+            or []
+        )
+        if not isinstance(prompts, list):
+            prompts = []
+
+        return {
+            "creative_concept_reasoning": str(reasoning),
+            "image_generation_prompts": [str(p) for p in prompts[:3]],
+        }
+
     def generate_campaign_builder_draft(self, context: dict) -> dict:
         """Generate campaign builder blocks for a new draft."""
         compact_context = json.dumps(context, default=str)

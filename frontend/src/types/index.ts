@@ -338,10 +338,17 @@ export interface CreativePlanBlock {
   cta: string;
 }
 
+export interface ImageConceptsBlock {
+  creative_concept_reasoning: string;
+  image_generation_prompts: string[];
+  imageUrls: string[];
+}
+
 export interface CampaignDraftBlocks {
   campaignPlan: CampaignPlanBlock;
   audiencePlan: AudiencePlanBlock;
   creativePlan: CreativePlanBlock;
+  imageConcepts?: ImageConceptsBlock;
   reasoning: string;
 }
 
