@@ -3,14 +3,20 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
+  Banknote,
   CheckCircle2,
+  FileText,
+  Globe,
   ImageIcon,
   Loader2,
+  MapPin,
   Pencil,
   RefreshCw,
   Rocket,
   Sparkles,
+  Target,
   WandSparkles,
+  type LucideIcon,
 } from "lucide-react";
 import {
   useCampaignDraft,
@@ -39,9 +45,9 @@ type BriefForm = {
 const DEFAULT_BRIEF: BriefForm = {
   objective: "sales",
   offerProduct: "",
-  targetGeo: "US",
+  targetGeo: "IL",
   budget: 100,
-  language: "en",
+  language: "he",
   campaignName: "",
   pageId: "",
   destinationUrl: "",
@@ -420,78 +426,98 @@ export default function CampaignBuilder() {
       </div>
 
       {step === 1 && (
-        <section className="rounded-3xl border border-slate-800 bg-[#070d1f] p-5 shadow-[0_20px_60px_-42px_rgba(99,102,241,0.6)] sm:p-6">
+        <section className="rounded-3xl border border-slate-200/70 bg-white/90 p-5 shadow-[0_20px_60px_-42px_rgba(99,102,241,0.35)] dark:border-slate-800 dark:bg-[#070d1f] dark:shadow-[0_20px_60px_-42px_rgba(99,102,241,0.6)] sm:p-6">
           <div className="mb-4 flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-indigo-300" />
-            <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-indigo-100">
+            <Sparkles className="h-4 w-4 text-indigo-500 dark:text-indigo-300" />
+            <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-indigo-700 dark:text-indigo-100">
               1. Brief
             </h2>
           </div>
 
-          <p className="mb-4 text-sm text-slate-400">
+          <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
             Define objective, market, and offer. The agent will generate a complete AI draft.
           </p>
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-slate-300">Campaign Objective</span>
-              <select
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <BriefFieldCard
+              title="Campaign Setup"
+              subtitle="Structured controls for objective, market, and spend."
+            >
+              <IconSelectField
+                label="Campaign Objective"
                 value={brief.objective}
-                onChange={(event) =>
-                  setBrief((prev) => ({
-                    ...prev,
-                    objective: event.target.value as "lead" | "sales",
-                  }))
+                onChange={(value) =>
+                  setBrief((prev) => ({ ...prev, objective: value as "lead" | "sales" }))
                 }
-                className="w-full rounded-xl border border-slate-700 bg-[#0c1328] px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400"
+                icon={Target}
               >
                 <option value="lead">Lead</option>
                 <option value="sales">Sales</option>
-              </select>
-            </label>
+              </IconSelectField>
 
-            <InputField
-              label="Target Geo"
-              value={brief.targetGeo}
-              onChange={(value) => setBrief((prev) => ({ ...prev, targetGeo: value }))}
-            />
-            <InputField
-              label="Product / Offer Description"
-              value={brief.offerProduct}
-              onChange={(value) => setBrief((prev) => ({ ...prev, offerProduct: value }))}
-            />
-            <InputField
-              label="Language"
-              value={brief.language}
-              onChange={(value) => setBrief((prev) => ({ ...prev, language: value }))}
-            />
-            <InputField
-              label="Daily Budget"
-              type="number"
-              value={String(brief.budget)}
-              onChange={(value) => setBrief((prev) => ({ ...prev, budget: Number(value || 0) }))}
-            />
-            <InputField
-              label="Campaign Name (optional)"
-              value={brief.campaignName}
-              onChange={(value) => setBrief((prev) => ({ ...prev, campaignName: value }))}
-            />
+              <IconInputField
+                label="Target Geo"
+                value={brief.targetGeo}
+                onChange={(value) => setBrief((prev) => ({ ...prev, targetGeo: value }))}
+                icon={MapPin}
+              />
+
+              <IconInputField
+                label="Language"
+                value={brief.language}
+                onChange={(value) => setBrief((prev) => ({ ...prev, language: value }))}
+                icon={Globe}
+              />
+
+              <IconInputField
+                label="Daily Budget"
+                type="number"
+                value={String(brief.budget)}
+                onChange={(value) => setBrief((prev) => ({ ...prev, budget: Number(value || 0) }))}
+                icon={Banknote}
+                helperText="Daily spend limit in your account's currency."
+              />
+            </BriefFieldCard>
+
+            <BriefFieldCard
+              title="Offer Brief"
+              subtitle="Give the agent context-rich input for better draft quality."
+            >
+              <IconTextareaField
+                label="Product / Offer Description"
+                value={brief.offerProduct}
+                onChange={(value) => setBrief((prev) => ({ ...prev, offerProduct: value }))}
+                icon={FileText}
+                rows={5}
+                placeholder="e.g., Car insurance by Yair Yosefi, targeting young drivers, offering 24/7 human support..."
+                helperText="Paste the client's brief, target audience pain points, and core value proposition."
+              />
+
+              <IconInputField
+                label="Campaign Name (optional)"
+                value={brief.campaignName}
+                onChange={(value) => setBrief((prev) => ({ ...prev, campaignName: value }))}
+                icon={Sparkles}
+              />
+            </BriefFieldCard>
           </div>
 
-          <details className="mt-4 rounded-2xl border border-slate-700 bg-[#0b1226] p-3">
-            <summary className="cursor-pointer text-sm font-medium text-slate-300">
+          <details className="mt-4 rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-[#0b1226]">
+            <summary className="cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300">
               Advanced Publish Fields
             </summary>
             <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-              <InputField
+              <IconInputField
                 label="Meta Page ID"
                 value={brief.pageId}
                 onChange={(value) => setBrief((prev) => ({ ...prev, pageId: value }))}
+                icon={FileText}
               />
-              <InputField
+              <IconInputField
                 label="Destination URL"
                 value={brief.destinationUrl}
                 onChange={(value) => setBrief((prev) => ({ ...prev, destinationUrl: value }))}
+                icon={Globe}
               />
             </div>
           </details>
@@ -1188,6 +1214,127 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
       <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-slate-400">{label}</p>
       <p className="mt-1 break-words text-sm font-medium text-slate-100">{value}</p>
     </div>
+  );
+}
+
+function BriefFieldCard({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-700 dark:bg-slate-900/40">
+      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{title}</p>
+      <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>
+      <div className="space-y-3">{children}</div>
+    </div>
+  );
+}
+
+const BRIEF_INPUT_BASE =
+  "w-full rounded-xl border border-slate-300 bg-white/90 py-2.5 pl-10 pr-3 text-sm text-slate-900 shadow-[inset_0_1px_2px_rgba(15,23,42,0.12)] outline-none transition-all placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/50 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:shadow-[inset_0_1px_2px_rgba(2,6,23,0.65)] dark:placeholder:text-slate-500";
+
+function IconInputField({
+  label,
+  value,
+  onChange,
+  icon: Icon,
+  helperText,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  icon: LucideIcon;
+  helperText?: string;
+  type?: "text" | "number";
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-300">{label}</span>
+      <div className="relative">
+        <Icon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+        <input
+          value={value}
+          type={type}
+          onChange={(event) => onChange(event.target.value)}
+          className={BRIEF_INPUT_BASE}
+        />
+      </div>
+      {helperText && <p className="mt-1 text-[11px] text-slate-500">{helperText}</p>}
+    </label>
+  );
+}
+
+function IconSelectField({
+  label,
+  value,
+  onChange,
+  icon: Icon,
+  children,
+  helperText,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  icon: LucideIcon;
+  children: ReactNode;
+  helperText?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-300">{label}</span>
+      <div className="relative">
+        <Icon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className={`${BRIEF_INPUT_BASE} appearance-none`}
+        >
+          {children}
+        </select>
+      </div>
+      {helperText && <p className="mt-1 text-[11px] text-slate-500">{helperText}</p>}
+    </label>
+  );
+}
+
+function IconTextareaField({
+  label,
+  value,
+  onChange,
+  icon: Icon,
+  rows = 5,
+  placeholder,
+  helperText,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  icon: LucideIcon;
+  rows?: number;
+  placeholder?: string;
+  helperText?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-300">{label}</span>
+      <div className="relative">
+        <Icon className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
+        <textarea
+          rows={rows}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          className={`${BRIEF_INPUT_BASE} min-h-[130px] resize-y pt-3`}
+        />
+      </div>
+      {helperText && <p className="mt-1 text-[11px] text-slate-500">{helperText}</p>}
+    </label>
   );
 }
 

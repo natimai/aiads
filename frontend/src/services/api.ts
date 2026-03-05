@@ -26,6 +26,16 @@ import type {
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
+class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 async function getAuthHeaders(): Promise<HeadersInit> {
   const user = auth.currentUser;
   if (!user) throw new Error("Not authenticated");
@@ -46,6 +56,14 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
   if (!response.ok) {
     const raw = await response.text().catch(() => "");
     let message = `HTTP ${response.status}`;
+    const looksLikeHtml = /^\s*<!doctype html|^\s*<html/i.test(raw);
+
+    if (looksLikeHtml && [502, 503, 504].includes(response.status)) {
+      message =
+        "AI draft service is temporarily unavailable (gateway error). Please retry in 30-60 seconds.";
+      throw new ApiError(message, response.status);
+    }
+
     if (raw) {
       try {
         const parsed = JSON.parse(raw) as { error?: string };
@@ -55,10 +73,10 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
           message = raw.slice(0, 280);
         }
       } catch {
-        message = raw.slice(0, 280);
+        message = looksLikeHtml ? `Gateway error (HTTP ${response.status})` : raw.slice(0, 280);
       }
     }
-    throw new Error(message || "Request failed");
+    throw new ApiError(message || "Request failed", response.status);
   }
 
   return response.json();
@@ -195,20 +213,34 @@ export async function createCampaignDraft(
   const objectiveRaw = String(request.objective || "sales").toLowerCase();
   const objective =
     objectiveRaw === "lead" || objectiveRaw === "leads" ? "OUTCOME_LEADS" : "OUTCOME_SALES";
-  return apiFetch("/api/ai/campaign-builder/drafts", {
-    method: "POST",
-    body: JSON.stringify({
-      accountId: request.accountId,
-      objective,
-      offer: request.offerProduct,
-      targetGeo: request.targetGeo,
-      budget: request.budget,
-      language: request.language,
-      campaignName: request.campaignName,
-      pageId: request.pageId,
-      destinationUrl: request.destinationUrl,
-    }),
-  });
+  const payload = {
+    accountId: request.accountId,
+    objective,
+    offer: request.offerProduct,
+    targetGeo: request.targetGeo,
+    budget: request.budget,
+    language: request.language,
+    campaignName: request.campaignName,
+    pageId: request.pageId,
+    destinationUrl: request.destinationUrl,
+  };
+
+  try {
+    return await apiFetch("/api/ai/campaign-builder/drafts", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    if (err instanceof ApiError && [502, 503, 504].includes(err.status)) {
+      // One transparent retry for transient gateway failures.
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      return apiFetch("/api/ai/campaign-builder/drafts", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    }
+    throw err;
+  }
 }
 
 export async function getCampaignDraft(accountId: string, draftId: string): Promise<CampaignDraft> {

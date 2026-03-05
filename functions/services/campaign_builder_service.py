@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from datetime import datetime, timedelta, timezone
 from statistics import median
@@ -73,7 +74,17 @@ class CampaignBuilderService:
         context = self._build_context(user_id=user_id, account_id=account_id, inputs=inputs)
         blocks = self._generate_full_draft_via_agents(context=context)
         blocks = self._normalize_blocks(blocks, inputs)
-        blocks = self._run_art_director(blocks=blocks, context=context)
+        if self._should_generate_images_on_create():
+            blocks = self._run_art_director(blocks=blocks, context=context)
+        else:
+            blocks.setdefault(
+                "imageConcepts",
+                {
+                    "creative_concept_reasoning": "",
+                    "image_generation_prompts": [],
+                    "imageUrls": [],
+                },
+            )
         validation = self._validate_blocks(blocks, inputs)
         status = "ready_for_publish" if validation["isValid"] else "draft"
 
@@ -910,6 +921,7 @@ class CampaignBuilderService:
         language = str(normalized_inputs.get("language") or "en")
         offer = str(normalized_inputs.get("offer") or campaign_name).strip()
         is_hebrew = self._is_hebrew_language(language)
+        offer_for_copy = self._sanitize_offer_for_copy(offer, is_hebrew)
 
         campaign_plan = blocks.get("campaignPlan") if isinstance(blocks.get("campaignPlan"), dict) else {}
         audience_plan = blocks.get("audiencePlan") if isinstance(blocks.get("audiencePlan"), dict) else {}
@@ -944,19 +956,19 @@ class CampaignBuilderService:
         )
         creative_plan.setdefault(
             "primaryTexts",
-            self._default_primary_texts(offer, is_hebrew),
+            self._default_primary_texts(offer_for_copy, is_hebrew),
         )
         creative_plan.setdefault(
             "headlines",
-            self._default_headlines(offer, is_hebrew),
+            self._default_headlines(offer_for_copy, is_hebrew),
         )
         creative_plan.setdefault("cta", "LEARN_MORE")
 
         # Guard against creative fields that exist but are empty or all-whitespace
         if not creative_plan.get("primaryTexts") or all(not str(t).strip() for t in creative_plan["primaryTexts"]):
-            creative_plan["primaryTexts"] = self._default_primary_texts(offer, is_hebrew)
+            creative_plan["primaryTexts"] = self._default_primary_texts(offer_for_copy, is_hebrew)
         if not creative_plan.get("headlines") or all(not str(h).strip() for h in creative_plan["headlines"]):
-            creative_plan["headlines"] = self._default_headlines(offer, is_hebrew)
+            creative_plan["headlines"] = self._default_headlines(offer_for_copy, is_hebrew)
         if not creative_plan.get("angles") or all(not str(a).strip() for a in creative_plan["angles"]):
             creative_plan["angles"] = self._default_angles(is_hebrew)
 
@@ -986,11 +998,37 @@ class CampaignBuilderService:
 
     def _generate_full_draft_via_agents(self, *, context: dict[str, Any]) -> dict[str, Any]:
         """
-        Multi-agent sequential chain:
-        1) Media Strategist -> campaignPlan + reasoning
-        2) Audience Expert -> audiencePlan
-        3) DR Copywriter -> creativePlan (with retry on failure)
+        Fast first-pass draft generation.
+        1) Try one-shot full-draft generation (single model call).
+        2) If empty/invalid, fall back to sequential multi-agent chain.
         """
+        try:
+            single_pass = self.ai.generate_campaign_builder_draft(context)
+        except Exception:
+            logger.warning("One-shot draft generation failed", exc_info=True)
+            single_pass = {}
+
+        blocks: dict[str, Any] = {}
+        if isinstance(single_pass, dict):
+            for key in ("campaignPlan", "audiencePlan", "creativePlan", "reasoning"):
+                value = single_pass.get(key)
+                if key == "reasoning" and isinstance(value, str) and value.strip():
+                    blocks[key] = value
+                elif key != "reasoning" and isinstance(value, dict):
+                    blocks[key] = value
+
+        if blocks:
+            return blocks
+
+        # Keep fallback configurable to preserve reliability if one-shot parsing fails.
+        if self._allow_multi_agent_fallback():
+            return self._generate_full_draft_multi_agent(context=context)
+
+        logger.warning("Draft generation returned no structured blocks; using normalization fallback")
+        return {}
+
+    def _generate_full_draft_multi_agent(self, *, context: dict[str, Any]) -> dict[str, Any]:
+        """Sequential multi-agent fallback path."""
         blocks: dict[str, Any] = {}
 
         strategy_payload = self.ai.generate_strategy_plan(context)
@@ -1029,6 +1067,16 @@ class CampaignBuilderService:
             logger.error("Creative agent failed after all attempts — no creativePlan in blocks")
 
         return blocks
+
+    @staticmethod
+    def _should_generate_images_on_create() -> bool:
+        value = str(os.environ.get("CAMPAIGN_BUILDER_EAGER_IMAGES", "0")).strip().lower()
+        return value in {"1", "true", "yes", "on"}
+
+    @staticmethod
+    def _allow_multi_agent_fallback() -> bool:
+        value = str(os.environ.get("CAMPAIGN_BUILDER_MULTI_AGENT_FALLBACK", "1")).strip().lower()
+        return value not in {"0", "false", "no", "off"}
 
     def _regenerate_block_via_agent(
         self,
@@ -1301,6 +1349,13 @@ class CampaignBuilderService:
             or "עבר" in raw
             or has_hebrew_chars
         )
+
+    @staticmethod
+    def _sanitize_offer_for_copy(offer: str, is_hebrew: bool) -> str:
+        compact = re.sub(r"\s+", " ", str(offer or "")).strip()
+        if compact:
+            return compact[:80]
+        return "הצעה חדשה" if is_hebrew else "your offer"
 
     @staticmethod
     def _default_interests(is_hebrew: bool) -> list[str]:

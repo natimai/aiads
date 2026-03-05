@@ -751,7 +751,8 @@ Data:
             "You are an expert Meta ads strategist. You build launch-ready campaign drafts. "
             "Output ONLY valid JSON. No markdown, no intro text."
         )
-        raw = self._generate(prompt, model=self.pro_model, system_instruction=system)
+        # Prefer flash model for draft creation latency; quality is recovered by block-level edits/regenerate.
+        raw = self._generate(prompt, model=self.flash_model, system_instruction=system)
         parsed = self._parse_json_dict(raw)
         return parsed if isinstance(parsed, dict) else {}
 
