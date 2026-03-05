@@ -127,26 +127,63 @@ def fetch_ad_accounts(access_token: str) -> list[dict]:
     ]
 
 
-def store_account_with_token(user_id: str, account: dict, access_token: str, token_expiry: datetime):
+def fetch_pages(access_token: str) -> list[dict]:
+    """Fetch all Facebook Pages the user manages (needed for ad publishing)."""
+    try:
+        resp = requests.get(
+            f"{GRAPH_API_BASE}/me/accounts",
+            params={
+                "access_token": access_token,
+                "fields": "id,name,access_token",
+                "limit": 100,
+            },
+        )
+        resp.raise_for_status()
+        pages = resp.json().get("data", [])
+        return [
+            {
+                "pageId": page.get("id"),
+                "pageName": page.get("name"),
+            }
+            for page in pages
+            if page.get("id")
+        ]
+    except Exception as e:
+        logger.warning("Failed to fetch Facebook Pages: %s", e)
+        return []
+
+
+def store_account_with_token(
+    user_id: str,
+    account: dict,
+    access_token: str,
+    token_expiry: datetime,
+    *,
+    default_page_id: str = "",
+    default_page_name: str = "",
+):
     """Store a connected Meta account with encrypted token in Firestore."""
     db = get_db()
     encrypted = encrypt_token(access_token)
     account_id = account["metaAccountId"]
 
+    doc_data = {
+        "accountName": account.get("accountName"),
+        "currency": account.get("currency", "USD"),
+        "businessId": account.get("businessId"),
+        "businessName": account.get("businessName"),
+        "accessToken": encrypted,
+        "tokenExpiry": token_expiry,
+        "isActive": True,
+        "connectedAt": datetime.now(timezone.utc),
+    }
+
+    if default_page_id:
+        doc_data["defaultPageId"] = default_page_id
+        doc_data["defaultPageName"] = default_page_name
+
     doc_ref = db.collection("users").document(user_id).collection("metaAccounts").document(account_id)
-    doc_ref.set(
-        {
-            "accountName": account.get("accountName"),
-            "currency": account.get("currency", "USD"),
-            "businessId": account.get("businessId"),
-            "businessName": account.get("businessName"),
-            "accessToken": encrypted,
-            "tokenExpiry": token_expiry,
-            "isActive": True,
-            "connectedAt": datetime.now(timezone.utc),
-        },
-        merge=True,
-    )
+    doc_ref.set(doc_data, merge=True)
     return account_id
 
 

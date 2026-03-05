@@ -73,6 +73,8 @@ def _get_accounts(user_id: str):
             "tokenExpiry": data.get("tokenExpiry").isoformat() if data.get("tokenExpiry") else None,
             "kpiSummary": data.get("kpiSummary"),
             "kpiUpdatedAt": data.get("kpiUpdatedAt").isoformat() if data.get("kpiUpdatedAt") else None,
+            "defaultPageId": data.get("defaultPageId"),
+            "defaultPageName": data.get("defaultPageName"),
         })
 
     return _cors_response(json.dumps({"accounts": accounts}))
@@ -115,7 +117,7 @@ def _handle_callback(request):
         return "", 302, {"Location": f"{FRONTEND_URL}/settings/accounts?error=invalid_state"}
 
     try:
-        from services.meta_auth import exchange_code_for_token, fetch_ad_accounts, store_account_with_token
+        from services.meta_auth import exchange_code_for_token, fetch_ad_accounts, fetch_pages, store_account_with_token
         redirect_uri = _get_callback_uri(request)
         token_data = exchange_code_for_token(code, redirect_uri)
         access_token = token_data["access_token"]
@@ -123,9 +125,23 @@ def _handle_callback(request):
 
         ad_accounts = fetch_ad_accounts(access_token)
 
+        # Auto-fetch Facebook Pages so we can store defaultPageId
+        pages = fetch_pages(access_token)
+        first_page_id = pages[0]["pageId"] if pages else ""
+        first_page_name = pages[0]["pageName"] if pages else ""
+        if pages:
+            logger.info(f"Found {len(pages)} Facebook Pages, using '{first_page_name}' ({first_page_id}) as default")
+
         connected = []
         for account in ad_accounts:
-            account_id = store_account_with_token(user_id, account, access_token, token_expiry)
+            account_id = store_account_with_token(
+                user_id,
+                account,
+                access_token,
+                token_expiry,
+                default_page_id=first_page_id,
+                default_page_name=first_page_name,
+            )
             connected.append(account_id)
 
         logger.info(f"Connected {len(connected)} accounts for user {user_id}")
