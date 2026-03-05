@@ -1,18 +1,21 @@
-import { useState, useCallback } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  CheckCircle2,
-  XCircle,
-  Pencil,
-  TrendingUp,
-  TrendingDown,
   AlertTriangle,
-  Loader2,
+  ArrowDownRight,
+  ArrowUpRight,
   Brain,
-  X,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
   ExternalLink,
+  Loader2,
+  Pencil,
+  RefreshCw,
+  Sparkles,
+  TestTube2,
+  X,
+  XCircle,
 } from "lucide-react";
 import type {
   Recommendation,
@@ -20,32 +23,9 @@ import type {
   TasksResponse,
 } from "../../types";
 
-/* ─── Material Symbol helper ──────────────────────────────────── */
-function MS({
-  name,
-  size = 20,
-  filled = false,
-  className = "",
-}: {
-  name: string;
-  size?: number;
-  filled?: boolean;
-  className?: string;
-}) {
-  return (
-    <span
-      className={`material-symbols-outlined leading-none select-none ${className}`}
-      style={{
-        fontSize: `${size}px`,
-        fontVariationSettings: `'FILL' ${filled ? 1 : 0}, 'wght' 400, 'GRAD' 0, 'opsz' ${size}`,
-      }}
-    >
-      {name}
-    </span>
-  );
-}
+type CardStatus = "idle" | "processing" | "error";
 
-type CardStatus = "idle" | "processing" | "success" | "error";
+type CardVariant = "kill" | "scale" | "creative" | "audience" | "ab_test" | "generic";
 
 interface ActionFeedProps {
   recommendations: Recommendation[];
@@ -53,12 +33,72 @@ interface ActionFeedProps {
   loading: boolean;
   busy: boolean;
   onApprove: (id: string, modifications?: RecommendationModifications) => Promise<void>;
-  onApproveAndExecute: (id: string, modifications?: RecommendationModifications) => Promise<void>;
+  onApproveAndExecute: (
+    id: string,
+    modifications?: RecommendationModifications
+  ) => Promise<void>;
   onReject: (id: string) => void;
 }
 
-/* ─── Card variant logic ──────────────────────────────────────── */
-type CardVariant = "kill" | "scale" | "creative" | "audience" | "ab_test" | "generic";
+const VARIANT_STYLES: Record<
+  CardVariant,
+  {
+    ring: string;
+    tone: string;
+    pill: string;
+    approve: string;
+    label: string;
+  }
+> = {
+  kill: {
+    ring: "from-rose-500/55 via-rose-400/20 to-transparent",
+    tone: "text-rose-200",
+    pill: "border-rose-400/30 bg-rose-500/20 text-rose-200",
+    approve: "bg-rose-500 text-white hover:bg-rose-400",
+    label: "Kill",
+  },
+  scale: {
+    ring: "from-emerald-500/55 via-emerald-400/20 to-transparent",
+    tone: "text-emerald-200",
+    pill: "border-emerald-400/30 bg-emerald-500/20 text-emerald-200",
+    approve: "bg-emerald-500 text-slate-950 hover:bg-emerald-400",
+    label: "Scale",
+  },
+  creative: {
+    ring: "from-violet-500/55 via-violet-400/20 to-transparent",
+    tone: "text-violet-200",
+    pill: "border-violet-400/30 bg-violet-500/20 text-violet-200",
+    approve: "bg-violet-500 text-white hover:bg-violet-400",
+    label: "Creative",
+  },
+  audience: {
+    ring: "from-cyan-500/55 via-cyan-400/20 to-transparent",
+    tone: "text-cyan-200",
+    pill: "border-cyan-400/30 bg-cyan-500/20 text-cyan-200",
+    approve: "bg-cyan-500 text-slate-950 hover:bg-cyan-400",
+    label: "Audience",
+  },
+  ab_test: {
+    ring: "from-amber-500/55 via-amber-400/20 to-transparent",
+    tone: "text-amber-200",
+    pill: "border-amber-400/30 bg-amber-500/20 text-amber-200",
+    approve: "bg-amber-500 text-slate-950 hover:bg-amber-400",
+    label: "A/B Test",
+  },
+  generic: {
+    ring: "from-indigo-500/55 via-indigo-400/20 to-transparent",
+    tone: "text-indigo-200",
+    pill: "border-indigo-400/30 bg-indigo-500/20 text-indigo-200",
+    approve: "bg-indigo-500 text-white hover:bg-indigo-400",
+    label: "Action",
+  },
+};
+
+const PRIORITY_PILL: Record<Recommendation["priority"], string> = {
+  high: "border-rose-400/40 bg-rose-500/15 text-rose-200",
+  medium: "border-amber-400/40 bg-amber-500/15 text-amber-200",
+  low: "border-slate-500/40 bg-slate-500/15 text-slate-300",
+};
 
 function getVariant(rec: Recommendation): CardVariant {
   const action = rec.executionPlan?.action;
@@ -69,199 +109,108 @@ function getVariant(rec: Recommendation): CardVariant {
     (action === "set_status" && desired === "paused") ||
     proposed === "PAUSE_AD_SET" ||
     proposed === "PAUSE_CAMPAIGN"
-  )
+  ) {
     return "kill";
+  }
 
   if (
     (action === "adjust_budget" && (rec.executionPlan?.deltaPct ?? 0) > 0) ||
     proposed === "INCREASE_BUDGET"
-  )
+  ) {
     return "scale";
+  }
 
-  if (rec.type === "creative_optimization" || rec.type === "creative_copy") return "creative";
+  if (rec.type === "creative_optimization" || rec.type === "creative_copy") {
+    return "creative";
+  }
+
   if (
     rec.type === "audience_optimization" ||
     rec.type === "audience_build" ||
     rec.type === "audience_discovery" ||
     rec.type === "targeting_optimization"
-  )
+  ) {
     return "audience";
-  if (rec.type === "ab_test") return "ab_test";
+  }
+
+  if (rec.type === "ab_test") {
+    return "ab_test";
+  }
+
   return "generic";
 }
 
-/* border-l-4 color + icon + palette per variant */
-const VARIANT = {
-  kill: {
-    borderLeft: "border-l-rose-500",
-    iconBg: "bg-rose-50",
-    iconColor: "text-rose-600",
-    badge: "bg-rose-100 text-rose-700 border-rose-200",
-    approveBtn: "bg-rose-600 text-white hover:bg-rose-700 shadow-rose-200",
-    label: "KILL",
-    labelClass: "bg-rose-100 text-rose-700 border border-rose-200",
-    msIcon: "pause_circle",
-  },
-  scale: {
-    borderLeft: "border-l-emerald-500",
-    iconBg: "bg-emerald-50",
-    iconColor: "text-emerald-600",
-    badge: "bg-emerald-100 text-emerald-700 border-emerald-200",
-    approveBtn: "bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200",
-    label: "SCALE",
-    labelClass: "bg-emerald-100 text-emerald-700 border border-emerald-200",
-    msIcon: "trending_up",
-  },
-  creative: {
-    borderLeft: "border-l-violet-500",
-    iconBg: "bg-violet-50",
-    iconColor: "text-violet-600",
-    badge: "bg-violet-100 text-violet-700 border-violet-200",
-    approveBtn: "bg-violet-600 text-white hover:bg-violet-700 shadow-violet-200",
-    label: "CREATIVE",
-    labelClass: "bg-violet-100 text-violet-700 border border-violet-200",
-    msIcon: "auto_fix_high",
-  },
-  audience: {
-    borderLeft: "border-l-blue-500",
-    iconBg: "bg-blue-50",
-    iconColor: "text-blue-600",
-    badge: "bg-blue-100 text-blue-700 border-blue-200",
-    approveBtn: "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200",
-    label: "AUDIENCE",
-    labelClass: "bg-blue-100 text-blue-700 border border-blue-200",
-    msIcon: "groups",
-  },
-  ab_test: {
-    borderLeft: "border-l-amber-500",
-    iconBg: "bg-amber-50",
-    iconColor: "text-amber-600",
-    badge: "bg-amber-100 text-amber-700 border-amber-200",
-    approveBtn: "bg-amber-600 text-white hover:bg-amber-700 shadow-amber-200",
-    label: "A/B TEST",
-    labelClass: "bg-amber-100 text-amber-700 border border-amber-200",
-    msIcon: "science",
-  },
-  generic: {
-    borderLeft: "border-l-indigo-500",
-    iconBg: "bg-indigo-50",
-    iconColor: "text-indigo-600",
-    badge: "bg-indigo-100 text-indigo-700 border-indigo-200",
-    approveBtn: "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200",
-    label: "ACTION",
-    labelClass: "bg-indigo-100 text-indigo-700 border border-indigo-200",
-    msIcon: "psychology",
-  },
-} as const;
-
-const PRIORITY_STYLES = {
-  high: "bg-rose-50 text-rose-700 border border-rose-200",
-  medium: "bg-amber-50 text-amber-700 border border-amber-200",
-  low: "bg-slate-100 text-slate-600 border border-slate-200",
-} as const;
-
-/* ─── Metric pill ─────────────────────────────────────────────── */
-function MetricPill({ label, value }: { label: string; value: string | number }) {
+function MetricChip({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5">
-      <span className="block text-[10px] uppercase tracking-wider text-slate-400">{label}</span>
-      <span className="block text-sm font-semibold tabular-nums text-slate-800">{value}</span>
+    <div className="rounded-xl border border-slate-700/80 bg-[#0e1630] px-2.5 py-2">
+      <p className="text-[10px] uppercase tracking-[0.1em] text-slate-500">{label}</p>
+      <p className="text-sm font-semibold text-slate-100">{value}</p>
     </div>
   );
 }
 
-/* ─── Nano Banana image gallery ───────────────────────────────── */
-function NanaBananaGallery({
+function SectionTitle({
+  title,
+  count,
+  tone,
+}: {
+  title: string;
+  count: number;
+  tone: string;
+}) {
+  return (
+    <div className="flex items-center gap-2 px-1">
+      <span className={`text-xs font-semibold uppercase tracking-[0.14em] ${tone}`}>{title}</span>
+      <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-slate-300">
+        {count}
+      </span>
+    </div>
+  );
+}
+
+function NanoBananaGallery({
   images,
   generatedAt,
 }: {
   images: string[];
   generatedAt?: string;
 }) {
-  const [selected, setSelected] = useState<number | null>(null);
-  const styleLabels = ["UGC Style", "Minimalist", "Lifestyle"];
+  if (!images.length) {
+    return (
+      <div className="mt-3 rounded-xl border border-violet-400/20 bg-violet-500/10 px-3 py-2 text-xs text-violet-200">
+        No generated image variations yet.
+      </div>
+    );
+  }
 
   return (
-    <div className="mt-3 rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 to-indigo-50 p-3">
-      <div className="mb-2.5 flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <MS name="auto_fix_high" size={14} filled className="text-violet-500" />
-          <span className="text-[10px] font-bold uppercase tracking-wider text-violet-600">
-            Nano Banana — 3 Creative Variations
-          </span>
-        </div>
-        {generatedAt && (
-          <span className="text-[10px] text-slate-400">Ready ✓</span>
-        )}
+    <div className="mt-3 rounded-2xl border border-violet-400/25 bg-[#121735] p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-200">
+          Nano Banana Variations
+        </p>
+        <span className="text-[11px] text-slate-400">{generatedAt ? "Ready" : "Generated"}</span>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        {images.map((url, i) => (
-          <button
-            key={i}
-            onClick={() => setSelected(selected === i ? null : i)}
-            className={`group relative aspect-square overflow-hidden rounded-lg border-2 transition-all duration-200 ${
-              selected === i
-                ? "border-violet-500 shadow-lg shadow-violet-200"
-                : "border-slate-200 hover:border-violet-300"
-            }`}
-          >
-            <img
-              src={url}
-              alt={styleLabels[i] ?? `Variation ${i + 1}`}
-              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-              loading="lazy"
-            />
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-1.5 py-1">
-              <span className="text-[9px] font-semibold uppercase tracking-wider text-white">
-                {styleLabels[i] ?? `V${i + 1}`}
-              </span>
-            </div>
-            {selected === i && (
-              <div className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-violet-500">
-                <CheckCircle2 className="h-3.5 w-3.5 text-white" />
-              </div>
-            )}
-          </button>
+      <div className="flex snap-x gap-3 overflow-x-auto pb-1 md:hidden">
+        {images.map((url, index) => (
+          <div key={url + index} className="w-[76%] shrink-0 snap-center overflow-hidden rounded-xl border border-slate-700/80">
+            <img src={url} alt={`Creative ${index + 1}`} className="aspect-square w-full object-cover" />
+          </div>
         ))}
       </div>
 
-      {selected !== null && images[selected] && (
-        <div className="mt-2.5 overflow-hidden rounded-lg border border-violet-200 bg-white">
-          <img
-            src={images[selected]}
-            alt={styleLabels[selected] ?? "Creative variation"}
-            className="w-full object-cover"
-          />
-          <div className="flex items-center justify-between border-t border-violet-100 px-3 py-2">
-            <span className="text-xs font-semibold text-violet-700">
-              {styleLabels[selected]} selected
-            </span>
-            <a
-              href={images[selected]}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-slate-500 transition-colors hover:text-violet-600"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <ExternalLink className="h-3 w-3" />
-              Full size
-            </a>
+      <div className="hidden md:columns-3 md:gap-3">
+        {images.map((url, index) => (
+          <div key={url + index} className="mb-3 break-inside-avoid overflow-hidden rounded-xl border border-slate-700/80">
+            <img src={url} alt={`Creative ${index + 1}`} className="w-full object-cover" />
           </div>
-        </div>
-      )}
-
-      {images.length === 0 && (
-        <div className="flex items-center gap-2 py-2 text-xs text-slate-400">
-          <MS name="image" size={16} />
-          Images are being generated in the background…
-        </div>
-      )}
+        ))}
+      </div>
     </div>
   );
 }
 
-/* ─── TaskCard ────────────────────────────────────────────────── */
 function TaskCard({
   rec,
   busy,
@@ -276,37 +225,56 @@ function TaskCard({
   onReject: (id: string) => void;
 }) {
   const [cardStatus, setCardStatus] = useState<CardStatus>("idle");
+  const [errorMsg, setErrorMsg] = useState("");
   const [editing, setEditing] = useState(false);
+  const [expandedReasoning, setExpandedReasoning] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const [resolvedAs, setResolvedAs] = useState<"idle" | "approved" | "dismissed">("idle");
+
   const [editDelta, setEditDelta] = useState<number>(rec.executionPlan?.deltaPct ?? 0);
   const [editCopy, setEditCopy] = useState(rec.suggestedContent?.creativeCopy ?? "");
   const [editAudience, setEditAudience] = useState(
     (rec.suggestedContent?.audienceSuggestions ?? []).join(", ")
   );
-  const [expanded, setExpanded] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
 
   const variant = getVariant(rec);
-  const styles = VARIANT[variant];
+  const styles = VARIANT_STYLES[variant];
   const canExecute = rec.executionPlan?.action && rec.executionPlan.action !== "none";
-  const metrics = rec.metricsSnapshot ?? {};
-  const hasMetrics = Object.keys(metrics).some((k) => (metrics[k] ?? 0) > 0);
 
-  const buildModifications = useCallback((): RecommendationModifications | undefined => {
-    const mods: RecommendationModifications = {};
+  const isGhostDraft =
+    Boolean(rec.metadata?.draftId) &&
+    (rec.type === "ghost_draft" ||
+      rec.batchType === "GHOST_DRAFT" ||
+      rec.batchType === "PROACTIVE_DRAFT");
+
+  const metrics = rec.metricsSnapshot ?? {};
+
+  const finishResolution = (mode: "approved" | "dismissed") => {
+    setResolvedAs(mode);
+    window.setTimeout(() => setIsClosing(true), 380);
+    window.setTimeout(() => setHidden(true), 820);
+  };
+
+  const buildModifications = (): RecommendationModifications | undefined => {
+    const modifications: RecommendationModifications = {};
     let hasChanges = false;
+
     if (
       rec.executionPlan?.action === "adjust_budget" &&
       editDelta !== (rec.executionPlan?.deltaPct ?? 0)
     ) {
-      mods.deltaPct = editDelta;
+      modifications.deltaPct = editDelta;
       hasChanges = true;
     }
+
     if (rec.type === "creative_optimization" || rec.type === "creative_copy") {
       if (editCopy !== (rec.suggestedContent?.creativeCopy ?? "")) {
-        mods.creativeCopy = editCopy;
+        modifications.creativeCopy = editCopy;
         hasChanges = true;
       }
     }
+
     if (
       rec.type === "audience_optimization" ||
       rec.type === "audience_build" ||
@@ -315,418 +283,305 @@ function TaskCard({
     ) {
       const original = (rec.suggestedContent?.audienceSuggestions ?? []).join(", ");
       if (editAudience !== original) {
-        mods.audienceSuggestions = editAudience
+        modifications.audienceSuggestions = editAudience
           .split(",")
-          .map((s) => s.trim())
+          .map((value) => value.trim())
           .filter(Boolean);
         hasChanges = true;
       }
     }
-    return hasChanges ? mods : undefined;
-  }, [editDelta, editCopy, editAudience, rec]);
+
+    return hasChanges ? modifications : undefined;
+  };
 
   const handleApprove = async () => {
     setCardStatus("processing");
     setErrorMsg("");
+
     try {
       if (canExecute) {
         await onApproveAndExecute(rec.id);
       } else {
         await onApprove(rec.id);
       }
-      setCardStatus("success");
+      finishResolution("approved");
     } catch (err: unknown) {
       setCardStatus("error");
-      setErrorMsg(err instanceof Error ? err.message : "Execution failed");
+      setErrorMsg(err instanceof Error ? err.message : "Approval failed.");
     }
   };
 
   const handleSaveAndExecute = async () => {
     setCardStatus("processing");
     setErrorMsg("");
-    const mods = buildModifications();
+    const modifications = buildModifications();
+
     try {
       if (canExecute) {
-        await onApproveAndExecute(rec.id, mods);
+        await onApproveAndExecute(rec.id, modifications);
       } else {
-        await onApprove(rec.id, mods);
+        await onApprove(rec.id, modifications);
       }
-      setCardStatus("success");
-      setEditing(false);
+      finishResolution("approved");
     } catch (err: unknown) {
       setCardStatus("error");
-      setErrorMsg(err instanceof Error ? err.message : "Execution failed");
+      setErrorMsg(err instanceof Error ? err.message : "Save and execute failed.");
     }
   };
 
-  const handleReject = () => {
+  const handleDismiss = () => {
     setCardStatus("processing");
+    setErrorMsg("");
     onReject(rec.id);
-    setCardStatus("success");
+    finishResolution("dismissed");
   };
 
-  /* Success state */
-  if (cardStatus === "success") {
-    return (
-      <div className="rounded-xl border border-slate-200 bg-white p-4 opacity-50 transition-all duration-500">
-        <div className="flex items-center gap-2 text-sm text-slate-500">
-          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-          <span className="line-through">{rec.title}</span>
-          <span className="ml-auto text-xs">Done</span>
-        </div>
-      </div>
-    );
+  if (hidden) {
+    return null;
   }
 
-  const approveBtnLabel =
-    variant === "ab_test"
-      ? "Approve Test"
-      : variant === "kill"
-      ? "Pause Campaign"
-      : canExecute
-      ? "Approve & Execute"
-      : "Approve";
-  const isGhostDraft =
-    Boolean(rec.metadata?.draftId) &&
-    (rec.type === "ghost_draft" ||
-      rec.batchType === "GHOST_DRAFT" ||
-      rec.batchType === "PROACTIVE_DRAFT");
-  const isLaunchWatch = rec.type === "monitor_launch" || rec.batchType === "LAUNCH_WATCH";
-
   return (
-    <div
-      className={`rounded-xl border border-slate-200 border-l-4 ${styles.borderLeft} bg-white shadow-sm transition-all duration-200 ${
-        cardStatus === "processing" ? "pointer-events-none opacity-50" : ""
-      }`}
+    <article
+      className={`relative overflow-hidden rounded-2xl border border-slate-800 bg-[#080f23] px-4 py-4 shadow-[0_20px_55px_-35px_rgba(56,189,248,0.55)] transition-all duration-500 ${
+        isClosing ? "translate-x-6 scale-[0.98] opacity-0" : "opacity-100"
+      } ${cardStatus === "processing" ? "pointer-events-none opacity-70" : ""}`}
     >
-      {/* Card body */}
-      <div className="flex gap-3 p-4">
-        {/* Variant icon */}
-        <div
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${styles.iconBg}`}
-        >
-          <MS name={styles.msIcon} size={20} filled className={styles.iconColor} />
-        </div>
+      <div className={`pointer-events-none absolute inset-y-0 left-0 w-1 bg-gradient-to-b ${styles.ring}`} />
 
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          {/* Badge row */}
-          <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-            <span
-              className={`rounded-md px-2 py-0.5 text-[10px] font-bold tracking-wider border ${styles.labelClass}`}
-            >
-              {styles.label}
-            </span>
-            <span
-              className={`rounded-md px-2 py-0.5 text-[10px] font-medium ${PRIORITY_STYLES[rec.priority]}`}
-            >
-              {rec.priority === "high"
-                ? "🔴 High"
-                : rec.priority === "medium"
-                ? "🟡 Medium"
-                : "⚪ Low"}
-            </span>
-            {rec.accountName && (
-              <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                {rec.accountName}
-              </span>
-            )}
-            {isLaunchWatch && (
-              <span className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-700">
-                Launch Watch
-              </span>
-            )}
-            {isGhostDraft && (
-              <span className="rounded-md border border-purple-200 bg-purple-50 px-2 py-0.5 text-[10px] font-medium text-purple-700">
-                Ghost Draft
-              </span>
-            )}
-            <span className="ml-auto shrink-0 text-[11px] tabular-nums text-slate-400">
-              {Math.round(rec.confidence * 100)}% confidence
-            </span>
+      {resolvedAs !== "idle" && (
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-slate-950/72 backdrop-blur-sm">
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-500/20 px-4 py-2 text-sm font-semibold text-emerald-200">
+            <CheckCircle2 className="h-4 w-4" />
+            {resolvedAs === "approved" ? "Approved" : "Dismissed"}
           </div>
+        </div>
+      )}
 
-          {/* Title + description */}
-          <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug text-slate-900">
-            {rec.title}
-          </h3>
-          <p className="mt-0.5 line-clamp-2 text-sm leading-relaxed text-slate-600">
-            {rec.uiDisplayText || rec.why || rec.reasoning}
-          </p>
+      <div className="relative z-10">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.13em] ${styles.pill}`}>
+            {styles.label}
+          </span>
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] ${PRIORITY_PILL[rec.priority]}`}>
+            {rec.priority}
+          </span>
+          {rec.accountName && (
+            <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[10px] text-slate-300">
+              {rec.accountName}
+            </span>
+          )}
+          <span className="ml-auto text-[11px] font-semibold text-slate-400">
+            {Math.round(rec.confidence * 100)}% confidence
+          </span>
+        </div>
 
-          {/* Metrics snapshot */}
-          {hasMetrics && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {metrics.spend != null && metrics.spend > 0 && (
-                <MetricPill label="Spend" value={`$${metrics.spend.toFixed(0)}`} />
-              )}
-              {metrics.roas != null && metrics.roas > 0 && (
-                <MetricPill label="ROAS" value={`${metrics.roas.toFixed(2)}x`} />
-              )}
-              {metrics.cpa != null && metrics.cpa > 0 && (
-                <MetricPill label="CPA" value={`$${metrics.cpa.toFixed(0)}`} />
-              )}
-              {metrics.ctr != null && metrics.ctr > 0 && (
-                <MetricPill label="CTR" value={`${metrics.ctr.toFixed(2)}%`} />
-              )}
-              {metrics.cpm != null && metrics.cpm > 0 && (
-                <MetricPill label="CPM" value={`$${metrics.cpm.toFixed(1)}`} />
-              )}
-              {metrics.frequency != null && metrics.frequency > 0 && (
-                <MetricPill label="Freq" value={metrics.frequency.toFixed(1)} />
-              )}
+        <h3 className="text-[15px] font-semibold leading-snug text-slate-100">{rec.title}</h3>
+        <p className="mt-1 text-sm leading-relaxed text-slate-300">
+          {rec.uiDisplayText || rec.why || rec.reasoning}
+        </p>
+
+        {rec.expectedImpact?.summary && (
+          <div className="mt-3 rounded-xl border border-slate-700/80 bg-[#111a33] px-3 py-2 text-xs text-slate-200">
+            <span className="font-semibold text-slate-100">Impact: </span>
+            {rec.expectedImpact.summary}
+          </div>
+        )}
+
+        <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+          {metrics.spend != null && metrics.spend > 0 && (
+            <MetricChip label="Spend" value={`$${metrics.spend.toFixed(0)}`} />
+          )}
+          {metrics.roas != null && metrics.roas > 0 && (
+            <MetricChip label="ROAS" value={`${metrics.roas.toFixed(2)}x`} />
+          )}
+          {metrics.cpa != null && metrics.cpa > 0 && (
+            <MetricChip label="CPA" value={`$${metrics.cpa.toFixed(0)}`} />
+          )}
+          {metrics.ctr != null && metrics.ctr > 0 && (
+            <MetricChip label="CTR" value={`${metrics.ctr.toFixed(2)}%`} />
+          )}
+        </div>
+
+        {(rec.type === "creative_optimization" || rec.type === "creative_copy") &&
+          rec.suggestedContent?.creativeCopy && !editing && (
+            <div className="mt-3 rounded-xl border border-violet-400/20 bg-violet-500/10 px-3 py-2 text-sm text-violet-100">
+              {rec.suggestedContent.creativeCopy}
             </div>
           )}
 
-          {/* Expandable reasoning */}
-          {rec.reasoning && rec.reasoning !== rec.uiDisplayText && (
-            <div className="mt-3">
-              <button
-                onClick={() => setExpanded(!expanded)}
-                className="flex items-center gap-1 text-xs text-slate-400 transition-colors hover:text-slate-600"
+        {(rec.type === "creative_optimization" || rec.type === "creative_copy") && !editing && (
+          <NanoBananaGallery
+            images={rec.nanoBananaImages ?? []}
+            generatedAt={rec.nanoBananaGeneratedAt}
+          />
+        )}
+
+        {rec.suggestedContent?.audienceSuggestions?.length && !editing ? (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {rec.suggestedContent.audienceSuggestions.map((suggestion, index) => (
+              <span
+                key={`${suggestion}-${index}`}
+                className="rounded-full border border-cyan-400/20 bg-cyan-500/12 px-2.5 py-1 text-xs text-cyan-100"
               >
-                {expanded ? (
-                  <ChevronUp className="h-3 w-3" />
-                ) : (
-                  <ChevronDown className="h-3 w-3" />
-                )}
-                {expanded ? "Hide details" : "Show details"}
-              </button>
-              {expanded && (
-                <p className="mt-2 rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs leading-relaxed text-slate-600">
-                  {rec.reasoning}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Expected impact */}
-          {rec.expectedImpact?.summary && (
-            <div className="mt-3 flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-              {rec.expectedImpact.direction === "up" ? (
-                <TrendingUp className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
-              ) : (
-                <TrendingDown className="h-3.5 w-3.5 shrink-0 text-rose-500" />
-              )}
-              <span className="text-xs text-slate-600">
-                <span className="font-medium">Expected: </span>
-                {rec.expectedImpact.summary}
+                {suggestion}
               </span>
-            </div>
-          )}
+            ))}
+          </div>
+        ) : null}
 
-          {/* Creative copy preview */}
-          {!editing && rec.suggestedContent?.creativeCopy && (
-            <div className="mt-3 rounded-xl border border-violet-100 bg-violet-50 p-3">
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-violet-500">
-                AI Suggested Copy
+        {rec.reasoning && rec.reasoning !== rec.uiDisplayText && (
+          <div className="mt-3">
+            <button
+              onClick={() => setExpandedReasoning((value) => !value)}
+              className="inline-flex items-center gap-1 text-xs text-slate-400 transition-colors hover:text-slate-200"
+            >
+              {expandedReasoning ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              {expandedReasoning ? "Hide reasoning" : "Show reasoning"}
+            </button>
+            {expandedReasoning && (
+              <p className="mt-2 rounded-xl border border-slate-700/80 bg-[#101833] p-3 text-xs leading-relaxed text-slate-300">
+                {rec.reasoning}
               </p>
-              <p className="text-sm text-violet-900">
-                &ldquo;{rec.suggestedContent.creativeCopy}&rdquo;
-              </p>
-            </div>
-          )}
+            )}
+          </div>
+        )}
 
-          {/* Nano Banana gallery */}
-          {!editing &&
-            (rec.type === "creative_optimization" || rec.type === "creative_copy") && (
-              <NanaBananaGallery
-                images={rec.nanoBananaImages ?? []}
-                generatedAt={rec.nanoBananaGeneratedAt}
-              />
+        {editing && (
+          <div className="mt-4 space-y-3 rounded-2xl border border-indigo-400/30 bg-indigo-500/10 p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-indigo-200">
+                Edit Before Execute
+              </p>
+              <button
+                onClick={() => setEditing(false)}
+                className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border border-slate-700 text-slate-300"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {rec.executionPlan?.action === "adjust_budget" && (
+              <label className="block">
+                <span className="text-xs font-medium text-slate-200">Budget delta (%)</span>
+                <input
+                  type="range"
+                  min={-50}
+                  max={50}
+                  step={1}
+                  value={editDelta}
+                  onChange={(event) => setEditDelta(Number(event.target.value))}
+                  className="mt-2 w-full accent-indigo-400"
+                />
+                <p className="text-xs font-semibold text-slate-300">
+                  {editDelta > 0 ? "+" : ""}
+                  {editDelta}%
+                </p>
+              </label>
             )}
 
-          {/* Audience suggestions */}
-          {!editing && rec.suggestedContent?.audienceSuggestions?.length ? (
-            <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 p-3">
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-blue-500">
-                Audience Suggestions
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {rec.suggestedContent.audienceSuggestions.map((s, i) => (
-                  <span
-                    key={i}
-                    className="rounded-full border border-blue-200 bg-white px-2 py-0.5 text-xs text-blue-700"
-                  >
-                    {s}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : null}
+            {(rec.type === "creative_optimization" || rec.type === "creative_copy") && (
+              <label className="block">
+                <span className="text-xs font-medium text-slate-200">Creative copy</span>
+                <textarea
+                  rows={3}
+                  value={editCopy}
+                  onChange={(event) => setEditCopy(event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-700 bg-[#0b1228] px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-400"
+                />
+              </label>
+            )}
 
-          {/* Edit panel */}
-          {editing && (
-            <div className="mt-3 space-y-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-indigo-700">
-                  Edit before executing
-                </span>
-                <button
-                  onClick={() => setEditing(false)}
-                  className="text-slate-400 hover:text-slate-600 transition-colors"
+            {(rec.type === "audience_optimization" ||
+              rec.type === "audience_build" ||
+              rec.type === "audience_discovery" ||
+              rec.type === "targeting_optimization") && (
+              <label className="block">
+                <span className="text-xs font-medium text-slate-200">Audience suggestions</span>
+                <input
+                  value={editAudience}
+                  onChange={(event) => setEditAudience(event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-700 bg-[#0b1228] px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-400"
+                />
+              </label>
+            )}
+
+            <button
+              onClick={handleSaveAndExecute}
+              disabled={busy || cardStatus === "processing"}
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 px-4 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"
+            >
+              {cardStatus === "processing" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Save and Execute
+            </button>
+          </div>
+        )}
+
+        {errorMsg && (
+          <div className="mt-3 rounded-xl border border-rose-400/30 bg-rose-500/12 px-3 py-2 text-xs text-rose-100">
+            {errorMsg}
+          </div>
+        )}
+
+        {rec.status === "pending" && !editing && (
+          <div className="sticky bottom-0 z-20 -mx-4 mt-4 border-t border-slate-800 bg-[#080f23]/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:border-t-0 sm:bg-transparent sm:px-0 sm:pb-0">
+            <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center">
+              {isGhostDraft && rec.metadata?.draftId && (
+                <Link
+                  to={`/campaign-builder?draftId=${encodeURIComponent(rec.metadata.draftId)}${
+                    rec.accountId ? `&accountId=${encodeURIComponent(rec.accountId)}` : ""
+                  }`}
+                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-indigo-400/25 bg-indigo-500/12 px-3 text-sm font-medium text-indigo-100 hover:bg-indigo-500/20 sm:w-auto"
                 >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              {rec.executionPlan?.action === "adjust_budget" && (
-                <label className="block">
-                  <span className="text-xs font-medium text-slate-700">
-                    Budget change (%)
-                  </span>
-                  <input
-                    type="range"
-                    min={-50}
-                    max={50}
-                    step={1}
-                    value={editDelta}
-                    onChange={(e) => setEditDelta(Number(e.target.value))}
-                    className="mt-1 w-full accent-indigo-600"
-                  />
-                  <div className="mt-0.5 flex justify-between text-xs text-slate-500">
-                    <span>-50%</span>
-                    <span
-                      className={`font-semibold ${
-                        editDelta >= 0 ? "text-emerald-600" : "text-rose-600"
-                      }`}
-                    >
-                      {editDelta > 0 ? "+" : ""}
-                      {editDelta}%
-                    </span>
-                    <span>+50%</span>
-                  </div>
-                </label>
-              )}
-
-              {(rec.type === "creative_optimization" || rec.type === "creative_copy") && (
-                <label className="block">
-                  <span className="text-xs font-medium text-slate-700">Ad copy</span>
-                  <textarea
-                    value={editCopy}
-                    onChange={(e) => setEditCopy(e.target.value)}
-                    rows={3}
-                    className="mt-1 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                    maxLength={2000}
-                  />
-                </label>
-              )}
-
-              {(rec.type === "audience_optimization" ||
-                rec.type === "audience_build" ||
-                rec.type === "audience_discovery" ||
-                rec.type === "targeting_optimization") && (
-                <label className="block">
-                  <span className="text-xs font-medium text-slate-700">
-                    Audience (comma-separated)
-                  </span>
-                  <input
-                    type="text"
-                    value={editAudience}
-                    onChange={(e) => setEditAudience(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                  />
-                </label>
+                  <ExternalLink className="h-4 w-4" />
+                  Review Draft
+                </Link>
               )}
 
               <button
-                onClick={handleSaveAndExecute}
+                onClick={handleDismiss}
                 disabled={busy || cardStatus === "processing"}
-                className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-[#0f1732] px-3 text-sm font-medium text-slate-200 hover:bg-[#151f40] sm:w-auto"
               >
-                <CheckCircle2 className="h-4 w-4" />
-                Save & Execute
+                <XCircle className="h-4 w-4" />
+                Dismiss
+              </button>
+
+              <button
+                onClick={() => setEditing(true)}
+                disabled={busy || cardStatus === "processing"}
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-[#0f1732] px-3 text-sm font-medium text-slate-200 hover:bg-[#151f40] sm:w-auto"
+              >
+                <Pencil className="h-4 w-4" />
+                Edit
+              </button>
+
+              <button
+                onClick={handleApprove}
+                disabled={busy || cardStatus === "processing"}
+                className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors disabled:opacity-50 sm:ml-auto sm:w-auto ${styles.approve}`}
+              >
+                {cardStatus === "processing" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
+                {variant === "kill"
+                  ? "Pause"
+                  : variant === "ab_test"
+                  ? "Approve Test"
+                  : canExecute
+                  ? "Approve and Execute"
+                  : "Approve"}
               </button>
             </div>
-          )}
-
-          {/* Error */}
-          {errorMsg && (
-            <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-              {errorMsg}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
-
-      {/* ── Footer action buttons ─────────────────────────────── */}
-      {rec.status === "pending" && !editing && (
-        <div className="flex flex-col items-stretch gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row sm:items-center">
-          {isGhostDraft && rec.metadata?.draftId && (
-            <Link
-              to={`/campaign-builder?draftId=${encodeURIComponent(rec.metadata.draftId)}${rec.accountId ? `&accountId=${encodeURIComponent(rec.accountId)}` : ""}`}
-              className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-center text-sm font-medium text-indigo-700 hover:bg-indigo-100"
-            >
-              {rec.uiDisplayText || "Review AI Draft"}
-            </Link>
-          )}
-          {/* Dismiss */}
-          <button
-            onClick={handleReject}
-            disabled={busy || cardStatus === "processing"}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
-          >
-            <XCircle className="h-3.5 w-3.5" />
-            Dismiss
-          </button>
-
-          {/* Edit */}
-          <button
-            onClick={() => setEditing(true)}
-            disabled={busy || cardStatus === "processing"}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800 disabled:opacity-50"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-            Edit
-          </button>
-
-          {/* Primary action */}
-          <button
-            onClick={handleApprove}
-            disabled={busy || cardStatus === "processing"}
-            className={`flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold shadow-sm transition-colors disabled:opacity-50 sm:ml-auto ${styles.approveBtn}`}
-          >
-            {cardStatus === "processing" ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <CheckCircle2 className="h-4 w-4" />
-            )}
-            {approveBtnLabel}
-          </button>
-        </div>
-      )}
-
-      {/* Status footers */}
-      {rec.status === "executed" && (
-        <div className="border-t border-slate-100 px-4 py-2.5">
-          <span className="flex items-center gap-1.5 text-xs text-emerald-600">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Executed successfully
-          </span>
-        </div>
-      )}
-      {rec.status === "failed" && (
-        <div className="border-t border-slate-100 px-4 py-2.5">
-          <span className="flex items-center gap-1.5 text-xs text-rose-600">
-            <AlertTriangle className="h-3.5 w-3.5" /> Execution failed
-            {rec.execution?.error && `: ${rec.execution.error}`}
-          </span>
-        </div>
-      )}
-      {rec.status === "approved" && (
-        <div className="border-t border-slate-100 px-4 py-2.5">
-          <span className="flex items-center gap-1.5 text-xs text-indigo-600">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Approved — awaiting execution
-          </span>
-        </div>
-      )}
-      {rec.status === "rejected" && (
-        <div className="border-t border-slate-100 px-4 py-2.5">
-          <span className="flex items-center gap-1.5 text-xs text-slate-400">
-            <XCircle className="h-3.5 w-3.5" /> Dismissed
-          </span>
-        </div>
-      )}
-    </div>
+    </article>
   );
 }
 
@@ -744,44 +599,48 @@ function ABTestCard({
   onReject: (id: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
   const [cardStatus, setCardStatus] = useState<CardStatus>("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [isClosing, setIsClosing] = useState(false);
+  const [hidden, setHidden] = useState(false);
 
   const setup = rec.suggestedContent?.testSetup;
   const control = rec.suggestedContent?.abTest?.control;
   const variant = rec.suggestedContent?.abTest?.variant;
-
-  const defaultBudget = Number(
-    rec.executionPlan?.recommendedTestBudget ?? setup?.recommendedTestBudget ?? 50
-  );
   const variantSettings = (rec.executionPlan?.variantSettings ??
     setup?.variantSettings ??
     {}) as Record<string, unknown>;
-  const initialCustom = Array.isArray(variantSettings.custom_audiences)
-    ? (variantSettings.custom_audiences as unknown[]).map((x) => String(x)).join(", ")
-    : "lookalike_purchase_3pct";
-  const initialInterests = Array.isArray(variantSettings.interests)
-    ? (variantSettings.interests as unknown[]).map((x) => String(x)).join(", ")
-    : "";
 
-  const [budget, setBudget] = useState(defaultBudget);
-  const [customAudiences, setCustomAudiences] = useState(initialCustom);
-  const [interests, setInterests] = useState(initialInterests);
+  const [budget, setBudget] = useState(
+    Number(rec.executionPlan?.recommendedTestBudget ?? setup?.recommendedTestBudget ?? 50)
+  );
+  const [customAudiences, setCustomAudiences] = useState(
+    Array.isArray(variantSettings.custom_audiences)
+      ? (variantSettings.custom_audiences as unknown[]).map((value) => String(value)).join(", ")
+      : ""
+  );
+  const [interests, setInterests] = useState(
+    Array.isArray(variantSettings.interests)
+      ? (variantSettings.interests as unknown[]).map((value) => String(value)).join(", ")
+      : ""
+  );
 
-  const buildModifications = (): RecommendationModifications => {
+  const modifications = (): RecommendationModifications => {
     const parsedCustom = customAudiences
       .split(",")
-      .map((s) => s.trim())
+      .map((value) => value.trim())
       .filter(Boolean);
     const parsedInterests = interests
       .split(",")
-      .map((s) => s.trim())
+      .map((value) => value.trim())
       .filter(Boolean);
+
     const nextVariantSettings = {
       ...variantSettings,
       custom_audiences: parsedCustom,
       interests: parsedInterests,
     };
+
     return {
       recommendedTestBudget: budget,
       variantSettings: nextVariantSettings,
@@ -793,187 +652,195 @@ function ABTestCard({
     };
   };
 
+  const finish = () => {
+    window.setTimeout(() => setIsClosing(true), 360);
+    window.setTimeout(() => setHidden(true), 800);
+  };
+
   const handleApprove = async () => {
     setCardStatus("processing");
     setErrorMsg("");
     try {
-      const modifications = buildModifications();
       if (rec.executionPlan?.action && rec.executionPlan.action !== "none") {
-        await onApproveAndExecute(rec.id, modifications);
+        await onApproveAndExecute(rec.id, modifications());
       } else {
-        await onApprove(rec.id, modifications);
+        await onApprove(rec.id, modifications());
       }
-      setCardStatus("success");
+      finish();
     } catch (err: unknown) {
       setCardStatus("error");
-      setErrorMsg(err instanceof Error ? err.message : "A/B test execution failed");
+      setErrorMsg(err instanceof Error ? err.message : "A/B execution failed.");
     }
   };
 
-  const handleReject = () => {
+  const handleDismiss = () => {
     setCardStatus("processing");
     onReject(rec.id);
-    setCardStatus("success");
+    finish();
   };
 
-  if (cardStatus === "success") {
-    return (
-      <div className="rounded-xl border border-slate-200 bg-white p-4 opacity-50 transition-all duration-500">
-        <div className="flex items-center gap-2 text-sm text-slate-500">
-          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-          <span className="line-through">{rec.title}</span>
-          <span className="ml-auto text-xs">Done</span>
-        </div>
-      </div>
-    );
+  if (hidden) {
+    return null;
   }
 
   return (
-    <div
-      className={`rounded-xl border border-slate-200 border-l-4 border-l-amber-500 bg-white shadow-sm ${
-        cardStatus === "processing" ? "pointer-events-none opacity-50" : ""
-      }`}
+    <article
+      className={`relative overflow-hidden rounded-2xl border border-amber-400/35 bg-[#090f24] px-4 py-4 shadow-[0_20px_55px_-35px_rgba(245,158,11,0.6)] transition-all duration-500 ${
+        isClosing ? "translate-x-6 scale-[0.98] opacity-0" : "opacity-100"
+      } ${cardStatus === "processing" ? "pointer-events-none opacity-70" : ""}`}
     >
-      <div className="p-4">
-        <div className="mb-2 flex items-center gap-2">
-          <span className="rounded-md border border-amber-200 bg-amber-100 px-2 py-0.5 text-[10px] font-bold tracking-wider text-amber-700">
-            A/B TEST
-          </span>
-          <span className="rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-            {rec.priority.toUpperCase()}
-          </span>
-          <span className="ml-auto text-[11px] text-slate-400">
-            {Math.round(rec.confidence * 100)}% confidence
-          </span>
-        </div>
-        <h3 className="line-clamp-2 text-[15px] font-semibold text-slate-900">{rec.title}</h3>
-        <p className="mt-1 line-clamp-2 text-sm text-slate-600">{rec.uiDisplayText || rec.reasoning}</p>
-
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-              Control (Current)
-            </p>
-            <p className="mt-1 text-sm text-slate-700">
-              {String(control?.name ?? control?.targeting ?? setup?.controlAdsetId ?? "Current audience")}
-            </p>
-            {setup?.controlAdsetId && (
-              <p className="mt-1 text-xs text-slate-500">AdSet ID: {setup.controlAdsetId}</p>
-            )}
-          </div>
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600">
-              Variant (AI Proposal)
-            </p>
-            <p className="mt-1 text-sm text-amber-900">
-              {String(variant?.targeting ?? "3% Purchase Lookalike")}
-            </p>
-            <p className="mt-1 text-xs text-amber-700">
-              Budget: ${Number.isFinite(budget) ? budget : defaultBudget}/day
-            </p>
-          </div>
-        </div>
-
-        {editing && (
-          <div className="mt-3 space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
-            <label className="block text-xs font-medium text-slate-700">
-              Test budget (USD/day)
-              <input
-                type="number"
-                min={1}
-                value={budget}
-                onChange={(e) => setBudget(Math.max(1, Number(e.target.value || 1)))}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
-              />
-            </label>
-            <label className="block text-xs font-medium text-slate-700">
-              Variant custom audiences (comma-separated)
-              <input
-                type="text"
-                value={customAudiences}
-                onChange={(e) => setCustomAudiences(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
-              />
-            </label>
-            <label className="block text-xs font-medium text-slate-700">
-              Variant interests (comma-separated, empty to isolate lookalike)
-              <input
-                type="text"
-                value={interests}
-                onChange={(e) => setInterests(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
-              />
-            </label>
-          </div>
-        )}
-
-        {errorMsg && (
-          <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-            {errorMsg}
-          </div>
-        )}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="rounded-full border border-amber-400/35 bg-amber-500/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.13em] text-amber-100">
+          A/B Test
+        </span>
+        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] ${PRIORITY_PILL[rec.priority]}`}>
+          {rec.priority}
+        </span>
+        <span className="ml-auto text-[11px] font-semibold text-slate-400">
+          {Math.round(rec.confidence * 100)}% confidence
+        </span>
       </div>
 
+      <h3 className="text-[15px] font-semibold text-slate-100">{rec.title}</h3>
+      <p className="mt-1 text-sm text-slate-300">{rec.uiDisplayText || rec.reasoning}</p>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="rounded-2xl border border-slate-700 bg-[#0f1732] p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+            Control
+          </p>
+          <p className="mt-1 text-sm font-medium text-slate-100">
+            {String(control?.name ?? control?.targeting ?? setup?.controlAdsetId ?? "Current setup")}
+          </p>
+          {setup?.controlAdsetId && (
+            <p className="mt-1 text-xs text-slate-400">Ad Set: {setup.controlAdsetId}</p>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-amber-400/30 bg-amber-500/12 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-200">
+            Variant
+          </p>
+          <p className="mt-1 text-sm font-medium text-amber-100">
+            {String(variant?.targeting ?? "AI-proposed targeting variant")}
+          </p>
+          <p className="mt-1 text-xs text-amber-200/90">Budget: ${budget}/day</p>
+        </div>
+      </div>
+
+      {editing && (
+        <div className="mt-3 space-y-2 rounded-2xl border border-amber-400/25 bg-[#131933] p-3">
+          <label className="block text-xs font-medium text-slate-200">
+            Test budget (USD/day)
+            <input
+              type="number"
+              min={1}
+              value={budget}
+              onChange={(event) => setBudget(Math.max(1, Number(event.target.value || 1)))}
+              className="mt-1 w-full rounded-xl border border-slate-700 bg-[#0b1228] px-3 py-2 text-sm text-slate-100"
+            />
+          </label>
+          <label className="block text-xs font-medium text-slate-200">
+            Custom audiences
+            <input
+              type="text"
+              value={customAudiences}
+              onChange={(event) => setCustomAudiences(event.target.value)}
+              className="mt-1 w-full rounded-xl border border-slate-700 bg-[#0b1228] px-3 py-2 text-sm text-slate-100"
+            />
+          </label>
+          <label className="block text-xs font-medium text-slate-200">
+            Interests
+            <input
+              type="text"
+              value={interests}
+              onChange={(event) => setInterests(event.target.value)}
+              className="mt-1 w-full rounded-xl border border-slate-700 bg-[#0b1228] px-3 py-2 text-sm text-slate-100"
+            />
+          </label>
+        </div>
+      )}
+
+      {errorMsg && (
+        <div className="mt-3 rounded-xl border border-rose-400/30 bg-rose-500/12 px-3 py-2 text-xs text-rose-100">
+          {errorMsg}
+        </div>
+      )}
+
       {rec.status === "pending" && (
-        <div className="flex flex-col items-stretch gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row sm:items-center">
-          <button
-            onClick={handleReject}
-            disabled={busy || cardStatus === "processing"}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
-          >
-            <XCircle className="h-3.5 w-3.5" />
-            Dismiss
-          </button>
-          <button
-            onClick={() => setEditing((v) => !v)}
-            disabled={busy || cardStatus === "processing"}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-            Edit Parameters
-          </button>
-          <button
-            onClick={handleApprove}
-            disabled={busy || cardStatus === "processing"}
-            className="flex items-center justify-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 sm:ml-auto"
-          >
-            {cardStatus === "processing" ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <CheckCircle2 className="h-4 w-4" />
-            )}
-            Approve Test
-          </button>
+        <div className="sticky bottom-0 z-20 -mx-4 mt-4 border-t border-slate-800 bg-[#090f24]/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:border-t-0 sm:bg-transparent sm:px-0 sm:pb-0">
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center">
+            <button
+              onClick={handleDismiss}
+              disabled={busy || cardStatus === "processing"}
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-[#101935] px-3 text-sm font-medium text-slate-100 hover:bg-[#182345] sm:w-auto"
+            >
+              <XCircle className="h-4 w-4" />
+              Dismiss
+            </button>
+            <button
+              onClick={() => setEditing((value) => !value)}
+              disabled={busy || cardStatus === "processing"}
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-[#101935] px-3 text-sm font-medium text-slate-100 hover:bg-[#182345] sm:w-auto"
+            >
+              <Pencil className="h-4 w-4" />
+              Edit Parameters
+            </button>
+            <button
+              onClick={handleApprove}
+              disabled={busy || cardStatus === "processing"}
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-50 sm:ml-auto sm:w-auto"
+            >
+              {cardStatus === "processing" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <TestTube2 className="h-4 w-4" />
+              )}
+              Approve Test
+            </button>
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
+function RecentSection({ items }: { items: Recommendation[] }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-800 bg-[#080f23]">
+      <button
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-900/40"
+      >
+        Completed ({items.length})
+        {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+      </button>
+
+      {open && (
+        <div className="divide-y divide-slate-800 border-t border-slate-800">
+          {items.slice(0, 10).map((rec) => {
+            const variant = getVariant(rec);
+            const style = VARIANT_STYLES[variant];
+            return (
+              <div key={rec.id} className="flex items-center gap-2 px-4 py-2.5 text-sm">
+                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${style.pill}`}>
+                  {style.label}
+                </span>
+                <p className="flex-1 truncate text-slate-300">{rec.title}</p>
+                <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] text-slate-400">
+                  {rec.status}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-/* ─── Section header ──────────────────────────────────────────── */
-function SectionHeader({
-  label,
-  count,
-  msIcon,
-  color,
-}: {
-  label: string;
-  count: number;
-  msIcon: string;
-  color: string;
-}) {
-  return (
-    <div className={`flex items-center gap-2 px-1 py-1`}>
-      <MS name={msIcon} size={14} filled className={color} />
-      <span className={`text-xs font-bold uppercase tracking-widest ${color}`}>{label}</span>
-      <span className="ml-auto rounded-full bg-slate-200/70 px-2 py-0.5 text-[11px] font-bold text-slate-600">
-        {count}
-      </span>
-    </div>
-  );
-}
-
-/* ─── ActionFeed ──────────────────────────────────────────────── */
 export function ActionFeed({
   recommendations,
   groups,
@@ -983,31 +850,41 @@ export function ActionFeed({
   onApproveAndExecute,
   onReject,
 }: ActionFeedProps) {
-  const pending = recommendations.filter((r) => r.status === "pending");
-  const recent = recommendations.filter((r) => r.status !== "pending");
-  const highCount = pending.filter((r) => r.priority === "high").length;
+  const pending = recommendations.filter((item) => item.status === "pending");
+  const recent = recommendations.filter((item) => item.status !== "pending");
 
-  const morningTasks = groups?.morning ?? [];
-  const eveningTasks = groups?.evening ?? [];
-  const otherTasks = groups?.other ?? [];
-  const hasGroups = morningTasks.length > 0 || eveningTasks.length > 0;
+  const sorted = useMemo(() => {
+    const rank: Record<Recommendation["priority"], number> = {
+      high: 0,
+      medium: 1,
+      low: 2,
+    };
 
-  const sorted = [...pending].sort((a, b) => {
-    const rank = { high: 0, medium: 1, low: 2 };
-    return rank[a.priority] - rank[b.priority];
-  });
+    return [...pending].sort((a, b) => rank[a.priority] - rank[b.priority]);
+  }, [pending]);
 
-  const renderCard = (rec: Recommendation) =>
-    rec.type === "ab_test" ? (
-      <ABTestCard
-        key={rec.id}
-        rec={rec}
-        busy={busy}
-        onApprove={onApprove}
-        onApproveAndExecute={onApproveAndExecute}
-        onReject={onReject}
-      />
-    ) : (
+  const highCount = pending.filter((item) => item.priority === "high").length;
+
+  const morning = groups?.morning ?? [];
+  const evening = groups?.evening ?? [];
+  const other = groups?.other ?? [];
+  const hasGroups = morning.length > 0 || evening.length > 0;
+
+  const renderCard = (rec: Recommendation) => {
+    if (rec.type === "ab_test") {
+      return (
+        <ABTestCard
+          key={rec.id}
+          rec={rec}
+          busy={busy}
+          onApprove={onApprove}
+          onApproveAndExecute={onApproveAndExecute}
+          onReject={onReject}
+        />
+      );
+    }
+
+    return (
       <TaskCard
         key={rec.id}
         rec={rec}
@@ -1017,134 +894,70 @@ export function ActionFeed({
         onReject={onReject}
       />
     );
+  };
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-10 text-center shadow-sm">
-        <Loader2 className="mx-auto h-6 w-6 animate-spin text-indigo-400" />
-        <p className="mt-2 text-sm text-slate-500">Loading your inbox…</p>
+      <div className="space-y-3 rounded-2xl border border-slate-800 bg-[#080f23] p-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div key={index} className="h-28 animate-pulse rounded-xl bg-slate-800/80" />
+        ))}
       </div>
     );
   }
 
   return (
-    <div className="space-y-5">
-      {/* Header row */}
-      <div className="flex items-center gap-3">
-        <h2 className="text-lg font-bold text-slate-900">Task Inbox</h2>
-        {pending.length > 0 && (
-          <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
+    <section className="space-y-4">
+      <header className="rounded-2xl border border-slate-800 bg-[#080f23] p-4 shadow-[0_18px_60px_-45px_rgba(56,189,248,0.65)]">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-lg font-semibold text-slate-100">AI Inbox</h2>
+          <span className="rounded-full border border-indigo-400/30 bg-indigo-500/15 px-2.5 py-1 text-xs font-semibold text-indigo-200">
             {pending.length} pending
           </span>
-        )}
-        {highCount > 0 && (
-          <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-700">
-            {highCount} urgent
-          </span>
-        )}
-      </div>
+          {highCount > 0 && (
+            <span className="rounded-full border border-rose-400/35 bg-rose-500/15 px-2.5 py-1 text-xs font-semibold text-rose-200">
+              {highCount} urgent
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-sm text-slate-400">
+          Approve or dismiss recommendations like an operator inbox.
+        </p>
+      </header>
 
-      {/* Empty state */}
       {sorted.length === 0 && recent.length === 0 && (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white py-16 shadow-sm">
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50">
-            <Brain className="h-8 w-8 text-indigo-400" />
+        <div className="rounded-2xl border border-dashed border-slate-700 bg-[#080f23] px-6 py-14 text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/20">
+            <Brain className="h-6 w-6 text-indigo-200" />
           </div>
-          <p className="text-base font-semibold text-slate-700">Inbox zero</p>
-          <p className="mt-1 max-w-xs text-center text-sm text-slate-500">
-            Nati AI prepares your next batch automatically — Morning Strategy at 07:00
-            AM, Evening Guard at 18:00 PM.
-          </p>
+          <p className="text-base font-semibold text-slate-100">No AI tasks today</p>
+          <p className="mt-1 text-sm text-slate-400">Monitoring is active across your managed accounts.</p>
         </div>
       )}
 
-      {/* Grouped view: Morning → Evening → Other */}
       {hasGroups ? (
-        <>
-          {morningTasks.length > 0 && (
+        <div className="space-y-4">
+          {morning.length > 0 && (
             <div className="space-y-3">
-              <SectionHeader
-                label="Morning Strategy"
-                count={morningTasks.length}
-                msIcon="wb_sunny"
-                color="text-amber-600"
-              />
-              {morningTasks.map((rec) => renderCard(rec))}
+              <SectionTitle title="Morning Strategy" count={morning.length} tone="text-amber-200" />
+              {morning.map((item) => renderCard(item))}
             </div>
           )}
 
-          {eveningTasks.length > 0 && (
+          {evening.length > 0 && (
             <div className="space-y-3">
-              <SectionHeader
-                label="Evening Guard"
-                count={eveningTasks.length}
-                msIcon="shield"
-                color="text-slate-500"
-              />
-              {eveningTasks.map((rec) => renderCard(rec))}
+              <SectionTitle title="Evening Guard" count={evening.length} tone="text-cyan-200" />
+              {evening.map((item) => renderCard(item))}
             </div>
           )}
 
-          {otherTasks.length > 0 && (
-            <div className="space-y-3">
-              {otherTasks.map((rec) => renderCard(rec))}
-            </div>
-          )}
-        </>
-      ) : (
-        /* Flat view */
-        sorted.map((rec) => renderCard(rec))
-      )}
-
-      {/* Recently completed */}
-      {recent.length > 0 && <RecentSection items={recent} />}
-    </div>
-  );
-}
-
-/* ─── Recently completed collapsible ─────────────────────────── */
-function RecentSection({ items }: { items: Recommendation[] }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-4 py-3 text-sm text-slate-500 transition-colors hover:text-slate-700"
-      >
-        <span className="font-medium">Completed tasks ({items.length})</span>
-        {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-      </button>
-      {open && (
-        <div className="divide-y divide-slate-100 border-t border-slate-100">
-          {items.slice(0, 10).map((rec) => {
-            const variant = getVariant(rec);
-            const styles = VARIANT[variant];
-            return (
-              <div key={rec.id} className="flex items-center gap-3 px-4 py-2.5">
-                <span
-                  className={`shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-bold ${styles.labelClass}`}
-                >
-                  {styles.label}
-                </span>
-                <span className="flex-1 truncate text-sm text-slate-600">{rec.title}</span>
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                    rec.status === "executed"
-                      ? "bg-emerald-50 text-emerald-700"
-                      : rec.status === "failed"
-                      ? "bg-rose-50 text-rose-700"
-                      : rec.status === "rejected"
-                      ? "bg-slate-100 text-slate-500"
-                      : "bg-indigo-50 text-indigo-700"
-                  }`}
-                >
-                  {rec.status}
-                </span>
-              </div>
-            );
-          })}
+          {other.length > 0 && <div className="space-y-3">{other.map((item) => renderCard(item))}</div>}
         </div>
+      ) : (
+        <div className="space-y-3">{sorted.map((item) => renderCard(item))}</div>
       )}
-    </div>
+
+      {recent.length > 0 && <RecentSection items={recent} />}
+    </section>
   );
 }
