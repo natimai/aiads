@@ -317,7 +317,13 @@ HARD RULES (non-negotiable)
             logger.error("Imagen API call failed: %s", exc)
             return None
 
-    def _upload_to_storage(self, image_bytes: bytes, blob_path: str) -> str | None:
+    def _upload_to_storage(
+        self,
+        image_bytes: bytes,
+        blob_path: str,
+        *,
+        content_type: str = "image/jpeg",
+    ) -> str | None:
         """
         Uploads image bytes to Firebase Storage and returns a 7-day signed URL.
         Falls back to a public URL if signing fails (e.g. local emulator).
@@ -327,7 +333,7 @@ HARD RULES (non-negotiable)
 
             bucket = fb_storage.bucket(self.storage_bucket or None)
             blob = bucket.blob(blob_path)
-            blob.upload_from_string(image_bytes, content_type="image/jpeg")
+            blob.upload_from_string(image_bytes, content_type=content_type or "image/jpeg")
 
             # Try signed URL first (works without public bucket ACLs)
             try:

@@ -1,13 +1,18 @@
 """AI Campaign Builder service: draft generation, regeneration, preflight safety, and publish."""
 from __future__ import annotations
 
+import asyncio
+import base64
 import json
 import logging
 import os
+import hashlib
 import re
 from datetime import datetime, timedelta, timezone
 from statistics import median
 from typing import Any
+
+import requests
 
 from services.ai_analyzer import AIAnalyzer
 from services.nano_banana import NanaBananaArtDirector
@@ -48,6 +53,9 @@ BLOCK_TYPE_ALIASES = {
     "image_concepts": "imageConcepts",
     "images": "imageConcepts",
 }
+NANO_BANANA_PRO_IMAGE_MODEL = "gemini-3-pro-image-preview"
+GEMINI_GENERATE_CONTENT_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+MAX_ART_DIRECTOR_IMAGES = 3
 
 
 class ValidationError(ValueError):
@@ -1070,7 +1078,7 @@ class CampaignBuilderService:
 
     @staticmethod
     def _should_generate_images_on_create() -> bool:
-        value = str(os.environ.get("CAMPAIGN_BUILDER_EAGER_IMAGES", "0")).strip().lower()
+        value = str(os.environ.get("CAMPAIGN_BUILDER_EAGER_IMAGES", "1")).strip().lower()
         return value in {"1", "true", "yes", "on"}
 
     @staticmethod
@@ -1173,21 +1181,188 @@ class CampaignBuilderService:
         prompts: list[str],
         account_id: str,
     ) -> list[str]:
-        """Call Imagen 3 via NanaBananaArtDirector for each prompt and return signed URLs."""
+        """
+        Generate and upload up to 3 real ad images via Gemini Nano Banana Pro.
+        Returns Firebase Storage URLs only.
+        """
+        prompt_batch = [str(p or "").strip() for p in prompts[:MAX_ART_DIRECTOR_IMAGES] if str(p or "").strip()]
+        if not prompt_batch:
+            return []
+
+        try:
+            asyncio.get_running_loop()
+            # Runtime guard: Cloud Functions is sync; if an event loop exists, run sequentially.
+            return [
+                url
+                for i, prompt_text in enumerate(prompt_batch)
+                for url in [self._generate_single_prompt_image(prompt_text=prompt_text, account_id=account_id, index=i)]
+                if url
+            ]
+        except RuntimeError:
+            return asyncio.run(
+                self._generate_images_from_prompts_async(
+                    prompts=prompt_batch,
+                    account_id=account_id,
+                )
+            )
+
+    async def _generate_images_from_prompts_async(
+        self,
+        *,
+        prompts: list[str],
+        account_id: str,
+    ) -> list[str]:
+        semaphore = asyncio.Semaphore(MAX_ART_DIRECTOR_IMAGES)
+        tasks = [
+            self._generate_single_prompt_image_async(
+                prompt_text=prompt_text,
+                account_id=account_id,
+                index=i,
+                semaphore=semaphore,
+            )
+            for i, prompt_text in enumerate(prompts)
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
         urls: list[str] = []
-        for i, prompt_text in enumerate(prompts[:3]):
-            try:
-                image_bytes = self.art_director._call_imagen_api(prompt_text)
-                if not image_bytes:
-                    logger.warning("Imagen returned no bytes for Art Director prompt %d", i)
-                    continue
-                blob_path = f"creative_assets/{account_id}/campaign_builder/art_director_{i}.jpg"
-                url = self.art_director._upload_to_storage(image_bytes, blob_path)
-                if url:
-                    urls.append(url)
-            except Exception as exc:
-                logger.warning("Art Director image generation failed for prompt %d: %s", i, exc)
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.warning("Gemini image generation failed for prompt %d: %s", i, result)
+                continue
+            if isinstance(result, str) and result:
+                urls.append(result)
         return urls
+
+    async def _generate_single_prompt_image_async(
+        self,
+        *,
+        prompt_text: str,
+        account_id: str,
+        index: int,
+        semaphore: asyncio.Semaphore,
+    ) -> str | None:
+        async with semaphore:
+            return await asyncio.to_thread(
+                self._generate_single_prompt_image,
+                prompt_text=prompt_text,
+                account_id=account_id,
+                index=index,
+            )
+
+    def _generate_single_prompt_image(
+        self,
+        *,
+        prompt_text: str,
+        account_id: str,
+        index: int,
+    ) -> str | None:
+        image_bytes, mime_type = self._call_nano_banana_pro_image_api(prompt_text=prompt_text)
+        if not image_bytes:
+            logger.warning("Gemini Nano Banana Pro returned no image bytes for prompt %d", index)
+            return None
+
+        file_ext = self._mime_to_extension(mime_type)
+        prompt_hash = hashlib.sha1(prompt_text.encode("utf-8")).hexdigest()[:10]
+        now_stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+        blob_path = (
+            f"creative_assets/{account_id}/campaign_builder/"
+            f"art_director_{now_stamp}_{index}_{prompt_hash}.{file_ext}"
+        )
+        url = self.art_director._upload_to_storage(image_bytes, blob_path, content_type=mime_type)
+        if not url:
+            logger.warning("Firebase upload failed for Gemini image prompt %d", index)
+            return None
+        return url
+
+    def _call_nano_banana_pro_image_api(self, *, prompt_text: str) -> tuple[bytes | None, str]:
+        api_key = str(self.art_director.api_key or "").strip()
+        if not api_key:
+            logger.warning("Nano Banana Pro skipped: GEMINI_API_KEY is not configured")
+            return None, "image/jpeg"
+
+        model_name = str(os.environ.get("GEMINI_IMAGE_MODEL", NANO_BANANA_PRO_IMAGE_MODEL)).strip() or NANO_BANANA_PRO_IMAGE_MODEL
+        endpoint = GEMINI_GENERATE_CONTENT_URL.format(model=model_name)
+        payload = {
+            "contents": [{"parts": [{"text": prompt_text}]}],
+            "generationConfig": {
+                "responseModalities": ["IMAGE"],
+                "temperature": 0.7,
+            },
+        }
+
+        try:
+            response = requests.post(
+                endpoint,
+                params={"key": api_key},
+                json=payload,
+                timeout=90,
+            )
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else "unknown"
+            body = exc.response.text[:500] if exc.response is not None else ""
+            logger.warning("Nano Banana Pro HTTP error %s: %s", status, body)
+            return None, "image/jpeg"
+        except Exception as exc:
+            logger.warning("Nano Banana Pro request failed: %s", exc)
+            return None, "image/jpeg"
+
+        return self._extract_image_bytes_from_gemini_response(response.json())
+
+    @staticmethod
+    def _extract_image_bytes_from_gemini_response(payload: dict[str, Any]) -> tuple[bytes | None, str]:
+        """Parse inline image bytes from Gemini generateContent responses."""
+        if not isinstance(payload, dict):
+            return None, "image/jpeg"
+
+        candidates = payload.get("candidates")
+        if isinstance(candidates, list):
+            for candidate in candidates:
+                content = candidate.get("content") if isinstance(candidate, dict) else {}
+                parts = content.get("parts") if isinstance(content, dict) else []
+                if not isinstance(parts, list):
+                    continue
+                for part in parts:
+                    if not isinstance(part, dict):
+                        continue
+                    inline_data = part.get("inlineData") or part.get("inline_data")
+                    if not isinstance(inline_data, dict):
+                        continue
+                    raw_b64 = (
+                        inline_data.get("data")
+                        or inline_data.get("bytesBase64Encoded")
+                        or inline_data.get("bytes_base64_encoded")
+                    )
+                    if not raw_b64:
+                        continue
+                    mime_type = str(inline_data.get("mimeType") or inline_data.get("mime_type") or "image/jpeg")
+                    try:
+                        return base64.b64decode(raw_b64), mime_type
+                    except Exception:
+                        logger.warning("Failed to decode Gemini inline image bytes")
+                        return None, mime_type
+
+        # Defensive fallback for Imagen-like response shapes.
+        predictions = payload.get("predictions")
+        if isinstance(predictions, list) and predictions:
+            first = predictions[0] if isinstance(predictions[0], dict) else {}
+            raw_b64 = first.get("bytesBase64Encoded") or first.get("bytes_base64_encoded")
+            if raw_b64:
+                try:
+                    return base64.b64decode(raw_b64), "image/jpeg"
+                except Exception:
+                    logger.warning("Failed to decode image bytes from predictions fallback")
+
+        return None, "image/jpeg"
+
+    @staticmethod
+    def _mime_to_extension(mime_type: str) -> str:
+        normalized = str(mime_type or "").strip().lower()
+        if "png" in normalized:
+            return "png"
+        if "webp" in normalized:
+            return "webp"
+        return "jpg"
 
     def regenerate_images(
         self,

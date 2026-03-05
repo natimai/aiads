@@ -297,6 +297,49 @@ class CampaignBuilderServiceTest(unittest.TestCase):
         self.assertTrue(self.service._is_hebrew_language("עבירת"))
         self.assertTrue(self.service._is_hebrew_language("he"))
 
+    def test_generate_images_from_prompts_returns_empty_when_gemini_key_missing(self):
+        self.service.art_director.api_key = ""
+        urls = self.service._generate_images_from_prompts(
+            prompts=["A cinematic insurance ad", "Nighttime roadside support"],
+            account_id="acc-1",
+        )
+        self.assertEqual(urls, [])
+
+    def test_generate_images_from_prompts_uploads_gemini_outputs(self):
+        self.service.art_director.api_key = "test-key"
+        self.service._call_nano_banana_pro_image_api = MagicMock(return_value=(b"img-bytes", "image/png"))
+        self.service.art_director._upload_to_storage = MagicMock(side_effect=["https://cdn/img1.png", "https://cdn/img2.png"])
+
+        urls = self.service._generate_images_from_prompts(
+            prompts=["Prompt 1", "Prompt 2"],
+            account_id="acc-1",
+        )
+
+        self.assertEqual(urls, ["https://cdn/img1.png", "https://cdn/img2.png"])
+        self.assertEqual(self.service._call_nano_banana_pro_image_api.call_count, 2)
+        self.assertEqual(self.service.art_director._upload_to_storage.call_count, 2)
+
+    def test_extract_image_bytes_from_gemini_response_reads_inline_data(self):
+        payload = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "inlineData": {
+                                    "mimeType": "image/png",
+                                    "data": "aGVsbG8=",
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        image_bytes, mime_type = self.service._extract_image_bytes_from_gemini_response(payload)
+        self.assertEqual(image_bytes, b"hello")
+        self.assertEqual(mime_type, "image/png")
+
 
 if __name__ == "__main__":
     unittest.main()
