@@ -1282,10 +1282,20 @@ class CampaignBuilderService:
 
         model_name = str(os.environ.get("GEMINI_IMAGE_MODEL", NANO_BANANA_PRO_IMAGE_MODEL)).strip() or NANO_BANANA_PRO_IMAGE_MODEL
         endpoint = GEMINI_GENERATE_CONTENT_URL.format(model=model_name)
+        aspect_ratio = str(os.environ.get("CAMPAIGN_BUILDER_IMAGE_ASPECT_RATIO", "1:1")).strip() or "1:1"
+        image_size = str(os.environ.get("CAMPAIGN_BUILDER_IMAGE_SIZE", "1K")).strip() or "1K"
+        image_prompt = (
+            "Create exactly one photorealistic Meta Ads image asset.\n"
+            "Return visual output only, no long textual explanation.\n\n"
+            f"{prompt_text}"
+        )
         payload = {
-            "contents": [{"parts": [{"text": prompt_text}]}],
+            "contents": [{"role": "user", "parts": [{"text": image_prompt}]}],
             "generationConfig": {
-                "responseModalities": ["IMAGE"],
+                "imageConfig": {
+                    "aspectRatio": aspect_ratio,
+                    "imageSize": image_size,
+                },
                 "temperature": 0.7,
             },
         }
@@ -1293,9 +1303,12 @@ class CampaignBuilderService:
         try:
             response = requests.post(
                 endpoint,
-                params={"key": api_key},
+                headers={
+                    "x-goog-api-key": api_key,
+                    "Content-Type": "application/json",
+                },
                 json=payload,
-                timeout=90,
+                timeout=120,
             )
             response.raise_for_status()
         except requests.HTTPError as exc:
@@ -1307,7 +1320,36 @@ class CampaignBuilderService:
             logger.warning("Nano Banana Pro request failed: %s", exc)
             return None, "image/jpeg"
 
-        return self._extract_image_bytes_from_gemini_response(response.json())
+        image_bytes, mime_type = self._extract_image_bytes_from_gemini_response(response.json())
+        if image_bytes:
+            return image_bytes, mime_type
+
+        # Retry once with explicit modality hint for compatibility across model versions.
+        retry_payload = {
+            "contents": [{"role": "user", "parts": [{"text": image_prompt}]}],
+            "generationConfig": {
+                "responseModalities": ["TEXT", "IMAGE"],
+                "imageConfig": {
+                    "aspectRatio": aspect_ratio,
+                    "imageSize": image_size,
+                },
+            },
+        }
+        try:
+            retry_response = requests.post(
+                endpoint,
+                headers={
+                    "x-goog-api-key": api_key,
+                    "Content-Type": "application/json",
+                },
+                json=retry_payload,
+                timeout=120,
+            )
+            retry_response.raise_for_status()
+            return self._extract_image_bytes_from_gemini_response(retry_response.json())
+        except Exception as exc:
+            logger.warning("Nano Banana Pro retry failed: %s", exc)
+            return None, "image/jpeg"
 
     @staticmethod
     def _extract_image_bytes_from_gemini_response(payload: dict[str, Any]) -> tuple[bytes | None, str]:

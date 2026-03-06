@@ -65,10 +65,7 @@ class NanaBananaArtDirector:
         self.flash_model: str = os.environ.get(
             "GEMINI_FLASH_MODEL", "gemini-3-flash-preview"
         )
-        self.storage_bucket: str = os.environ.get(
-            "FIREBASE_STORAGE_BUCKET",
-            f"{os.environ.get('FIREBASE_PROJECT_ID', '')}.appspot.com",
-        )
+        self.storage_bucket: str = self._resolve_storage_bucket()
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -328,30 +325,39 @@ HARD RULES (non-negotiable)
         Uploads image bytes to Firebase Storage and returns a 7-day signed URL.
         Falls back to a public URL if signing fails (e.g. local emulator).
         """
-        try:
-            from firebase_admin import storage as fb_storage
+        from firebase_admin import storage as fb_storage
 
-            bucket = fb_storage.bucket(self.storage_bucket or None)
-            blob = bucket.blob(blob_path)
-            blob.upload_from_string(image_bytes, content_type=content_type or "image/jpeg")
-
-            # Try signed URL first (works without public bucket ACLs)
+        last_error: Exception | None = None
+        for bucket_name in self._candidate_buckets():
             try:
-                expiry = datetime.now(timezone.utc) + timedelta(days=7)
-                url = blob.generate_signed_url(
-                    expiration=expiry,
-                    method="GET",
-                    version="v4",
-                )
-                return url
-            except Exception:
-                # Fall back to public URL (requires public bucket access)
-                blob.make_public()
-                return blob.public_url
+                bucket = fb_storage.bucket(bucket_name)
+                blob = bucket.blob(blob_path)
+                blob.upload_from_string(image_bytes, content_type=content_type or "image/jpeg")
 
-        except Exception as exc:
-            logger.error("Firebase Storage upload failed for '%s': %s", blob_path, exc)
-            return None
+                # Try signed URL first (works without public bucket ACLs)
+                try:
+                    expiry = datetime.now(timezone.utc) + timedelta(days=7)
+                    url = blob.generate_signed_url(
+                        expiration=expiry,
+                        method="GET",
+                        version="v4",
+                    )
+                    return url
+                except Exception:
+                    # Fall back to public URL (requires public bucket access)
+                    blob.make_public()
+                    return blob.public_url
+            except Exception as exc:
+                last_error = exc
+                continue
+
+        logger.error(
+            "Firebase Storage upload failed for '%s' (bucket='%s'): %s",
+            blob_path,
+            self.storage_bucket or "<default>",
+            last_error,
+        )
+        return None
 
     # ------------------------------------------------------------------
     # Helpers
@@ -374,3 +380,56 @@ HARD RULES (non-negotiable)
 
         # Fall back to reasoning (contains performance context)
         return str(task.get("reasoning") or task.get("why") or task.get("title") or "")
+
+    @staticmethod
+    def _resolve_storage_bucket() -> str:
+        explicit = str(os.environ.get("FIREBASE_STORAGE_BUCKET", "")).strip()
+        if explicit:
+            return explicit
+
+        # Firebase Functions often inject project-level options into the default app.
+        try:
+            import firebase_admin
+
+            app = firebase_admin.get_app()
+            options = getattr(app, "options", {}) or {}
+            configured = str(options.get("storageBucket") or "").strip()
+            if configured:
+                return configured
+        except Exception:
+            pass
+
+        # Optional JSON env config used in some Firebase deployments.
+        firebase_config = str(os.environ.get("FIREBASE_CONFIG", "")).strip()
+        if firebase_config.startswith("{"):
+            try:
+                parsed = json.loads(firebase_config)
+                configured = str(parsed.get("storageBucket") or "").strip()
+                if configured:
+                    return configured
+            except Exception:
+                pass
+
+        project_id = (
+            str(os.environ.get("FIREBASE_PROJECT_ID", "")).strip()
+            or str(os.environ.get("GOOGLE_CLOUD_PROJECT", "")).strip()
+            or str(os.environ.get("GCP_PROJECT", "")).strip()
+        )
+        return f"{project_id}.appspot.com" if project_id else ""
+
+    def _candidate_buckets(self) -> list[str | None]:
+        candidates: list[str | None] = []
+        configured = str(self.storage_bucket or "").strip()
+        if configured:
+            candidates.append(configured)
+            if configured.endswith(".appspot.com"):
+                candidates.append(configured.replace(".appspot.com", ".firebasestorage.app"))
+            elif configured.endswith(".firebasestorage.app"):
+                candidates.append(configured.replace(".firebasestorage.app", ".appspot.com"))
+        candidates.append(None)
+
+        ordered: list[str | None] = []
+        for candidate in candidates:
+            if candidate not in ordered:
+                ordered.append(candidate)
+        return ordered
