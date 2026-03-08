@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import json
 import logging
+import re
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -668,20 +669,80 @@ Return ONLY valid JSON with this exact structure:
         reasoning = (
             parsed.get("creative_concept_reasoning")
             or parsed.get("creativeConceptReasoning")
+            or parsed.get("reasoning")
+            or parsed.get("creative_reasoning")
             or ""
         )
         prompts = (
             parsed.get("image_generation_prompts")
             or parsed.get("imageGenerationPrompts")
+            or parsed.get("image_prompts")
+            or parsed.get("imagePrompts")
+            or parsed.get("prompts")
             or []
         )
-        if not isinstance(prompts, list):
-            prompts = []
+        normalized_prompts = self._normalize_image_prompts(prompts)
+        if not normalized_prompts:
+            normalized_prompts = self._extract_prompts_from_raw_text(raw)
+        if not reasoning and raw and not raw.strip().startswith("{"):
+            reasoning = self._extract_reasoning_from_raw_text(raw)
 
         return {
             "creative_concept_reasoning": str(reasoning),
-            "image_generation_prompts": [str(p) for p in prompts[:3]],
+            "image_generation_prompts": normalized_prompts[:3],
         }
+
+    @staticmethod
+    def _normalize_image_prompts(prompts: Any) -> list[str]:
+        if not isinstance(prompts, list):
+            return []
+
+        normalized: list[str] = []
+        for item in prompts:
+            if isinstance(item, str):
+                text = item.strip()
+                if text:
+                    normalized.append(text)
+            elif isinstance(item, dict):
+                candidate = (
+                    item.get("prompt")
+                    or item.get("text")
+                    or item.get("description")
+                    or ""
+                )
+                text = str(candidate).strip()
+                if text:
+                    normalized.append(text)
+        return normalized
+
+    @staticmethod
+    def _extract_prompts_from_raw_text(raw: str) -> list[str]:
+        text = str(raw or "")
+        if not text.strip():
+            return []
+
+        prompt_matches = re.findall(
+            r"(?:^|\n)\s*(?:\d+[\).]\s*)?(?:Prompt\s*\d+\s*:\s*)(.+?)(?=(?:\n\s*(?:\d+[\).]\s*)?Prompt\s*\d+\s*:)|\Z)",
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        prompts = [re.sub(r"\s+", " ", match).strip() for match in prompt_matches if match.strip()]
+        if prompts:
+            return prompts[:3]
+
+        # Last-resort: collect long bullet lines that look like visual prompts.
+        bullet_matches = re.findall(r"(?:^|\n)\s*(?:[-*•]\s+)(.+)", text)
+        candidates = [re.sub(r"\s+", " ", line).strip() for line in bullet_matches if len(line.strip()) > 40]
+        return candidates[:3]
+
+    @staticmethod
+    def _extract_reasoning_from_raw_text(raw: str) -> str:
+        text = str(raw or "").strip()
+        if not text:
+            return ""
+        # Keep only leading paragraph before first numbered/bullet prompt marker.
+        split = re.split(r"\n\s*(?:\d+[\).]\s*)?(?:Prompt\s*\d+\s*:)|\n\s*[-*•]\s+", text, maxsplit=1, flags=re.IGNORECASE)
+        return split[0].strip() if split else text
 
     def generate_campaign_builder_draft(self, context: dict) -> dict:
         """Generate campaign builder blocks for a new draft."""

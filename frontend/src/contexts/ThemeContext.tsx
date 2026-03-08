@@ -12,32 +12,26 @@ const ThemeContext = createContext<ThemeContextValue>({
   toggleTheme: () => {},
 });
 
+const STORAGE_KEY = "adops-pulse-theme";
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem("theme") as Theme | null;
+    const saved = localStorage.getItem(STORAGE_KEY) as Theme | null;
     return saved ?? "dark";
   });
 
   useEffect(() => {
-    const root = document.documentElement;
-    root.classList.remove("dark", "light");
-    root.classList.add(theme);
-    localStorage.setItem("theme", theme);
-
-    if (theme === "dark") {
-      document.body.className = "bg-slate-950 text-slate-100";
-    } else {
-      document.body.className = "bg-white text-slate-900";
-    }
+    document.documentElement.setAttribute("data-theme", theme);
+    document.documentElement.setAttribute("dir", "rtl");
+    document.documentElement.setAttribute("lang", "he");
+    document.body.classList.remove("theme-dark", "theme-light");
+    document.body.classList.add(theme === "dark" ? "theme-dark" : "theme-light");
+    localStorage.setItem(STORAGE_KEY, theme);
   }, [theme]);
 
-  const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
+  const toggleTheme = () => setTheme((current) => (current === "dark" ? "light" : "dark"));
 
-  return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={{ theme, toggleTheme }}>{children}</ThemeContext.Provider>;
 }
 
 export const useTheme = () => useContext(ThemeContext);

@@ -16,7 +16,7 @@ interface PerformanceChartProps {
 }
 
 const METRICS = [
-  { key: "spend", label: "Spend", color: "#3b82f6", yAxisId: "left" },
+  { key: "spend", label: "הוצאה", color: "#3b82f6", yAxisId: "left" },
   { key: "cpi", label: "CPI", color: "#ef4444", yAxisId: "right" },
   { key: "roas", label: "ROAS", color: "#22c55e", yAxisId: "right" },
   { key: "ctr", label: "CTR %", color: "#eab308", yAxisId: "right" },
@@ -42,9 +42,9 @@ export function PerformanceChart({ data, loading }: PerformanceChartProps) {
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-4 h-5 w-40 rounded bg-slate-100 skeleton" />
-        <div className="h-64 rounded bg-slate-100 skeleton" />
+      <div className="panel p-6">
+        <div className="mb-4 h-5 w-40 rounded bg-[var(--line)] skeleton" />
+        <div className="h-64 rounded bg-[var(--line)] skeleton" />
       </div>
     );
   }
@@ -77,9 +77,9 @@ export function PerformanceChart({ data, loading }: PerformanceChartProps) {
   const hasRightAxis = METRICS.filter((m) => activeMetrics.has(m.key) && m.yAxisId === "right").length > 0;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="panel p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-slate-800">Performance Over Time</h3>
+        <h3 className="text-sm font-semibold text-[var(--text-primary)]">ביצועים לאורך זמן</h3>
         <div className="flex flex-wrap gap-1.5">
           {METRICS.map((m) => (
             <button
@@ -87,8 +87,8 @@ export function PerformanceChart({ data, loading }: PerformanceChartProps) {
               onClick={() => toggleMetric(m.key)}
               className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors border ${
                 activeMetrics.has(m.key)
-                  ? "text-slate-800"
-                  : "text-slate-400 border-transparent hover:text-slate-600"
+                  ? "text-[var(--text-primary)]"
+                  : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
               }`}
               style={{
                 backgroundColor: activeMetrics.has(m.key) ? `${m.color}15` : "transparent",
@@ -170,8 +170,8 @@ export function PerformanceChart({ data, loading }: PerformanceChartProps) {
           </LineChart>
         </ResponsiveContainer>
       ) : (
-        <div className="flex h-64 items-center justify-center text-sm text-slate-400">
-          No data available for the selected period
+        <div className="flex h-64 items-center justify-center text-sm text-[var(--text-muted)]">
+          אין נתונים זמינים לטווח שנבחר
         </div>
       )}
     </div>

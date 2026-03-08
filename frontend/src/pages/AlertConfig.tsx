@@ -1,171 +1,236 @@
-import { useState } from "react";
-import { ArrowLeft, Plus, Trash2, Save } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { ArrowLeft, Save, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAlertConfigs, useSaveAlertConfig, useDeleteAlertConfig } from "../hooks/useAlerts";
 import { useAccounts } from "../contexts/AccountContext";
 import type { AlertType } from "../types";
 
 const ALERT_TYPES: { value: AlertType; label: string; description: string; defaultThreshold: number }[] = [
-  { value: "roas_drop", label: "ROAS Drop", description: "Triggers when ROAS falls below threshold", defaultThreshold: 1.5 },
-  { value: "creative_fatigue", label: "Creative Fatigue", description: "Detects declining creative performance (frequency threshold)", defaultThreshold: 3.0 },
-  { value: "budget_anomaly", label: "Budget Anomaly", description: "Alerts on spend deviations from expected budget (%)", defaultThreshold: 30 },
-  { value: "cpi_spike", label: "CPI Spike", description: "Triggers when CPI exceeds threshold value", defaultThreshold: 5.0 },
-  { value: "campaign_status", label: "Campaign Status", description: "Alerts on campaign paused/rejected/issues", defaultThreshold: 0 },
+  { value: "roas_drop", label: "ירידת ROAS", description: "מופעל כאשר ROAS יורד מתחת לסף", defaultThreshold: 1.5 },
+  { value: "creative_fatigue", label: "עייפות קריאייטיב", description: "מופעל כשהביצועים נחלשים לאורך זמן", defaultThreshold: 3.0 },
+  { value: "budget_anomaly", label: "חריגת תקציב", description: "זיהוי סטייה חריגה מהוצאות רגילות", defaultThreshold: 30 },
+  { value: "cpi_spike", label: "עלייה ב-CPI", description: "מופעל כשעלות התקנה חורגת מהסף", defaultThreshold: 5.0 },
+  { value: "campaign_status", label: "סטטוס קמפיין", description: "התראות על עצירה, דחייה או תקלה", defaultThreshold: 0 },
 ];
+
+type ConfigDraft = {
+  id?: string;
+  enabled: boolean;
+  threshold: number;
+  cooldownHours: number;
+  channels: string[];
+};
 
 export default function AlertConfig() {
   const { accounts } = useAccounts();
-  const { data: configs, isLoading } = useAlertConfigs();
+  const { data: configs } = useAlertConfigs();
   const saveConfig = useSaveAlertConfig();
   const deleteConfig = useDeleteAlertConfig();
   const [selectedAccount, setSelectedAccount] = useState<string>("");
+  const [drafts, setDrafts] = useState<Record<AlertType, ConfigDraft>>({} as Record<AlertType, ConfigDraft>);
 
-  const handleToggle = (alertType: AlertType, enabled: boolean) => {
+  const accountConfigs = useMemo(
+    () => configs?.filter((item) => item.accountId === selectedAccount) ?? [],
+    [configs, selectedAccount]
+  );
+
+  useEffect(() => {
     if (!selectedAccount) return;
-    const existing = configs?.find(
-      (c) => c.alertType === alertType && c.accountId === selectedAccount
-    );
+
+    const nextDrafts = ALERT_TYPES.reduce((acc, typeItem) => {
+      const existing = accountConfigs.find((item) => item.alertType === typeItem.value);
+      acc[typeItem.value] = {
+        id: existing?.id,
+        enabled: existing?.enabled ?? false,
+        threshold: existing?.threshold ?? typeItem.defaultThreshold,
+        cooldownHours: existing?.cooldownHours ?? 6,
+        channels: existing?.channels?.length ? existing.channels : ["telegram"],
+      };
+      return acc;
+    }, {} as Record<AlertType, ConfigDraft>);
+
+    setDrafts(nextDrafts);
+  }, [selectedAccount, accountConfigs]);
+
+  const setDraftValue = <K extends keyof ConfigDraft>(
+    alertType: AlertType,
+    key: K,
+    value: ConfigDraft[K]
+  ) => {
+    setDrafts((prev) => ({
+      ...prev,
+      [alertType]: {
+        ...prev[alertType],
+        [key]: value,
+      },
+    }));
+  };
+
+  const toggleChannel = (alertType: AlertType, channel: string) => {
+    const channels = drafts[alertType]?.channels ?? [];
+    const nextChannels = channels.includes(channel)
+      ? channels.filter((item) => item !== channel)
+      : [...channels, channel];
+
+    setDraftValue(alertType, "channels", nextChannels);
+  };
+
+  const handleSave = (alertType: AlertType) => {
+    if (!selectedAccount) return;
+    const draft = drafts[alertType];
+    if (!draft) return;
+
     saveConfig.mutate({
-      id: existing?.id,
+      id: draft.id,
       accountId: selectedAccount,
       alertType,
-      enabled,
-      threshold: existing?.threshold ?? ALERT_TYPES.find((t) => t.value === alertType)!.defaultThreshold,
-      cooldownHours: existing?.cooldownHours ?? 6,
-      channels: existing?.channels ?? ["telegram"],
+      enabled: draft.enabled,
+      threshold: draft.threshold,
+      cooldownHours: draft.cooldownHours,
+      channels: draft.channels,
     });
   };
 
-  const handleThresholdChange = (alertType: AlertType, threshold: number) => {
-    if (!selectedAccount) return;
-    const existing = configs?.find(
-      (c) => c.alertType === alertType && c.accountId === selectedAccount
-    );
-    saveConfig.mutate({
-      id: existing?.id,
-      accountId: selectedAccount,
-      alertType,
-      enabled: existing?.enabled ?? true,
-      threshold,
-      cooldownHours: existing?.cooldownHours ?? 6,
-      channels: existing?.channels ?? ["telegram"],
-    });
+  const handleDelete = (alertType: AlertType) => {
+    const draftId = drafts[alertType]?.id;
+    if (!draftId) return;
+    deleteConfig.mutate(draftId);
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link to="/alerts" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <div>
-          <h2 className="text-xl font-bold text-slate-900">Alert Configuration</h2>
-          <p className="text-sm text-slate-500">Configure alert thresholds and delivery channels</p>
+    <div className="space-y-6 reveal-up">
+      <section className="panel p-5 sm:p-6">
+        <div className="flex items-center gap-4">
+          <Link to="/alerts" className="focus-ring rounded-lg p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-soft)]">
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <div>
+            <h2 className="brand-display text-2xl text-[var(--text-primary)]">תצורת התראות</h2>
+            <p className="text-sm text-[var(--text-secondary)]">הגדרת ספים, קירור וערוצי התראה לכל חשבון</p>
+          </div>
         </div>
-      </div>
 
-      <div>
-        <label className="mb-2 block text-sm font-medium text-slate-600">Select Account</label>
-        <select
-          value={selectedAccount}
-          onChange={(e) => setSelectedAccount(e.target.value)}
-          className="w-full max-w-xs rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-indigo-400"
-        >
-          <option value="">Choose an account...</option>
-          {accounts.map((acc) => (
-            <option key={acc.id} value={acc.id}>{acc.accountName}</option>
-          ))}
-        </select>
-      </div>
+        <div className="mt-5">
+          <label className="mb-2 block text-sm font-medium text-[var(--text-secondary)]">בחירת חשבון</label>
+          <select
+            value={selectedAccount}
+            onChange={(event) => setSelectedAccount(event.target.value)}
+            className="focus-ring w-full max-w-xs rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-sm text-[var(--text-primary)]"
+          >
+            <option value="">בחר חשבון...</option>
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.accountName}
+              </option>
+            ))}
+          </select>
+        </div>
+      </section>
 
       {selectedAccount && (
         <div className="space-y-4">
           {ALERT_TYPES.map((alertType) => {
-            const config = configs?.find(
-              (c) => c.alertType === alertType.value && c.accountId === selectedAccount
-            );
-            const isEnabled = config?.enabled ?? false;
-            const threshold = config?.threshold ?? alertType.defaultThreshold;
-            const cooldown = config?.cooldownHours ?? 6;
+            const draft = drafts[alertType.value];
+            if (!draft) return null;
+
+            const isStatusType = alertType.value === "campaign_status";
 
             return (
-              <div
-                key={alertType.value}
-                className="rounded-xl border border-slate-200 bg-white p-5"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
+              <article key={alertType.value} className="panel p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
                     <div className="flex items-center gap-3">
-                      <h3 className="text-sm font-semibold text-slate-800">{alertType.label}</h3>
+                      <h3 className="text-sm font-semibold text-[var(--text-primary)]">{alertType.label}</h3>
                       <label className="relative inline-flex cursor-pointer items-center">
                         <input
                           type="checkbox"
-                          checked={isEnabled}
-                          onChange={(e) => handleToggle(alertType.value, e.target.checked)}
+                          checked={draft.enabled}
+                          onChange={(event) => setDraftValue(alertType.value, "enabled", event.target.checked)}
                           className="peer sr-only"
                         />
-                        <div className="h-5 w-9 rounded-full bg-slate-200 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow after:transition-all peer-checked:bg-indigo-600 peer-checked:after:translate-x-full" />
+                        <div className="h-5 w-9 rounded-full border border-[var(--line)] bg-[var(--bg-soft)] after:absolute after:right-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-[var(--text-primary)] after:transition-all peer-checked:bg-[var(--accent-2)] peer-checked:after:-translate-x-full" />
                       </label>
                     </div>
-                    <p className="mt-1 text-xs text-slate-400">{alertType.description}</p>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">{alertType.description}</p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleSave(alertType.value)}
+                      className="focus-ring inline-flex min-h-10 items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--bg-soft)] px-3 text-xs font-semibold text-[var(--text-primary)]"
+                    >
+                      <Save className="h-3.5 w-3.5" />
+                      שמירה
+                    </button>
+                    {draft.id && (
+                      <button
+                        onClick={() => handleDelete(alertType.value)}
+                        className="focus-ring inline-flex min-h-10 items-center gap-1 rounded-xl border border-rose-400/35 bg-rose-500/12 px-3 text-xs font-semibold text-rose-200"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        מחיקה
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                {alertType.value !== "campaign_status" && (
-                  <div className="mt-4 grid grid-cols-3 gap-4">
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-400">Threshold</label>
+                {!isStatusType && (
+                  <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <Field label="סף">
                       <input
                         type="number"
                         step="0.1"
-                        value={threshold}
-                        onChange={(e) => handleThresholdChange(alertType.value, parseFloat(e.target.value) || 0)}
-                        className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-indigo-400"
+                        value={draft.threshold}
+                        onChange={(event) =>
+                          setDraftValue(alertType.value, "threshold", parseFloat(event.target.value) || 0)
+                        }
+                        className="focus-ring ltr w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-sm text-[var(--text-primary)]"
                       />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-500">Cooldown (hours)</label>
+                    </Field>
+
+                    <Field label="קירור (שעות)">
                       <input
                         type="number"
-                        value={cooldown}
-                        onChange={() => {}}
-                        className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-indigo-400"
+                        min={1}
+                        value={draft.cooldownHours}
+                        onChange={(event) =>
+                          setDraftValue(alertType.value, "cooldownHours", Number(event.target.value) || 1)
+                        }
+                        className="focus-ring ltr w-full rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-1.5 text-sm text-[var(--text-primary)]"
                       />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-slate-400">Channels</label>
-                      <div className="flex gap-2 pt-1">
-                        {["telegram", "email", "sms"].map((ch) => (
-                          <label key={ch} className="flex items-center gap-1.5 text-xs text-slate-600">
+                    </Field>
+
+                    <Field label="ערוצי שליחה">
+                      <div className="flex gap-3 pt-1">
+                        {["telegram", "email", "sms"].map((channel) => (
+                          <label key={channel} className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
                             <input
                               type="checkbox"
-                              defaultChecked={ch === "telegram"}
-                              className="rounded border-slate-300 accent-indigo-600"
+                              checked={draft.channels.includes(channel)}
+                              onChange={() => toggleChannel(alertType.value, channel)}
+                              className="accent-[var(--accent-2)]"
                             />
-                            {ch}
+                            {channel}
                           </label>
                         ))}
                       </div>
-                    </div>
+                    </Field>
                   </div>
                 )}
-
-                {config?.id && (
-                  <div className="mt-3 flex justify-end">
-                    <button
-                      onClick={() => deleteConfig.mutate(config.id!)}
-                      className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      Remove
-                    </button>
-                  </div>
-                )}
-              </div>
+              </article>
             );
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">{label}</label>
+      {children}
     </div>
   );
 }

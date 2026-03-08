@@ -48,8 +48,45 @@ const METRICS_BY_VERTICAL: Record<
   APP_INSTALLS: { result: "installs", efficiency: "cpi", quality: "ctr" },
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "פעיל",
+  PAUSED: "מושהה",
+  DELETED: "נמחק",
+  ARCHIVED: "בארכיון",
+  WITH_ISSUES: "עם תקלות",
+};
+
+const METRIC_LABELS: Partial<Record<DashboardMetricKey, string>> = {
+  spend: "הוצאה",
+  leads: "לידים",
+  purchases: "רכישות",
+  installs: "התקנות",
+  cpl: "עלות לליד",
+  cpa: "עלות לרכישה",
+  cpi: "עלות להתקנה",
+  ctr: "CTR",
+  roas: "ROAS",
+};
+
 function statusClass(status: string) {
   return STATUS_COLORS[status] ?? "bg-slate-500/20 text-slate-300 ring-1 ring-slate-400/20";
+}
+
+function statusLabel(status: string) {
+  return STATUS_LABELS[status] ?? status;
+}
+
+function metricLabel(metric: DashboardMetricKey) {
+  return METRIC_LABELS[metric] ?? metric.toUpperCase();
+}
+
+function objectiveLabel(objective?: string) {
+  if (!objective) return "ללא יעד מוגדר";
+  const normalized = objective.toLowerCase();
+  if (normalized.includes("lead")) return "לידים";
+  if (normalized.includes("sale")) return "מכירות";
+  if (normalized.includes("install")) return "התקנות";
+  return objective;
 }
 
 function campaignMatchesSearch(campaign: Campaign, query: string) {
@@ -77,31 +114,31 @@ function extractAudience(adset: AdSet): string {
     if (names.length > 0) return names.join(" · ");
   }
   if (adset.targetingSummary?.trim()) return adset.targetingSummary;
-  return "Broad audience";
+  return "קהל רחב";
 }
 
 function extractLocation(adset: AdSet): string {
   const record = adset as unknown as Record<string, unknown>;
   const targeting = record.targeting;
   if (!targeting || typeof targeting !== "object" || Array.isArray(targeting)) {
-    return "All locations";
+    return "כל המיקומים";
   }
 
   const geo = (targeting as Record<string, unknown>).geo_locations;
   if (!geo || typeof geo !== "object" || Array.isArray(geo)) {
-    return "All locations";
+    return "כל המיקומים";
   }
 
   const countries = (geo as Record<string, unknown>).countries;
   if (!Array.isArray(countries) || countries.length === 0) {
-    return "All locations";
+    return "כל המיקומים";
   }
 
   const values = countries
     .filter((item): item is string => typeof item === "string")
     .slice(0, 3);
 
-  if (values.length === 0) return "All locations";
+  if (values.length === 0) return "כל המיקומים";
   return values.join(", ");
 }
 
@@ -173,7 +210,7 @@ function AdCard({
           <div className="mb-1 flex items-start justify-between gap-2">
             <p className="truncate text-sm font-medium text-slate-100">{ad.name}</p>
             <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusClass(ad.status)}`}>
-              {ad.status}
+              {statusLabel(ad.status)}
             </span>
           </div>
 
@@ -183,13 +220,13 @@ function AdCard({
               onClick={onToggleExpand}
               className="mt-1 text-[11px] font-medium text-cyan-300 transition-colors hover:text-cyan-200"
             >
-              {expanded ? "Read less" : "Read more"}
+              {expanded ? "הצג פחות" : "הצג עוד"}
             </button>
           )}
 
           <div className="mt-2 text-[11px] text-slate-400">
             CTR {ctr !== null ? `${ctr.toFixed(2)}%` : "—"}
-            {ad.creativeId ? ` · Creative ${ad.creativeId.slice(-6)}` : ""}
+            {ad.creativeId ? ` · קריאייטיב ${ad.creativeId.slice(-6)}` : ""}
           </div>
         </div>
       </div>
@@ -303,8 +340,8 @@ export function CampaignExplorer({
   const emptyState =
     !loading && filteredCampaigns.length === 0 ? (
       <div className="px-5 py-12 text-center">
-        <p className="text-sm font-medium text-slate-200">No campaigns match this view.</p>
-        <p className="mt-1 text-xs text-slate-400">No AI tasks today, grab a coffee.</p>
+        <p className="text-sm font-medium text-slate-200">לא נמצאו קמפיינים בתצוגה הנוכחית.</p>
+        <p className="mt-1 text-xs text-slate-400">אין פעולות פעילות כרגע.</p>
       </div>
     ) : null;
 
@@ -313,9 +350,9 @@ export function CampaignExplorer({
       <div className="border-b border-slate-800/80 px-4 py-4 sm:px-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h3 className="text-base font-semibold text-slate-100">Campaign Explorer</h3>
+            <h3 className="text-base font-semibold text-slate-100">סייר קמפיינים</h3>
             <p className="text-xs text-slate-400">
-              {totals.campaigns} campaigns · {totals.adsets} ad sets · {totals.ads} ads
+              {totals.campaigns} קמפיינים · {totals.adsets} קבוצות מודעות · {totals.ads} מודעות
             </p>
           </div>
 
@@ -325,7 +362,7 @@ export function CampaignExplorer({
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               type="text"
-              placeholder="Search campaigns, ad sets, ads"
+              placeholder="חיפוש קמפיין, קבוצת מודעות או מודעה"
               className="w-full rounded-xl border border-slate-700/80 bg-slate-900/80 py-2.5 pl-9 pr-3 text-sm text-slate-200 outline-none transition-colors placeholder:text-slate-500 focus:border-cyan-400/40 focus:ring-2 focus:ring-cyan-400/20"
             />
           </div>
@@ -352,25 +389,25 @@ export function CampaignExplorer({
                         )}
                       </div>
                       <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold ${statusClass(campaign.status)}`}>
-                        {campaign.status}
+                        {statusLabel(campaign.status)}
                       </span>
                     </div>
 
                     <div className="mb-3 grid grid-cols-3 gap-2 text-center">
                       <div className="rounded-xl border border-slate-800/80 bg-[#0c1328] px-2 py-2">
-                        <p className="text-[10px] uppercase tracking-wide text-slate-500">Spend</p>
+                        <p className="text-[10px] uppercase tracking-wide text-slate-500">{metricLabel("spend")}</p>
                         <p className="text-xs font-semibold text-slate-200">
                           {formatInsightMetric(campaign.todayInsights, "spend", currency)}
                         </p>
                       </div>
                       <div className="rounded-xl border border-slate-800/80 bg-[#0c1328] px-2 py-2">
-                        <p className="text-[10px] uppercase tracking-wide text-slate-500">{metricBundle.result.toUpperCase()}</p>
+                        <p className="text-[10px] uppercase tracking-wide text-slate-500">{metricLabel(metricBundle.result)}</p>
                         <p className="text-xs font-semibold text-slate-200">
                           {formatInsightMetric(campaign.todayInsights, metricBundle.result, currency)}
                         </p>
                       </div>
                       <div className="rounded-xl border border-slate-800/80 bg-[#0c1328] px-2 py-2">
-                        <p className="text-[10px] uppercase tracking-wide text-slate-500">{metricBundle.efficiency.toUpperCase()}</p>
+                        <p className="text-[10px] uppercase tracking-wide text-slate-500">{metricLabel(metricBundle.efficiency)}</p>
                         <p className="text-xs font-semibold text-slate-200">
                           {formatInsightMetric(campaign.todayInsights, metricBundle.efficiency, currency)}
                         </p>
@@ -385,7 +422,7 @@ export function CampaignExplorer({
                         }}
                         className="inline-flex min-h-11 flex-1 items-center justify-center rounded-xl bg-cyan-500/20 px-3 text-sm font-medium text-cyan-200 ring-1 ring-cyan-400/30"
                       >
-                        View Ad Sets ({campaign.adsets?.length ?? 0})
+                        צפייה בקבוצות מודעות ({campaign.adsets?.length ?? 0})
                       </button>
 
                       <button
@@ -420,7 +457,7 @@ export function CampaignExplorer({
                   </button>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-slate-100">{selectedCampaign.name}</p>
-                    <p className="text-xs text-slate-400">Ad Sets ({selectedCampaign.adsets?.length ?? 0})</p>
+                    <p className="text-xs text-slate-400">קבוצות מודעות ({selectedCampaign.adsets?.length ?? 0})</p>
                   </div>
                 </div>
 
@@ -433,21 +470,21 @@ export function CampaignExplorer({
                       <div className="mb-3 flex items-start justify-between gap-3">
                         <p className="clamp-2 text-sm font-semibold text-slate-100">{adset.name}</p>
                         <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold ${statusClass(adset.status)}`}>
-                          {adset.status}
+                          {statusLabel(adset.status)}
                         </span>
                       </div>
 
                       <div className="space-y-1.5 text-xs text-slate-300">
-                        <p className="truncate">Audience: {extractAudience(adset)}</p>
-                        <p className="truncate">Locations: {extractLocation(adset)}</p>
-                        <p>Daily budget: {formatCurrency(adset.dailyBudget, currency)}</p>
+                        <p className="truncate">קהל: {extractAudience(adset)}</p>
+                        <p className="truncate">מיקומים: {extractLocation(adset)}</p>
+                        <p>תקציב יומי: {formatCurrency(adset.dailyBudget, currency)}</p>
                       </div>
 
                       <button
                         onClick={() => setMobileAdSetId(adset.id)}
                         className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-indigo-500/20 text-sm font-medium text-indigo-200 ring-1 ring-indigo-400/35"
                       >
-                        View Ads ({adset.ads?.length ?? 0})
+                        צפייה במודעות ({adset.ads?.length ?? 0})
                       </button>
                     </div>
                   ))}
@@ -464,7 +501,7 @@ export function CampaignExplorer({
                   </button>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-slate-100">{selectedAdSet.name}</p>
-                    <p className="text-xs text-slate-400">Ads ({selectedAdSet.ads?.length ?? 0})</p>
+                    <p className="text-xs text-slate-400">מודעות ({selectedAdSet.ads?.length ?? 0})</p>
                   </div>
                 </div>
 
@@ -492,22 +529,22 @@ export function CampaignExplorer({
                   <tr className="border-b border-slate-800/80 bg-[#0b1227]">
                     <th className="w-10 px-3 py-3" />
                     <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-                      Campaign
+                      קמפיין
                     </th>
                     <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-                      Status
+                      סטטוס
                     </th>
                     <th className="px-3 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-                      Spend
+                      {metricLabel("spend")}
                     </th>
                     <th className="px-3 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-                      {metricBundle.result.toUpperCase()}
+                      {metricLabel(metricBundle.result)}
                     </th>
                     <th className="px-3 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-                      {metricBundle.efficiency.toUpperCase()}
+                      {metricLabel(metricBundle.efficiency)}
                     </th>
                     <th className="px-3 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-                      {metricBundle.quality.toUpperCase()}
+                      {metricLabel(metricBundle.quality)}
                     </th>
                     <th className="w-16 px-3 py-3" />
                   </tr>
@@ -531,7 +568,7 @@ export function CampaignExplorer({
                                   ? "text-slate-300 hover:bg-slate-800"
                                   : "cursor-default text-slate-700"
                               }`}
-                              title={hasAdsets ? "Expand Ad Sets" : "No Ad Sets"}
+                              title={hasAdsets ? "הצגת קבוצות מודעות" : "אין קבוצות מודעות"}
                             >
                               {isCampaignExpanded ? (
                                 <ChevronDown className="h-4 w-4" />
@@ -544,14 +581,14 @@ export function CampaignExplorer({
                           <td className="px-3 py-3">
                             <p className="max-w-[24rem] truncate font-medium text-slate-100">{campaign.name}</p>
                             <p className="mt-1 text-xs text-slate-400">
-                              {campaign.objective ?? "Objective not set"}
+                              {objectiveLabel(campaign.objective)}
                               {campaign.accountName ? ` · ${campaign.accountName}` : ""}
                             </p>
                           </td>
 
                           <td className="px-3 py-3">
                             <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusClass(campaign.status)}`}>
-                              {campaign.status}
+                              {statusLabel(campaign.status)}
                             </span>
                           </td>
 
@@ -579,7 +616,7 @@ export function CampaignExplorer({
                               }
                               disabled={!campaign.accountId}
                               className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-700/80 text-slate-300 transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                              title={campaign.status === "ACTIVE" ? "Pause campaign" : "Resume campaign"}
+                              title={campaign.status === "ACTIVE" ? "עצירת קמפיין" : "הפעלת קמפיין"}
                             >
                               {campaign.status === "ACTIVE" ? (
                                 <Pause className="h-4 w-4" />
@@ -600,22 +637,22 @@ export function CampaignExplorer({
                                       <tr className="border-b border-slate-800/70 bg-slate-900/60">
                                         <th className="w-10 px-3 py-2" />
                                         <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
-                                          Ad Set
+                                          קבוצת מודעות
                                         </th>
                                         <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
-                                          Status
+                                          סטטוס
                                         </th>
                                         <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
-                                          Audiences
+                                          קהלים
                                         </th>
                                         <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
-                                          Locations
+                                          מיקומים
                                         </th>
                                         <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
-                                          Daily Budget
+                                          תקציב יומי
                                         </th>
                                         <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
-                                          Ads
+                                          מודעות
                                         </th>
                                       </tr>
                                     </thead>
@@ -638,7 +675,7 @@ export function CampaignExplorer({
                                                       ? "text-slate-300 hover:bg-slate-800"
                                                       : "cursor-default text-slate-700"
                                                   }`}
-                                                  title={hasAds ? "Expand Ads" : "No Ads"}
+                                                  title={hasAds ? "הצגת מודעות" : "אין מודעות"}
                                                 >
                                                   {isAdSetExpanded ? (
                                                     <ChevronDown className="h-4 w-4" />
@@ -652,12 +689,12 @@ export function CampaignExplorer({
                                                   {adset.name}
                                                 </p>
                                                 <p className="mt-0.5 max-w-[17rem] truncate text-xs text-slate-500">
-                                                  {adset.optimizationGoal ?? "Optimization not set"}
+                                                  {adset.optimizationGoal ?? "ללא אופטימיזציה מוגדרת"}
                                                 </p>
                                               </td>
                                               <td className="px-3 py-2.5">
                                                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusClass(adset.status)}`}>
-                                                  {adset.status}
+                                                  {statusLabel(adset.status)}
                                                 </span>
                                               </td>
                                               <td className="px-3 py-2.5 text-xs text-slate-300">
@@ -679,7 +716,7 @@ export function CampaignExplorer({
                                                 <td colSpan={7} className="px-3 py-3">
                                                   <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">
                                                     <Sparkles className="h-3.5 w-3.5" />
-                                                    Ad Level Details
+                                                    פירוט ברמת מודעה
                                                   </div>
                                                   <div className="grid gap-3 xl:grid-cols-2">
                                                     {(adset.ads ?? []).map((ad) => {

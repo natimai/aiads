@@ -10,7 +10,7 @@ interface DateRangeContextValue {
 const today = format(new Date(), "yyyy-MM-dd");
 
 const defaultRange: DateRange = {
-  label: "Last 30 Days",
+  label: "30 ימים אחרונים",
   from: format(subDays(new Date(), 30), "yyyy-MM-dd"),
   to: today,
 };

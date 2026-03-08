@@ -1,19 +1,19 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { Routes, Route, useLocation, NavLink } from "react-router-dom";
+import { Routes, Route, useLocation, NavLink, Navigate } from "react-router-dom";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import {
-  Brain,
   Keyboard,
-  LayoutDashboard,
-  Layers3,
   Menu,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
   RefreshCw,
   Sun,
-  WandSparkles,
   X,
+  Inbox,
+  ChartNoAxesCombined,
+  WandSparkles,
+  Layers3,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { auth } from "./services/firebase";
@@ -23,13 +23,14 @@ import { DateRangePicker } from "./components/common/DateRangePicker";
 import { useAccountsQuery } from "./hooks/useAccounts";
 import { useKeyboardShortcuts, SHORTCUTS } from "./hooks/useKeyboardShortcuts";
 import { useTheme } from "./contexts/ThemeContext";
+import { getRouteMeta, t } from "./utils/copy";
 
 const Login = lazy(() => import("./pages/Login"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Cockpit = lazy(() => import("./pages/Cockpit"));
 const Campaigns = lazy(() => import("./pages/Campaigns"));
 const Alerts = lazy(() => import("./pages/Alerts"));
 const AlertConfig = lazy(() => import("./pages/AlertConfig"));
-const AIInsights = lazy(() => import("./pages/AIInsights"));
 const CampaignBuilder = lazy(() => import("./pages/CampaignBuilder"));
 const Reports = lazy(() => import("./pages/Reports"));
 const CreativeLab = lazy(() => import("./pages/CreativeLab"));
@@ -39,7 +40,7 @@ const AccountSettings = lazy(() => import("./pages/AccountSettings"));
 function PageLoader() {
   return (
     <div className="flex h-64 items-center justify-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-700 border-t-indigo-400" />
+      <div className="h-10 w-10 animate-spin rounded-full border-2 border-[var(--line-strong)] border-t-[var(--accent-2)]" />
     </div>
   );
 }
@@ -51,8 +52,8 @@ export default function App() {
 
   if (user === undefined) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#040816]">
-        <div className="h-10 w-10 animate-spin rounded-full border-2 border-slate-700 border-t-indigo-400" />
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-[var(--line-strong)] border-t-[var(--accent-2)]" />
       </div>
     );
   }
@@ -72,13 +73,14 @@ function AuthenticatedApp() {
   useAccountsQuery();
   const queryClient = useQueryClient();
   const location = useLocation();
+  const routeMeta = useMemo(() => getRouteMeta(location.pathname), [location.pathname]);
   const { theme, toggleTheme } = useTheme();
   const { showHelp, setShowHelp } = useKeyboardShortcuts();
 
   const [refreshing, setRefreshing] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
-    return localStorage.getItem("nati-sidebar-collapsed") === "1";
+    return localStorage.getItem("adops-sidebar-collapsed") === "1";
   });
 
   useEffect(() => {
@@ -86,20 +88,8 @@ function AuthenticatedApp() {
   }, [location.pathname]);
 
   useEffect(() => {
-    localStorage.setItem("nati-sidebar-collapsed", sidebarCollapsed ? "1" : "0");
+    localStorage.setItem("adops-sidebar-collapsed", sidebarCollapsed ? "1" : "0");
   }, [sidebarCollapsed]);
-
-  const routeTitle = useMemo(() => {
-    const path = location.pathname;
-    if (path.startsWith("/ai-insights")) return "Action Feed";
-    if (path.startsWith("/campaign-builder")) return "Campaign Builder";
-    if (path.startsWith("/campaigns")) return "Campaign Explorer";
-    if (path.startsWith("/alerts")) return "Alerts";
-    if (path.startsWith("/reports")) return "Reports";
-    if (path.startsWith("/creative-lab")) return "Creative Lab";
-    if (path.startsWith("/settings")) return "Settings";
-    return "Dashboard";
-  }, [location.pathname]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -107,28 +97,13 @@ function AuthenticatedApp() {
     setTimeout(() => setRefreshing(false), 450);
   };
 
-  const darkShell =
-    theme === "dark"
-      ? "bg-[#040816] text-slate-100"
-      : "bg-slate-100 text-slate-900";
-
-  const topbarSurface =
-    theme === "dark"
-      ? "border-slate-800/70 bg-[#070d1f]/80"
-      : "border-slate-200/80 bg-white/85";
-
-  const mobileNavSurface =
-    theme === "dark"
-      ? "border-slate-800 bg-[#070d1f]/95"
-      : "border-slate-200 bg-white/95";
-
   return (
-    <div className={`min-h-screen ${darkShell}`}>
+    <div className="min-h-screen text-[var(--text-primary)]">
       {sidebarOpen && (
         <button
           className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm lg:hidden"
           onClick={() => setSidebarOpen(false)}
-          aria-label="Close navigation"
+          aria-label="סגירת ניווט"
         />
       )}
 
@@ -139,27 +114,25 @@ function AuthenticatedApp() {
       />
 
       <div
-        className={`min-h-screen transition-[padding-left] duration-300 ${
-          sidebarCollapsed ? "lg:pl-24" : "lg:pl-72"
+        className={`min-h-screen transition-[padding-right] duration-300 ${
+          sidebarCollapsed ? "lg:pr-24" : "lg:pr-72"
         }`}
       >
-        <header
-          className={`sticky top-0 z-30 border-b px-4 py-3 backdrop-blur-xl sm:px-6 ${topbarSurface}`}
-        >
+        <header className="sticky top-0 z-30 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--bg-elevated)_84%,transparent)] px-4 py-3 backdrop-blur-xl sm:px-6">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2.5">
               <button
                 onClick={() => setSidebarOpen(true)}
-                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-700/70 text-slate-300 lg:hidden"
-                aria-label="Open menu"
+                className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--line)] text-[var(--text-primary)] lg:hidden"
+                aria-label="פתיחת תפריט"
               >
                 <Menu className="h-4 w-4" />
               </button>
 
               <button
-                onClick={() => setSidebarCollapsed((v) => !v)}
-                className="hidden min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-700/70 text-slate-300 transition-colors hover:bg-slate-800 lg:inline-flex"
-                aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                onClick={() => setSidebarCollapsed((value) => !value)}
+                className="focus-ring hidden min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--line)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-soft)] lg:inline-flex"
+                aria-label={sidebarCollapsed ? "הרחבת תפריט" : "צמצום תפריט"}
               >
                 {sidebarCollapsed ? (
                   <PanelLeftOpen className="h-4 w-4" />
@@ -169,10 +142,8 @@ function AuthenticatedApp() {
               </button>
 
               <div className="min-w-0">
-                <p className="truncate text-base font-semibold">{routeTitle}</p>
-                <p className="truncate text-xs text-slate-400">
-                  Command surface for proactive Meta Ads operations
-                </p>
+                <p className="truncate text-base font-semibold text-[var(--text-primary)]">{routeMeta.title}</p>
+                <p className="truncate text-xs text-[var(--text-muted)]">{routeMeta.subtitle}</p>
               </div>
             </div>
 
@@ -186,26 +157,26 @@ function AuthenticatedApp() {
 
               <button
                 onClick={toggleTheme}
-                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-700/70 text-slate-300 transition-colors hover:bg-slate-800"
-                title={theme === "dark" ? "Switch to light" : "Switch to dark"}
-                aria-label="Toggle color theme"
+                className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--line)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-soft)]"
+                title={theme === "dark" ? t("app.theme.light") : t("app.theme.dark")}
+                aria-label="שינוי ערכת צבע"
               >
                 {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </button>
 
               <button
                 onClick={() => setShowHelp(true)}
-                className="hidden min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-700/70 text-slate-300 transition-colors hover:bg-slate-800 md:inline-flex"
-                title="Keyboard shortcuts"
+                className="focus-ring hidden min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--line)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-soft)] md:inline-flex"
+                title={t("app.shortcuts")}
               >
                 <Keyboard className="h-4 w-4" />
               </button>
 
               <button
                 onClick={handleRefresh}
-                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-700/70 text-slate-300 transition-colors hover:bg-slate-800"
-                title="Refresh all data"
-                aria-label="Refresh"
+                className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--line)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-soft)]"
+                title={t("app.refresh")}
+                aria-label={t("app.refresh")}
               >
                 <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
               </button>
@@ -217,11 +188,14 @@ function AuthenticatedApp() {
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/inbox" element={<Navigate to="/" replace />} />
+              <Route path="/cockpit" element={<Cockpit />} />
+              <Route path="/dashboard" element={<Navigate to="/cockpit" replace />} />
+              <Route path="/ai-insights" element={<Navigate to="/" replace />} />
               <Route path="/campaigns" element={<Campaigns />} />
               <Route path="/campaigns/:accountId" element={<Campaigns />} />
               <Route path="/alerts" element={<Alerts />} />
               <Route path="/alerts/config" element={<AlertConfig />} />
-              <Route path="/ai-insights" element={<AIInsights />} />
               <Route path="/campaign-builder" element={<CampaignBuilder />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/creative-lab" element={<CreativeLab />} />
@@ -232,15 +206,13 @@ function AuthenticatedApp() {
         </main>
       </div>
 
-      <nav
-        className={`fixed inset-x-0 bottom-0 z-40 border-t px-3 pb-[max(env(safe-area-inset-bottom),10px)] pt-2 md:hidden ${mobileNavSurface}`}
-      >
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--line)] bg-[color-mix(in_srgb,var(--bg-elevated)_92%,transparent)] px-3 pb-[max(env(safe-area-inset-bottom),10px)] pt-2 md:hidden">
         <div className="grid grid-cols-4 gap-1.5">
           {[
-            { to: "/ai-insights", label: "Feed", icon: Brain },
-            { to: "/", label: "Dashboard", icon: LayoutDashboard },
-            { to: "/campaigns", label: "Campaigns", icon: Layers3 },
-            { to: "/campaign-builder", label: "Builder", icon: WandSparkles },
+            { to: "/", label: "תיבה", icon: Inbox },
+            { to: "/cockpit", label: "קוקפיט", icon: ChartNoAxesCombined },
+            { to: "/campaigns", label: "קמפיינים", icon: Layers3 },
+            { to: "/campaign-builder", label: "בונה", icon: WandSparkles },
           ].map((item) => (
             <NavLink
               key={item.to}
@@ -249,8 +221,8 @@ function AuthenticatedApp() {
               className={({ isActive }) =>
                 `flex min-h-11 flex-col items-center justify-center rounded-xl text-[11px] font-medium transition-colors ${
                   isActive
-                    ? "bg-indigo-500/20 text-indigo-200"
-                    : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+                    ? "border border-[var(--line-strong)] bg-[var(--bg-soft-2)] text-[var(--text-primary)]"
+                    : "text-[var(--text-muted)] hover:bg-[var(--bg-soft)] hover:text-[var(--text-primary)]"
                 }`
               }
             >
@@ -267,15 +239,15 @@ function AuthenticatedApp() {
           onClick={() => setShowHelp(false)}
         >
           <div
-            className="w-full max-w-sm rounded-2xl border border-slate-800 bg-[#0b1229] shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
+            className="panel w-full max-w-sm"
+            onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-              <h3 className="text-sm font-semibold text-slate-100">Keyboard Shortcuts</h3>
+            <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">קיצורי מקלדת</h3>
               <button
                 onClick={() => setShowHelp(false)}
-                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
-                aria-label="Close keyboard shortcuts"
+                className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-soft)] hover:text-[var(--text-primary)]"
+                aria-label="סגירת חלון קיצורים"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -285,10 +257,10 @@ function AuthenticatedApp() {
               {SHORTCUTS.map((shortcut) => (
                 <div
                   key={shortcut.key}
-                  className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2"
+                  className="flex items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2"
                 >
-                  <span className="text-xs text-slate-300">{shortcut.description}</span>
-                  <kbd className="rounded-md border border-slate-700 bg-slate-950 px-2 py-0.5 text-[11px] font-mono text-slate-200">
+                  <span className="text-xs text-[var(--text-secondary)]">{shortcut.description}</span>
+                  <kbd className="rounded-md border border-[var(--line)] bg-[var(--bg-soft-2)] px-2 py-0.5 text-[11px] font-mono text-[var(--text-primary)]">
                     {shortcut.key}
                   </kbd>
                 </div>

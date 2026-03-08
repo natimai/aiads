@@ -18,22 +18,22 @@ export interface MetricDefinition {
 
 const METRICS_BY_VERTICAL: Record<AccountVertical, MetricDefinition[]> = {
   LEAD_GEN: [
-    { key: "spend", label: "Spend", icon: "payments", iconBg: "bg-indigo-50", iconColor: "text-indigo-600" },
-    { key: "leads", label: "Leads", icon: "person_add", iconBg: "bg-emerald-50", iconColor: "text-emerald-600" },
+    { key: "spend", label: "הוצאה", icon: "payments", iconBg: "bg-indigo-50", iconColor: "text-indigo-600" },
+    { key: "leads", label: "לידים", icon: "person_add", iconBg: "bg-emerald-50", iconColor: "text-emerald-600" },
     { key: "cpl", label: "CPL", icon: "price_change", iconBg: "bg-amber-50", iconColor: "text-amber-600" },
     { key: "ctr", label: "CTR", icon: "ads_click", iconBg: "bg-blue-50", iconColor: "text-blue-600" },
     { key: "cpm", label: "CPM", icon: "visibility", iconBg: "bg-violet-50", iconColor: "text-violet-600" },
   ],
   ECOMMERCE: [
-    { key: "spend", label: "Spend", icon: "payments", iconBg: "bg-indigo-50", iconColor: "text-indigo-600" },
-    { key: "purchases", label: "Purchases", icon: "shopping_cart", iconBg: "bg-emerald-50", iconColor: "text-emerald-600" },
+    { key: "spend", label: "הוצאה", icon: "payments", iconBg: "bg-indigo-50", iconColor: "text-indigo-600" },
+    { key: "purchases", label: "רכישות", icon: "shopping_cart", iconBg: "bg-emerald-50", iconColor: "text-emerald-600" },
     { key: "cpa", label: "CPA", icon: "sell", iconBg: "bg-amber-50", iconColor: "text-amber-600" },
     { key: "roas", label: "ROAS", icon: "trending_up", iconBg: "bg-blue-50", iconColor: "text-blue-600" },
     { key: "ctr", label: "CTR", icon: "ads_click", iconBg: "bg-violet-50", iconColor: "text-violet-600" },
   ],
   APP_INSTALLS: [
-    { key: "spend", label: "Spend", icon: "payments", iconBg: "bg-indigo-50", iconColor: "text-indigo-600" },
-    { key: "installs", label: "Installs", icon: "download", iconBg: "bg-emerald-50", iconColor: "text-emerald-600" },
+    { key: "spend", label: "הוצאה", icon: "payments", iconBg: "bg-indigo-50", iconColor: "text-indigo-600" },
+    { key: "installs", label: "התקנות", icon: "download", iconBg: "bg-emerald-50", iconColor: "text-emerald-600" },
     { key: "cpi", label: "CPI", icon: "price_change", iconBg: "bg-amber-50", iconColor: "text-amber-600" },
     { key: "ctr", label: "CTR", icon: "ads_click", iconBg: "bg-blue-50", iconColor: "text-blue-600" },
   ],

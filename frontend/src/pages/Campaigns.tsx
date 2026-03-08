@@ -18,12 +18,12 @@ export default function Campaigns() {
   }, [accountId, setSelectedAccountId]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-2">
-        <h2 className="text-2xl font-semibold tracking-tight text-slate-100">Campaign Explorer</h2>
-        <p className="max-w-3xl text-sm text-slate-400">
-          Explore your full Meta account hierarchy in one view: Campaigns to Ad Sets to Ads.
-          Expand for targeting, location, budget, creative details, and fast status actions.
+    <div className="space-y-6 reveal-up">
+      <div className="panel p-5 sm:p-6">
+        <h2 className="brand-display text-2xl text-[var(--text-primary)]">סייר קמפיינים</h2>
+        <p className="mt-2 max-w-3xl text-sm text-[var(--text-secondary)]">
+          חקירת היררכיית החשבון המלאה במקום אחד: קמפיינים, קבוצות מודעות ומודעות.
+          פתיחה מהירה לפרטי טרגוט, מיקום, תקציב, קריאייטיב ופעולות סטטוס.
         </p>
       </div>
 

@@ -1,9 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  AlertTriangle,
-  ArrowDownRight,
-  ArrowUpRight,
   Brain,
   CheckCircle2,
   ChevronDown,
@@ -12,7 +9,6 @@ import {
   Loader2,
   Pencil,
   RefreshCw,
-  Sparkles,
   TestTube2,
   X,
   XCircle,
@@ -55,42 +51,42 @@ const VARIANT_STYLES: Record<
     tone: "text-rose-200",
     pill: "border-rose-400/30 bg-rose-500/20 text-rose-200",
     approve: "bg-rose-500 text-white hover:bg-rose-400",
-    label: "Kill",
+    label: "עצירה",
   },
   scale: {
     ring: "from-emerald-500/55 via-emerald-400/20 to-transparent",
     tone: "text-emerald-200",
     pill: "border-emerald-400/30 bg-emerald-500/20 text-emerald-200",
     approve: "bg-emerald-500 text-slate-950 hover:bg-emerald-400",
-    label: "Scale",
+    label: "סקייל",
   },
   creative: {
     ring: "from-violet-500/55 via-violet-400/20 to-transparent",
     tone: "text-violet-200",
     pill: "border-violet-400/30 bg-violet-500/20 text-violet-200",
     approve: "bg-violet-500 text-white hover:bg-violet-400",
-    label: "Creative",
+    label: "קריאייטיב",
   },
   audience: {
     ring: "from-cyan-500/55 via-cyan-400/20 to-transparent",
     tone: "text-cyan-200",
     pill: "border-cyan-400/30 bg-cyan-500/20 text-cyan-200",
     approve: "bg-cyan-500 text-slate-950 hover:bg-cyan-400",
-    label: "Audience",
+    label: "קהל",
   },
   ab_test: {
     ring: "from-amber-500/55 via-amber-400/20 to-transparent",
     tone: "text-amber-200",
     pill: "border-amber-400/30 bg-amber-500/20 text-amber-200",
     approve: "bg-amber-500 text-slate-950 hover:bg-amber-400",
-    label: "A/B Test",
+    label: "טסט A/B",
   },
   generic: {
     ring: "from-indigo-500/55 via-indigo-400/20 to-transparent",
     tone: "text-indigo-200",
     pill: "border-indigo-400/30 bg-indigo-500/20 text-indigo-200",
     approve: "bg-indigo-500 text-white hover:bg-indigo-400",
-    label: "Action",
+    label: "פעולה",
   },
 };
 
@@ -99,6 +95,25 @@ const PRIORITY_PILL: Record<Recommendation["priority"], string> = {
   medium: "border-amber-400/40 bg-amber-500/15 text-amber-200",
   low: "border-slate-500/40 bg-slate-500/15 text-slate-300",
 };
+
+const PRIORITY_LABEL: Record<Recommendation["priority"], string> = {
+  high: "גבוהה",
+  medium: "בינונית",
+  low: "נמוכה",
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  pending: "ממתינה",
+  approved: "אושרה",
+  rejected: "נדחתה",
+  executed: "בוצעה",
+  done: "הושלמה",
+  dismissed: "בוטלה",
+};
+
+function statusLabel(status: string) {
+  return STATUS_LABEL[status] ?? status;
+}
 
 function getVariant(rec: Recommendation): CardVariant {
   const action = rec.executionPlan?.action;
@@ -178,7 +193,7 @@ function NanoBananaGallery({
   if (!images.length) {
     return (
       <div className="mt-3 rounded-xl border border-violet-400/20 bg-violet-500/10 px-3 py-2 text-xs text-violet-200">
-        No generated image variations yet.
+        אין וריאציות תמונה זמינות כרגע.
       </div>
     );
   }
@@ -187,15 +202,15 @@ function NanoBananaGallery({
     <div className="mt-3 rounded-2xl border border-violet-400/25 bg-[#121735] p-3">
       <div className="mb-2 flex items-center justify-between">
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-200">
-          Nano Banana Variations
+          וריאציות Nano Banana
         </p>
-        <span className="text-[11px] text-slate-400">{generatedAt ? "Ready" : "Generated"}</span>
+        <span className="text-[11px] text-slate-400">{generatedAt ? "מוכן" : "נוצר"}</span>
       </div>
 
       <div className="flex snap-x gap-3 overflow-x-auto pb-1 md:hidden">
         {images.map((url, index) => (
           <div key={url + index} className="w-[76%] shrink-0 snap-center overflow-hidden rounded-xl border border-slate-700/80">
-            <img src={url} alt={`Creative ${index + 1}`} className="aspect-square w-full object-cover" />
+            <img src={url} alt={`קריאייטיב ${index + 1}`} className="aspect-square w-full object-cover" />
           </div>
         ))}
       </div>
@@ -203,7 +218,7 @@ function NanoBananaGallery({
       <div className="hidden md:columns-3 md:gap-3">
         {images.map((url, index) => (
           <div key={url + index} className="mb-3 break-inside-avoid overflow-hidden rounded-xl border border-slate-700/80">
-            <img src={url} alt={`Creative ${index + 1}`} className="w-full object-cover" />
+            <img src={url} alt={`קריאייטיב ${index + 1}`} className="w-full object-cover" />
           </div>
         ))}
       </div>
@@ -307,7 +322,7 @@ function TaskCard({
       finishResolution("approved");
     } catch (err: unknown) {
       setCardStatus("error");
-      setErrorMsg(err instanceof Error ? err.message : "Approval failed.");
+      setErrorMsg(err instanceof Error ? err.message : "אישור הפעולה נכשל.");
     }
   };
 
@@ -325,7 +340,7 @@ function TaskCard({
       finishResolution("approved");
     } catch (err: unknown) {
       setCardStatus("error");
-      setErrorMsg(err instanceof Error ? err.message : "Save and execute failed.");
+      setErrorMsg(err instanceof Error ? err.message : "שמירה וביצוע נכשלו.");
     }
   };
 
@@ -352,7 +367,7 @@ function TaskCard({
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-slate-950/72 backdrop-blur-sm">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-500/20 px-4 py-2 text-sm font-semibold text-emerald-200">
             <CheckCircle2 className="h-4 w-4" />
-            {resolvedAs === "approved" ? "Approved" : "Dismissed"}
+            {resolvedAs === "approved" ? "אושר" : "נדחה"}
           </div>
         </div>
       )}
@@ -363,7 +378,7 @@ function TaskCard({
             {styles.label}
           </span>
           <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] ${PRIORITY_PILL[rec.priority]}`}>
-            {rec.priority}
+            {PRIORITY_LABEL[rec.priority]}
           </span>
           {rec.accountName && (
             <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[10px] text-slate-300">
@@ -371,7 +386,7 @@ function TaskCard({
             </span>
           )}
           <span className="ml-auto text-[11px] font-semibold text-slate-400">
-            {Math.round(rec.confidence * 100)}% confidence
+            {Math.round(rec.confidence * 100)}% ביטחון
           </span>
         </div>
 
@@ -382,20 +397,20 @@ function TaskCard({
 
         {rec.expectedImpact?.summary && (
           <div className="mt-3 rounded-xl border border-slate-700/80 bg-[#111a33] px-3 py-2 text-xs text-slate-200">
-            <span className="font-semibold text-slate-100">Impact: </span>
+            <span className="font-semibold text-slate-100">השפעה צפויה: </span>
             {rec.expectedImpact.summary}
           </div>
         )}
 
         <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
           {metrics.spend != null && metrics.spend > 0 && (
-            <MetricChip label="Spend" value={`$${metrics.spend.toFixed(0)}`} />
+            <MetricChip label="ספנד" value={`$${metrics.spend.toFixed(0)}`} />
           )}
           {metrics.roas != null && metrics.roas > 0 && (
             <MetricChip label="ROAS" value={`${metrics.roas.toFixed(2)}x`} />
           )}
           {metrics.cpa != null && metrics.cpa > 0 && (
-            <MetricChip label="CPA" value={`$${metrics.cpa.toFixed(0)}`} />
+            <MetricChip label="עלות לרכישה" value={`$${metrics.cpa.toFixed(0)}`} />
           )}
           {metrics.ctr != null && metrics.ctr > 0 && (
             <MetricChip label="CTR" value={`${metrics.ctr.toFixed(2)}%`} />
@@ -436,7 +451,7 @@ function TaskCard({
               className="inline-flex items-center gap-1 text-xs text-slate-400 transition-colors hover:text-slate-200"
             >
               {expandedReasoning ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-              {expandedReasoning ? "Hide reasoning" : "Show reasoning"}
+              {expandedReasoning ? "הסתר הסבר" : "הצג הסבר"}
             </button>
             {expandedReasoning && (
               <p className="mt-2 rounded-xl border border-slate-700/80 bg-[#101833] p-3 text-xs leading-relaxed text-slate-300">
@@ -450,7 +465,7 @@ function TaskCard({
           <div className="mt-4 space-y-3 rounded-2xl border border-indigo-400/30 bg-indigo-500/10 p-4">
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-indigo-200">
-                Edit Before Execute
+                עריכה לפני ביצוע
               </p>
               <button
                 onClick={() => setEditing(false)}
@@ -462,7 +477,7 @@ function TaskCard({
 
             {rec.executionPlan?.action === "adjust_budget" && (
               <label className="block">
-                <span className="text-xs font-medium text-slate-200">Budget delta (%)</span>
+                <span className="text-xs font-medium text-slate-200">שינוי תקציב (%)</span>
                 <input
                   type="range"
                   min={-50}
@@ -481,7 +496,7 @@ function TaskCard({
 
             {(rec.type === "creative_optimization" || rec.type === "creative_copy") && (
               <label className="block">
-                <span className="text-xs font-medium text-slate-200">Creative copy</span>
+                <span className="text-xs font-medium text-slate-200">טקסט קריאייטיב</span>
                 <textarea
                   rows={3}
                   value={editCopy}
@@ -496,7 +511,7 @@ function TaskCard({
               rec.type === "audience_discovery" ||
               rec.type === "targeting_optimization") && (
               <label className="block">
-                <span className="text-xs font-medium text-slate-200">Audience suggestions</span>
+                <span className="text-xs font-medium text-slate-200">הצעות קהל</span>
                 <input
                   value={editAudience}
                   onChange={(event) => setEditAudience(event.target.value)}
@@ -515,7 +530,7 @@ function TaskCard({
               ) : (
                 <RefreshCw className="h-4 w-4" />
               )}
-              Save and Execute
+              שמירה וביצוע
             </button>
           </div>
         )}
@@ -537,7 +552,7 @@ function TaskCard({
                   className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-indigo-400/25 bg-indigo-500/12 px-3 text-sm font-medium text-indigo-100 hover:bg-indigo-500/20 sm:w-auto"
                 >
                   <ExternalLink className="h-4 w-4" />
-                  Review Draft
+                  מעבר לטיוטה
                 </Link>
               )}
 
@@ -547,7 +562,7 @@ function TaskCard({
                 className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-[#0f1732] px-3 text-sm font-medium text-slate-200 hover:bg-[#151f40] sm:w-auto"
               >
                 <XCircle className="h-4 w-4" />
-                Dismiss
+                דחייה
               </button>
 
               <button
@@ -556,7 +571,7 @@ function TaskCard({
                 className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-[#0f1732] px-3 text-sm font-medium text-slate-200 hover:bg-[#151f40] sm:w-auto"
               >
                 <Pencil className="h-4 w-4" />
-                Edit
+                עריכה
               </button>
 
               <button
@@ -570,12 +585,12 @@ function TaskCard({
                   <CheckCircle2 className="h-4 w-4" />
                 )}
                 {variant === "kill"
-                  ? "Pause"
+                  ? "עצירה"
                   : variant === "ab_test"
-                  ? "Approve Test"
+                  ? "אישור טסט"
                   : canExecute
-                  ? "Approve and Execute"
-                  : "Approve"}
+                  ? "אישור וביצוע"
+                  : "אישור"}
               </button>
             </div>
           </div>
@@ -669,7 +684,7 @@ function ABTestCard({
       finish();
     } catch (err: unknown) {
       setCardStatus("error");
-      setErrorMsg(err instanceof Error ? err.message : "A/B execution failed.");
+      setErrorMsg(err instanceof Error ? err.message : "ביצוע טסט A/B נכשל.");
     }
   };
 
@@ -691,13 +706,13 @@ function ABTestCard({
     >
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="rounded-full border border-amber-400/35 bg-amber-500/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.13em] text-amber-100">
-          A/B Test
+          טסט A/B
         </span>
         <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] ${PRIORITY_PILL[rec.priority]}`}>
-          {rec.priority}
+          {PRIORITY_LABEL[rec.priority]}
         </span>
         <span className="ml-auto text-[11px] font-semibold text-slate-400">
-          {Math.round(rec.confidence * 100)}% confidence
+          {Math.round(rec.confidence * 100)}% ביטחון
         </span>
       </div>
 
@@ -707,31 +722,33 @@ function ABTestCard({
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <div className="rounded-2xl border border-slate-700 bg-[#0f1732] p-3">
           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-            Control
+            בקרה
           </p>
           <p className="mt-1 text-sm font-medium text-slate-100">
-            {String(control?.name ?? control?.targeting ?? setup?.controlAdsetId ?? "Current setup")}
+            {String(control?.name ?? control?.targeting ?? setup?.controlAdsetId ?? "הגדרה קיימת")}
           </p>
           {setup?.controlAdsetId && (
-            <p className="mt-1 text-xs text-slate-400">Ad Set: {setup.controlAdsetId}</p>
+            <p className="mt-1 text-xs text-slate-400">קבוצת מודעות: {setup.controlAdsetId}</p>
           )}
         </div>
 
         <div className="rounded-2xl border border-amber-400/30 bg-amber-500/12 p-3">
           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-200">
-            Variant
+            וריאנט
           </p>
           <p className="mt-1 text-sm font-medium text-amber-100">
-            {String(variant?.targeting ?? "AI-proposed targeting variant")}
+            {String(variant?.targeting ?? "וריאנט טרגוט מוצע על ידי AI")}
           </p>
-          <p className="mt-1 text-xs text-amber-200/90">Budget: ${budget}/day</p>
+          <p className="mt-1 text-xs text-amber-200/90">
+            תקציב: <span className="ltr">${budget}/יום</span>
+          </p>
         </div>
       </div>
 
       {editing && (
         <div className="mt-3 space-y-2 rounded-2xl border border-amber-400/25 bg-[#131933] p-3">
           <label className="block text-xs font-medium text-slate-200">
-            Test budget (USD/day)
+            תקציב טסט (USD/יום)
             <input
               type="number"
               min={1}
@@ -741,7 +758,7 @@ function ABTestCard({
             />
           </label>
           <label className="block text-xs font-medium text-slate-200">
-            Custom audiences
+            קהלים מותאמים
             <input
               type="text"
               value={customAudiences}
@@ -750,7 +767,7 @@ function ABTestCard({
             />
           </label>
           <label className="block text-xs font-medium text-slate-200">
-            Interests
+            תחומי עניין
             <input
               type="text"
               value={interests}
@@ -776,7 +793,7 @@ function ABTestCard({
               className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-[#101935] px-3 text-sm font-medium text-slate-100 hover:bg-[#182345] sm:w-auto"
             >
               <XCircle className="h-4 w-4" />
-              Dismiss
+              דחייה
             </button>
             <button
               onClick={() => setEditing((value) => !value)}
@@ -784,7 +801,7 @@ function ABTestCard({
               className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-[#101935] px-3 text-sm font-medium text-slate-100 hover:bg-[#182345] sm:w-auto"
             >
               <Pencil className="h-4 w-4" />
-              Edit Parameters
+              עריכת פרמטרים
             </button>
             <button
               onClick={handleApprove}
@@ -796,7 +813,7 @@ function ABTestCard({
               ) : (
                 <TestTube2 className="h-4 w-4" />
               )}
-              Approve Test
+              אישור טסט
             </button>
           </div>
         </div>
@@ -814,7 +831,7 @@ function RecentSection({ items }: { items: Recommendation[] }) {
         onClick={() => setOpen((value) => !value)}
         className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-900/40"
       >
-        Completed ({items.length})
+        הושלמו ({items.length})
         {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
       </button>
 
@@ -830,7 +847,7 @@ function RecentSection({ items }: { items: Recommendation[] }) {
                 </span>
                 <p className="flex-1 truncate text-slate-300">{rec.title}</p>
                 <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] text-slate-400">
-                  {rec.status}
+                  {statusLabel(rec.status)}
                 </span>
               </div>
             );
@@ -910,18 +927,18 @@ export function ActionFeed({
     <section className="space-y-4">
       <header className="rounded-2xl border border-slate-800 bg-[#080f23] p-4 shadow-[0_18px_60px_-45px_rgba(56,189,248,0.65)]">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-semibold text-slate-100">AI Inbox</h2>
+          <h2 className="text-lg font-semibold text-slate-100">תיבת החלטות AI</h2>
           <span className="rounded-full border border-indigo-400/30 bg-indigo-500/15 px-2.5 py-1 text-xs font-semibold text-indigo-200">
-            {pending.length} pending
+            {pending.length} ממתינות
           </span>
           {highCount > 0 && (
             <span className="rounded-full border border-rose-400/35 bg-rose-500/15 px-2.5 py-1 text-xs font-semibold text-rose-200">
-              {highCount} urgent
+              {highCount} דחופות
             </span>
           )}
         </div>
         <p className="mt-1 text-sm text-slate-400">
-          Approve or dismiss recommendations like an operator inbox.
+          אישור או דחייה מהירה של המלצות, בפורמט תפעולי נקי.
         </p>
       </header>
 
@@ -930,8 +947,8 @@ export function ActionFeed({
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/20">
             <Brain className="h-6 w-6 text-indigo-200" />
           </div>
-          <p className="text-base font-semibold text-slate-100">No AI tasks today</p>
-          <p className="mt-1 text-sm text-slate-400">Monitoring is active across your managed accounts.</p>
+          <p className="text-base font-semibold text-slate-100">אין משימות פתוחות כרגע</p>
+          <p className="mt-1 text-sm text-slate-400">הניטור ממשיך לרוץ על החשבונות הפעילים שלך.</p>
         </div>
       )}
 
@@ -939,14 +956,14 @@ export function ActionFeed({
         <div className="space-y-4">
           {morning.length > 0 && (
             <div className="space-y-3">
-              <SectionTitle title="Morning Strategy" count={morning.length} tone="text-amber-200" />
+              <SectionTitle title="בוקר: פעולות צמיחה" count={morning.length} tone="text-amber-200" />
               {morning.map((item) => renderCard(item))}
             </div>
           )}
 
           {evening.length > 0 && (
             <div className="space-y-3">
-              <SectionTitle title="Evening Guard" count={evening.length} tone="text-cyan-200" />
+              <SectionTitle title="ערב: בקרת סיכון" count={evening.length} tone="text-cyan-200" />
               {evening.map((item) => renderCard(item))}
             </div>
           )}

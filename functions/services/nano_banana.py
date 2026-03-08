@@ -15,8 +15,10 @@ import base64
 import json
 import logging
 import os
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import quote
 
 import requests
 
@@ -344,9 +346,24 @@ HARD RULES (non-negotiable)
                     )
                     return url
                 except Exception:
-                    # Fall back to public URL (requires public bucket access)
-                    blob.make_public()
-                    return blob.public_url
+                    # Fallback 1: Firebase-style tokenized download URL (works with uniform bucket ACLs).
+                    try:
+                        token = str(uuid.uuid4())
+                        blob.metadata = {
+                            **(blob.metadata or {}),
+                            "firebaseStorageDownloadTokens": token,
+                        }
+                        blob.patch()
+                        encoded_path = quote(blob.name, safe="")
+                        bucket_for_url = bucket.name
+                        return (
+                            f"https://firebasestorage.googleapis.com/v0/b/{bucket_for_url}/o/"
+                            f"{encoded_path}?alt=media&token={token}"
+                        )
+                    except Exception:
+                        # Fallback 2: public URL (requires public bucket access).
+                        blob.make_public()
+                        return blob.public_url
             except Exception as exc:
                 last_error = exc
                 continue

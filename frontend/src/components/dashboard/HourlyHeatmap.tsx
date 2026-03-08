@@ -15,7 +15,7 @@ interface DayPerformanceChartProps {
   loading?: boolean;
 }
 
-const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAYS = ["ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳", "א׳"];
 
 export function HourlyHeatmap({ data, loading }: DayPerformanceChartProps) {
   const chartData = useMemo(() => {
@@ -44,9 +44,9 @@ export function HourlyHeatmap({ data, loading }: DayPerformanceChartProps) {
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-6">
-        <div className="mb-4 h-5 w-48 rounded bg-slate-800 skeleton" />
-        <div className="h-48 rounded bg-slate-800 skeleton" />
+      <div className="panel p-6">
+        <div className="mb-4 h-5 w-48 rounded bg-[var(--line)] skeleton" />
+        <div className="h-48 rounded bg-[var(--line)] skeleton" />
       </div>
     );
   }
@@ -54,10 +54,10 @@ export function HourlyHeatmap({ data, loading }: DayPerformanceChartProps) {
   const hasData = chartData.some((d) => d.spend > 0);
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6">
+    <div className="panel p-6">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-900">Spend by Day of Week</h3>
-        <span className="text-[11px] text-slate-500">Aggregated over period</span>
+        <h3 className="text-sm font-semibold text-[var(--text-primary)]">הוצאה לפי יום בשבוע</h3>
+        <span className="text-[11px] text-[var(--text-muted)]">מצטבר לכל הטווח</span>
       </div>
 
       {hasData ? (
@@ -88,7 +88,7 @@ export function HourlyHeatmap({ data, loading }: DayPerformanceChartProps) {
               }}
               labelStyle={{ color: "#e2e8f0", fontSize: 12, fontWeight: 600, marginBottom: 4 }}
               formatter={(value: number, name: string) => {
-                if (name === "spend") return [`$${value.toLocaleString()}`, "Spend"];
+                if (name === "spend") return [`$${value.toLocaleString()}`, "הוצאה"];
                 return [`${value}%`, "CTR"];
               }}
             />
@@ -96,8 +96,8 @@ export function HourlyHeatmap({ data, loading }: DayPerformanceChartProps) {
           </BarChart>
         </ResponsiveContainer>
       ) : (
-        <div className="flex h-48 items-center justify-center text-sm text-slate-500">
-          No data available for the selected period
+        <div className="flex h-48 items-center justify-center text-sm text-[var(--text-muted)]">
+          אין נתונים זמינים לטווח שנבחר
         </div>
       )}
     </div>

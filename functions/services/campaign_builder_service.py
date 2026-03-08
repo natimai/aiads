@@ -1123,7 +1123,12 @@ class CampaignBuilderService:
                 image_concepts = self.ai.generate_image_concepts(
                     offer=offer, language=language, creative_plan=cp,
                 )
-                prompts = image_concepts.get("image_generation_prompts", [])
+                prompts = self._ensure_image_prompts(
+                    image_concepts=image_concepts,
+                    creative_plan=cp,
+                    offer=offer,
+                    language=language,
+                )
                 image_urls = self._generate_images_from_prompts(prompts=prompts, account_id=account_id)
                 return {
                     "imageConcepts": {
@@ -1160,7 +1165,12 @@ class CampaignBuilderService:
                 language=language,
                 creative_plan=cp,
             )
-            prompts = image_concepts.get("image_generation_prompts", [])
+            prompts = self._ensure_image_prompts(
+                image_concepts=image_concepts,
+                creative_plan=cp,
+                offer=offer,
+                language=language,
+            )
             image_urls = self._generate_images_from_prompts(
                 prompts=prompts,
                 account_id=account_id,
@@ -1174,6 +1184,88 @@ class CampaignBuilderService:
             logger.warning("Art Director agent failed — skipping image concepts", exc_info=True)
 
         return blocks
+
+    def _ensure_image_prompts(
+        self,
+        *,
+        image_concepts: dict[str, Any],
+        creative_plan: dict[str, Any],
+        offer: str,
+        language: str,
+    ) -> list[str]:
+        raw_prompts = image_concepts.get("image_generation_prompts", []) if isinstance(image_concepts, dict) else []
+        prompts = [str(p or "").strip() for p in raw_prompts if str(p or "").strip()]
+        if prompts:
+            return prompts[:MAX_ART_DIRECTOR_IMAGES]
+        return self._build_fallback_image_prompts(
+            creative_plan=creative_plan,
+            offer=offer,
+            language=language,
+        )
+
+    def _build_fallback_image_prompts(
+        self,
+        *,
+        creative_plan: dict[str, Any],
+        offer: str,
+        language: str,
+    ) -> list[str]:
+        """Build deterministic backup prompts when Art Director output has no prompt list."""
+        primary_texts = creative_plan.get("primaryTexts") if isinstance(creative_plan.get("primaryTexts"), list) else []
+        headlines = creative_plan.get("headlines") if isinstance(creative_plan.get("headlines"), list) else []
+        angles = creative_plan.get("angles") if isinstance(creative_plan.get("angles"), list) else []
+        offer_text = str(offer or "the offer").strip() or "the offer"
+        is_hebrew = self._is_hebrew_language(language)
+
+        hook_1 = str(headlines[0] if headlines else "").strip()
+        hook_2 = str(headlines[1] if len(headlines) > 1 else hook_1).strip()
+        hook_3 = str(headlines[2] if len(headlines) > 2 else hook_2).strip()
+        angle_1 = str(angles[0] if angles else "").strip()
+        angle_2 = str(angles[1] if len(angles) > 1 else angle_1).strip()
+        copy_1 = str(primary_texts[0] if primary_texts else "").strip()
+
+        if is_hebrew:
+            return [
+                (
+                    f"צילום פרסומי ריאליסטי, סצנת כאב דרמטית שקשורה ל-{offer_text}. "
+                    f"תקריב רגשי, תאורה קולנועית, קומפוזיציה נקייה. "
+                    f"טקסט בולט בעברית על התמונה: '{hook_1 or 'הצעה משתלמת יותר'}'. "
+                    "ללא לוגואים וללא סימני מים."
+                ),
+                (
+                    f"צילום רחב קולנועי של רגע צורך אמיתי עבור {offer_text}. "
+                    f"הדגשת קונפליקט ופתרון עם אווירה אותנטית. "
+                    f"טקסט עברי ברור על התמונה: '{hook_2 or 'חוסכים בזמן ובכסף'}'. "
+                    f"סגנון: {angle_1 or 'פרימיום אמין'}, איכות גבוהה לפרסומת מטא."
+                ),
+                (
+                    f"קונספט split-screen לפני/אחרי עבור {offer_text}: צד אחד תסכול, צד שני הקלה וביטחון. "
+                    f"טקסט עברי קצר על התמונה: '{hook_3 or 'עוברים לפתרון חכם'}'. "
+                    f"תת-מסר מהקופי: '{copy_1[:90] if copy_1 else 'יחס אישי ותוצאה טובה יותר'}'. "
+                    f"סגנון משלים: {angle_2 or 'דרמטי וממוקד המרה'}."
+                ),
+            ][:MAX_ART_DIRECTOR_IMAGES]
+
+        return [
+            (
+                f"Photorealistic ad scene focused on a real pain moment for {offer_text}. "
+                f"Emotional close-up, cinematic lighting, clean composition. "
+                f"Typography overlay reads exactly: '{hook_1 or 'Get a better deal now'}'. "
+                "No logo, no watermark."
+            ),
+            (
+                f"Cinematic wide shot showing context and urgency for {offer_text}. "
+                f"Show contrast between stress and relief. "
+                f"Typography overlay reads exactly: '{hook_2 or 'Save time and money'}'. "
+                f"Visual angle: {angle_1 or 'high-converting direct response creative'}."
+            ),
+            (
+                f"Split-screen before/after concept for {offer_text}. "
+                f"Left side pain, right side positive outcome and confidence. "
+                f"Typography overlay reads exactly: '{hook_3 or 'Switch to a smarter option'}'. "
+                f"Supporting copy tone: {copy_1[:120] if copy_1 else 'fast and trusted solution'}."
+            ),
+        ][:MAX_ART_DIRECTOR_IMAGES]
 
     def _generate_images_from_prompts(
         self,
@@ -1436,7 +1528,12 @@ class CampaignBuilderService:
         image_concepts = self.ai.generate_image_concepts(
             offer=offer, language=language, creative_plan=creative_plan,
         )
-        prompts = image_concepts.get("image_generation_prompts", [])
+        prompts = self._ensure_image_prompts(
+            image_concepts=image_concepts,
+            creative_plan=creative_plan,
+            offer=offer,
+            language=language,
+        )
         image_urls = self._generate_images_from_prompts(prompts=prompts, account_id=account_id)
 
         next_blocks = dict(blocks)

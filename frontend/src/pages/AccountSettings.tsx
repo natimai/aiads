@@ -36,22 +36,21 @@ export default function AccountSettings() {
     if (success === "true") {
       setToast({
         type: "success",
-        message: `Connected ${count || ""} ad account${count !== "1" ? "s" : ""} successfully!`,
+        message: `חוברו ${count || ""} חשבונות בהצלחה`,
       });
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       setSearchParams({}, { replace: true });
     } else if (error) {
       const desc = searchParams.get("error_description") || error.replace(/_/g, " ");
-      setToast({ type: "error", message: `Connection failed: ${desc}` });
+      setToast({ type: "error", message: `חיבור נכשל: ${desc}` });
       setSearchParams({}, { replace: true });
     }
   }, [searchParams, setSearchParams, queryClient]);
 
   useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 6000);
-      return () => clearTimeout(timer);
-    }
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 6000);
+    return () => clearTimeout(timer);
   }, [toast]);
 
   const connect = useMutation({
@@ -66,7 +65,7 @@ export default function AccountSettings() {
     mutationFn: disconnectAccount,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      setToast({ type: "success", message: "Account disconnected" });
+      setToast({ type: "success", message: "החשבון נותק" });
     },
   });
 
@@ -84,8 +83,8 @@ export default function AccountSettings() {
     onSuccess: (data) => {
       const ok = data.synced.filter((s) => !s.error);
       const failed = data.synced.filter((s) => s.error);
-      let msg = `Synced ${ok.length} account${ok.length !== 1 ? "s" : ""}`;
-      if (failed.length) msg += ` (${failed.length} failed)`;
+      let msg = `סונכרנו ${ok.length} חשבונות`;
+      if (failed.length) msg += ` (${failed.length} נכשלו)`;
       setToast({ type: failed.length ? "error" : "success", message: msg });
       queryClient.invalidateQueries();
     },
@@ -97,24 +96,21 @@ export default function AccountSettings() {
     onSuccess: (data) => {
       setToast({
         type: "success",
-        message: `Synced: ${data.campaigns} campaigns, ${data.insights} insights`,
+        message: `סונכרן: ${data.campaigns} קמפיינים, ${data.insights} תובנות`,
       });
       queryClient.invalidateQueries();
     },
     onError: (err: Error) => setToast({ type: "error", message: err.message }),
   });
 
-  const managedCount = accounts.filter((a) => a.isManagedByPlatform).length;
+  const managedCount = accounts.filter((account) => account.isManagedByPlatform).length;
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      {/* Toast */}
+    <div className="space-y-6 max-w-4xl reveal-up">
       {toast && (
         <div
-          className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm ${
-            toast.type === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border-rose-200 bg-rose-50 text-rose-700"
+          className={`panel flex items-center gap-3 px-4 py-3 text-sm ${
+            toast.type === "success" ? "text-emerald-200" : "text-rose-200"
           }`}
         >
           {toast.type === "success" ? (
@@ -123,108 +119,98 @@ export default function AccountSettings() {
             <AlertTriangle className="h-5 w-5 shrink-0" />
           )}
           <span className="flex-1">{toast.message}</span>
-          <button onClick={() => setToast(null)} className="text-xs opacity-60 hover:opacity-100">
-            Dismiss
+          <button onClick={() => setToast(null)} className="text-xs opacity-70 hover:opacity-100">
+            סגירה
           </button>
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link
-          to="/settings"
-          className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <div className="flex-1">
-          <h2 className="text-xl font-bold text-slate-900">Account Setup</h2>
-          <p className="text-sm text-slate-500">
-            Connect accounts and toggle which ones Nati AI should actively manage.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {accounts.length > 0 && (
-            <button
-              onClick={() => syncAll.mutate()}
-              disabled={syncAll.isPending}
-              className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+      <section className="panel p-5 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <Link
+              to="/settings"
+              className="focus-ring rounded-lg border border-[var(--line)] p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-soft)]"
             >
-              {syncAll.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              Sync All
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <div>
+              <h2 className="brand-display text-2xl text-[var(--text-primary)]">ניהול חשבונות</h2>
+              <p className="text-sm text-[var(--text-secondary)]">
+                חיבור, הפעלה וסנכרון חשבונות שינוהלו אוטומטית במערכת.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {accounts.length > 0 && (
+              <button
+                onClick={() => syncAll.mutate()}
+                disabled={syncAll.isPending}
+                className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-4 text-sm font-medium text-[var(--text-primary)] disabled:opacity-50"
+              >
+                {syncAll.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                סנכרון הכל
+              </button>
+            )}
+            <button
+              onClick={() => connect.mutate()}
+              disabled={connect.isPending}
+              className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--line-strong)] bg-[linear-gradient(135deg,#5fe8c2_0%,#81b8ff_100%)] px-4 text-sm font-semibold text-[#041325] disabled:opacity-50"
+            >
+              {connect.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              חיבור חשבון
             </button>
-          )}
-          <button
-            onClick={() => connect.mutate()}
-            disabled={connect.isPending}
-            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 shadow-sm transition-colors"
-          >
-            {connect.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            Connect Account
-          </button>
-        </div>
-      </div>
-
-      {/* Info banner */}
-      {accounts.length > 0 && (
-        <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
-          <div className="flex items-center gap-2 text-sm">
-            <Zap className="h-4 w-4 text-indigo-600 shrink-0" />
-            <span className="font-semibold text-indigo-700">
-              {managedCount} of {accounts.length} accounts active
-            </span>
-            <span className="text-indigo-600/70">
-              — Only active accounts appear in the header selector and receive AI analysis.
-            </span>
           </div>
         </div>
-      )}
 
-      {/* Account table */}
+        {accounts.length > 0 && (
+          <div className="panel-soft mt-4 px-4 py-3">
+            <div className="flex items-center gap-2 text-sm">
+              <Zap className="h-4 w-4 shrink-0 text-[var(--accent)]" />
+              <span className="font-semibold text-[var(--text-primary)]">
+                {managedCount} מתוך {accounts.length} חשבונות פעילים
+              </span>
+              <span className="text-[var(--text-secondary)]">
+                רק חשבונות פעילים מקבלים ניתוח והמלצות AI
+              </span>
+            </div>
+          </div>
+        )}
+      </section>
+
       {accounts.length > 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          {/* Table header */}
-          <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 border-b border-slate-100 bg-slate-50 px-5 py-3">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Account</span>
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Is Active</span>
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Status</span>
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Actions</span>
+        <div className="panel overflow-hidden">
+          <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 border-b border-[var(--line)] bg-[var(--bg-soft)] px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
+            <span>חשבון</span>
+            <span>פעיל למערכת</span>
+            <span>סטטוס</span>
+            <span>פעולות</span>
           </div>
 
           {accounts.map((account) => (
             <div
               key={account.id}
-              className={`grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 border-b border-slate-100 px-5 py-4 last:border-b-0 transition-colors ${
-                account.isManagedByPlatform ? "bg-white" : "bg-slate-50/50"
+              className={`grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 border-b border-[var(--line)] px-5 py-4 last:border-b-0 ${
+                account.isManagedByPlatform ? "" : "opacity-80"
               }`}
             >
-              {/* Account info */}
               <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-slate-800">{account.accountName}</h3>
-                </div>
-                <div className="mt-0.5 flex items-center gap-3 text-[11px] text-slate-400">
-                  <span>ID: {account.id}</span>
-                  <span>{account.currency}</span>
+                <h3 className="text-sm font-semibold text-[var(--text-primary)]">{account.accountName}</h3>
+                <div className="mt-0.5 flex flex-wrap items-center gap-3 text-[11px] text-[var(--text-muted)]">
+                  <span className="ltr">ID: {account.id}</span>
+                  <span className="ltr">{account.currency}</span>
                   {account.businessName && <span>{account.businessName}</span>}
                 </div>
                 {account.tokenExpiry && (
                   <div className="mt-1 flex items-center gap-1 text-[11px]">
-                    <Clock className="h-3 w-3 text-slate-400" />
-                    <span
-                      className={
-                        new Date(account.tokenExpiry) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-                          ? "text-amber-600"
-                          : "text-slate-400"
-                      }
-                    >
-                      Token: {new Date(account.tokenExpiry).toLocaleDateString()}
+                    <Clock className="h-3 w-3 text-[var(--text-muted)]" />
+                    <span className="text-[var(--text-secondary)]">
+                      טוקן: {new Date(account.tokenExpiry).toLocaleDateString("he-IL")}
                     </span>
                   </div>
                 )}
               </div>
 
-              {/* Is Active Toggle */}
               <div className="flex flex-col items-center gap-1">
                 <button
                   onClick={() =>
@@ -235,65 +221,61 @@ export default function AccountSettings() {
                   }
                   disabled={toggleManaged.isPending}
                   className={`relative h-6 w-11 rounded-full transition-colors disabled:opacity-50 ${
-                    account.isManagedByPlatform ? "bg-indigo-600" : "bg-slate-200"
+                    account.isManagedByPlatform ? "bg-[var(--accent-2)]" : "bg-[var(--bg-soft)]"
                   }`}
-                  title={account.isManagedByPlatform ? "Click to deactivate" : "Click to activate"}
+                  title={account.isManagedByPlatform ? "לחיצה לנטרול" : "לחיצה להפעלה"}
                 >
                   <span
                     className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                      account.isManagedByPlatform ? "translate-x-[22px]" : "translate-x-0.5"
+                      account.isManagedByPlatform ? "-translate-x-[22px]" : "-translate-x-0.5"
                     }`}
                   />
                 </button>
-                <span className={`text-[10px] font-medium ${account.isManagedByPlatform ? "text-indigo-600" : "text-slate-400"}`}>
+                <span className="text-[10px] font-medium text-[var(--text-secondary)]">
                   {account.isManagedByPlatform ? "ON" : "OFF"}
                 </span>
               </div>
 
-              {/* Meta status badge */}
               <div>
                 <span
                   className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
                     account.isActive
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "bg-rose-50 text-rose-700"
+                      ? "bg-emerald-500/20 text-emerald-100"
+                      : "bg-rose-500/20 text-rose-200"
                   }`}
                 >
-                  {account.isActive ? "Active" : "Inactive"}
+                  {account.isActive ? "פעיל" : "לא פעיל"}
                 </span>
               </div>
 
-              {/* Action buttons */}
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => syncOne.mutate(account.id)}
                   disabled={syncOne.isPending}
-                  className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-slate-500 transition-colors hover:border-indigo-200 hover:text-indigo-600 disabled:opacity-50"
+                  className="focus-ring inline-flex min-h-9 items-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--text-primary)] disabled:opacity-50"
                 >
                   {syncOne.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                  Sync
+                  סנכרון
                 </button>
                 <button
                   onClick={() => disconnect.mutate(account.id)}
                   disabled={disconnect.isPending}
-                  className="flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-medium text-rose-600 transition-colors hover:bg-rose-100 disabled:opacity-50"
+                  className="focus-ring inline-flex min-h-9 items-center gap-1 rounded-lg border border-rose-400/35 bg-rose-500/12 px-2.5 py-1.5 text-[11px] font-medium text-rose-200 disabled:opacity-50"
                 >
                   <Trash2 className="h-3 w-3" />
-                  Remove
+                  הסרה
                 </button>
               </div>
             </div>
           ))}
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white py-16">
-          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
-            <Shield className="h-6 w-6 text-slate-400" />
+        <div className="panel flex flex-col items-center justify-center py-16">
+          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--line)] bg-[var(--bg-soft)]">
+            <Shield className="h-6 w-6 text-[var(--text-muted)]" />
           </div>
-          <p className="text-sm font-medium text-slate-700">No accounts connected</p>
-          <p className="mt-1 text-xs text-slate-500">
-            Click &ldquo;Connect Account&rdquo; to link your Meta Ad Account
-          </p>
+          <p className="text-sm font-medium text-[var(--text-primary)]">אין חשבונות מחוברים</p>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">לחץ על "חיבור חשבון" כדי להתחיל</p>
         </div>
       )}
     </div>

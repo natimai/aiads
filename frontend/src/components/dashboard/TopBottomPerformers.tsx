@@ -19,9 +19,9 @@ interface TopBottomPerformersProps {
 export function TopBottomPerformers({ campaigns, loading }: TopBottomPerformersProps) {
   if (loading) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-6">
-        <div className="mb-4 h-5 w-40 rounded bg-slate-800 skeleton" />
-        <div className="h-64 rounded bg-slate-800 skeleton" />
+      <div className="panel p-6">
+        <div className="mb-4 h-5 w-40 rounded bg-[var(--line)] skeleton" />
+        <div className="h-64 rounded bg-[var(--line)] skeleton" />
       </div>
     );
   }
@@ -39,8 +39,8 @@ export function TopBottomPerformers({ campaigns, loading }: TopBottomPerformersP
   const data = [...top5, ...bottom5.filter((b) => !top5.some((t) => t.name === b.name))];
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5">
-      <h3 className="mb-4 text-sm font-semibold text-slate-900">Top / Bottom Performers</h3>
+    <div className="panel p-5">
+      <h3 className="mb-4 text-sm font-semibold text-[var(--text-primary)]">מובילים וחלשים</h3>
 
       {data.length > 0 ? (
         <ResponsiveContainer width="100%" height={260}>
@@ -86,8 +86,8 @@ export function TopBottomPerformers({ campaigns, loading }: TopBottomPerformersP
           </BarChart>
         </ResponsiveContainer>
       ) : (
-        <div className="flex h-64 items-center justify-center text-sm text-slate-500">
-          No performance data available
+        <div className="flex h-64 items-center justify-center text-sm text-[var(--text-muted)]">
+          אין נתוני ביצועים זמינים
         </div>
       )}
     </div>

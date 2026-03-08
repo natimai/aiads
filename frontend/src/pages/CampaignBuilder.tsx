@@ -74,6 +74,13 @@ type CreativeForm = {
   hooks: string;
 };
 
+function objectiveLabel(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "lead" || normalized === "outcome_leads") return "לידים";
+  if (normalized === "sales" || normalized === "outcome_sales") return "מכירות";
+  return value;
+}
+
 export default function CampaignBuilder() {
   const navigate = useNavigate();
   const { setSelectedAccountId } = useAccounts();
@@ -177,20 +184,20 @@ export default function CampaignBuilder() {
 
   const publishValidation = useMemo(() => {
     const errors: string[] = [];
-    if (!draft) return { valid: false, errors: ["Generate a draft first."] };
+    if (!draft) return { valid: false, errors: ["צריך לייצר טיוטה לפני פרסום."] };
 
     const budget = Number(draft.blocks?.campaignPlan?.dailyBudget ?? 0);
     const primaryTexts = draft.blocks?.creativePlan?.primaryTexts ?? [];
     const headlines = draft.blocks?.creativePlan?.headlines ?? [];
 
     if (budget <= 0) {
-      errors.push("Daily budget must be greater than 0.");
+      errors.push("התקציב היומי חייב להיות גדול מ־0.");
     }
     if (!primaryTexts.length || primaryTexts.every((text) => !String(text).trim())) {
-      errors.push("At least one primary text is required.");
+      errors.push("חובה לפחות טקסט ראשי אחד.");
     }
     if (!headlines.length || headlines.every((text) => !String(text).trim())) {
-      errors.push("At least one headline is required.");
+      errors.push("חובה לפחות כותרת אחת.");
     }
 
     return { valid: errors.length === 0, errors };
@@ -209,11 +216,11 @@ export default function CampaignBuilder() {
     setPublishSuccess("");
 
     if (!brief.offerProduct.trim()) {
-      setErrorMessage("Product / offer description is required.");
+      setErrorMessage("יש להזין תיאור מוצר או הצעה.");
       return;
     }
     if (brief.budget <= 0) {
-      setErrorMessage("Daily budget must be greater than 0.");
+      setErrorMessage("התקציב היומי חייב להיות גדול מ־0.");
       return;
     }
 
@@ -237,7 +244,7 @@ export default function CampaignBuilder() {
       setSearchParams(nextParams);
       setStep(2);
     } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : "Failed to generate draft");
+      setErrorMessage(err instanceof Error ? err.message : "יצירת הטיוטה נכשלה.");
     }
   };
 
@@ -258,7 +265,7 @@ export default function CampaignBuilder() {
       setRegenOpen((prev) => ({ ...prev, [section]: false }));
       setRegenPrompt((prev) => ({ ...prev, [section]: "" }));
     } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : "Regeneration failed");
+      setErrorMessage(err instanceof Error ? err.message : "שחזור הבלוק נכשל.");
     } finally {
       setRegeneratingBlock(null);
     }
@@ -285,7 +292,7 @@ export default function CampaignBuilder() {
       });
       setEditing((prev) => ({ ...prev, strategy: false }));
     } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : "Failed saving strategy block");
+      setErrorMessage(err instanceof Error ? err.message : "שמירת בלוק האסטרטגיה נכשלה.");
     }
   };
 
@@ -322,7 +329,7 @@ export default function CampaignBuilder() {
       });
       setEditing((prev) => ({ ...prev, audience: false }));
     } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : "Failed saving audience block");
+      setErrorMessage(err instanceof Error ? err.message : "שמירת בלוק הקהל נכשלה.");
     }
   };
 
@@ -355,7 +362,7 @@ export default function CampaignBuilder() {
       });
       setEditing((prev) => ({ ...prev, creative: false }));
     } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : "Failed saving creative block");
+      setErrorMessage(err instanceof Error ? err.message : "שמירת בלוק הקריאייטיב נכשלה.");
     }
   };
 
@@ -369,7 +376,7 @@ export default function CampaignBuilder() {
         userInstructions,
       });
     } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : "Image regeneration failed");
+      setErrorMessage(err instanceof Error ? err.message : "יצירת התמונות מחדש נכשלה.");
     }
   };
 
@@ -381,20 +388,20 @@ export default function CampaignBuilder() {
 
     try {
       const result = await publishMutation.mutateAsync({ draftId: activeDraftId });
-      setPublishSuccess(`Published campaign ${result.campaignId} successfully.`);
+      setPublishSuccess(`הקמפיין פורסם בהצלחה (ID: ${result.campaignId}).`);
 
       navigate("/", {
         state: {
           toast: {
             type: "success",
-            message: "Campaign draft published to Meta Ads successfully.",
+            message: "טיוטת הקמפיין פורסמה בהצלחה ל־Meta Ads.",
           },
         },
       });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Publish failed";
+      const message = err instanceof Error ? err.message : "הפרסום נכשל.";
       if (message.includes("Budget exceeds safety limits")) {
-        setErrorMessage("Budget exceeds safety limits. Please edit the budget block.");
+        setErrorMessage("התקציב חורג ממגבלות הבטיחות. עדכן את בלוק התקציב לפני פרסום.");
       } else {
         setErrorMessage(message);
       }
@@ -408,16 +415,16 @@ export default function CampaignBuilder() {
           <div>
             <p className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/30 bg-violet-500/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-100">
               <WandSparkles className="h-3.5 w-3.5" />
-              AI Campaign Builder
+              בונה קמפיינים חכם
             </p>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-100">
-              Build and Publish in Minutes
+              בנייה ופרסום מבוקר בדקות
             </h1>
             <p className="mt-1 text-sm text-slate-400">
-              Brief your goal, refine AI blocks, and publish to Meta from one guided wizard.
+              בריף ממוקד, שיפור בלוקים מבוססי AI ופרסום בטוח ממסך אחד.
             </p>
           </div>
-          <p className="text-xs text-slate-500">Draft ID: {activeDraftId ?? "Not generated"}</p>
+          <p className="text-xs text-slate-500">מזהה טיוטה: {activeDraftId ?? "טרם נוצר"}</p>
         </div>
       </header>
 
@@ -430,71 +437,74 @@ export default function CampaignBuilder() {
           <div className="mb-4 flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-indigo-500 dark:text-indigo-300" />
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-indigo-700 dark:text-indigo-100">
-              1. Brief
+              1. בריף
             </h2>
           </div>
 
           <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
-            Define objective, market, and offer. The agent will generate a complete AI draft.
+            הגדרת יעד, שוק והצעה. המערכת תייצר טיוטת AI מלאה.
           </p>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <BriefFieldCard
-              title="Campaign Setup"
-              subtitle="Structured controls for objective, market, and spend."
+              title="הגדרת קמפיין"
+              subtitle="שליטה ביעד, שוק ותקציב."
             >
               <IconSelectField
-                label="Campaign Objective"
+                label="יעד הקמפיין"
                 value={brief.objective}
                 onChange={(value) =>
                   setBrief((prev) => ({ ...prev, objective: value as "lead" | "sales" }))
                 }
                 icon={Target}
               >
-                <option value="lead">Lead</option>
-                <option value="sales">Sales</option>
+                <option value="lead">לידים</option>
+                <option value="sales">מכירות</option>
               </IconSelectField>
 
               <IconInputField
-                label="Target Geo"
+                label="מדינת יעד"
                 value={brief.targetGeo}
                 onChange={(value) => setBrief((prev) => ({ ...prev, targetGeo: value }))}
                 icon={MapPin}
+                dir="ltr"
               />
 
               <IconInputField
-                label="Language"
+                label="שפת המודעות"
                 value={brief.language}
                 onChange={(value) => setBrief((prev) => ({ ...prev, language: value }))}
                 icon={Globe}
+                dir="ltr"
               />
 
               <IconInputField
-                label="Daily Budget"
+                label="תקציב יומי"
                 type="number"
                 value={String(brief.budget)}
                 onChange={(value) => setBrief((prev) => ({ ...prev, budget: Number(value || 0) }))}
                 icon={Banknote}
-                helperText="Daily spend limit in your account's currency."
+                helperText="סכום מקסימלי ליום לפי מטבע החשבון."
+                dir="ltr"
               />
             </BriefFieldCard>
 
             <BriefFieldCard
-              title="Offer Brief"
-              subtitle="Give the agent context-rich input for better draft quality."
+              title="בריף הצעה"
+              subtitle="ככל שתספק יותר הקשר, איכות הטיוטה תעלה."
             >
               <IconTextareaField
-                label="Product / Offer Description"
+                label="תיאור מוצר / הצעה"
                 value={brief.offerProduct}
                 onChange={(value) => setBrief((prev) => ({ ...prev, offerProduct: value }))}
                 icon={FileText}
                 rows={5}
-                placeholder="e.g., Car insurance by Yair Yosefi, targeting young drivers, offering 24/7 human support..."
-                helperText="Paste the client's brief, target audience pain points, and core value proposition."
+                placeholder="לדוגמה: ביטוח רכב לנהגים צעירים, מוקד אנושי 24/7, הצעת מחיר תוך 3 דקות."
+                helperText="הוסף קהל יעד, כאב מרכזי והצעת ערך כדי לשפר את איכות הטיוטה."
               />
 
               <IconInputField
-                label="Campaign Name (optional)"
+                label="שם קמפיין (אופציונלי)"
                 value={brief.campaignName}
                 onChange={(value) => setBrief((prev) => ({ ...prev, campaignName: value }))}
                 icon={Sparkles}
@@ -504,20 +514,22 @@ export default function CampaignBuilder() {
 
           <details className="mt-4 rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-[#0b1226]">
             <summary className="cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300">
-              Advanced Publish Fields
+              שדות מתקדמים לפרסום
             </summary>
             <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
               <IconInputField
-                label="Meta Page ID"
+                label="מזהה עמוד Meta"
                 value={brief.pageId}
                 onChange={(value) => setBrief((prev) => ({ ...prev, pageId: value }))}
                 icon={FileText}
+                dir="ltr"
               />
               <IconInputField
-                label="Destination URL"
+                label="כתובת יעד"
                 value={brief.destinationUrl}
                 onChange={(value) => setBrief((prev) => ({ ...prev, destinationUrl: value }))}
                 icon={Globe}
+                dir="ltr"
               />
             </div>
           </details>
@@ -530,12 +542,12 @@ export default function CampaignBuilder() {
             {createMutation.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Generating AI Draft
+                מייצר טיוטת AI
               </>
             ) : (
               <>
                 <Sparkles className="h-4 w-4" />
-                Generate AI Draft
+                יצירת טיוטת AI
               </>
             )}
           </button>
@@ -545,8 +557,8 @@ export default function CampaignBuilder() {
       {step === 2 && draft && (
         <section className="space-y-4 pb-24 md:pb-0">
           <BlockCard
-            title="Strategy"
-            subtitle="Campaign setup, objective alignment, and rationale."
+            title="אסטרטגיה"
+            subtitle="מבנה קמפיין, יישור ליעד ונימוק החלטות."
             loading={regeneratingBlock === "STRATEGY" && regenerateMutation.isPending}
             onEdit={() => setEditing((prev) => ({ ...prev, strategy: !prev.strategy }))}
             onRegenerate={() => setRegenOpen((prev) => ({ ...prev, strategy: !prev.strategy }))}
@@ -562,25 +574,26 @@ export default function CampaignBuilder() {
             {editing.strategy ? (
               <div className="space-y-3">
                 <InputField
-                  label="Campaign Name"
+                  label="שם קמפיין"
                   value={strategyForm.name}
                   onChange={(value) => setStrategyForm((prev) => ({ ...prev, name: value }))}
                 />
                 <InputField
-                  label="Objective"
+                  label="יעד"
                   value={strategyForm.objective}
                   onChange={(value) => setStrategyForm((prev) => ({ ...prev, objective: value }))}
                 />
                 <InputField
-                  label="Daily Budget"
+                  label="תקציב יומי"
                   type="number"
                   value={String(strategyForm.dailyBudget)}
                   onChange={(value) =>
                     setStrategyForm((prev) => ({ ...prev, dailyBudget: Number(value || 0) }))
                   }
+                  dir="ltr"
                 />
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-slate-300">Strategy Note</span>
+                  <span className="mb-1 block text-xs font-medium text-slate-300">הערת אסטרטגיה</span>
                   <textarea
                     rows={4}
                     value={strategyForm.reasoning}
@@ -595,15 +608,15 @@ export default function CampaignBuilder() {
                   disabled={busy}
                   className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 px-4 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50 sm:w-auto"
                 >
-                  Save Strategy
+                  שמירת אסטרטגיה
                 </button>
               </div>
             ) : (
               <div className="grid gap-3 md:grid-cols-2">
-                <ReadOnlyField label="Campaign" value={draft.blocks.campaignPlan.name} />
-                <ReadOnlyField label="Objective" value={draft.blocks.campaignPlan.objective} />
+                <ReadOnlyField label="קמפיין" value={draft.blocks.campaignPlan.name} />
+                <ReadOnlyField label="יעד" value={objectiveLabel(draft.blocks.campaignPlan.objective)} />
                 <ReadOnlyField
-                  label="Daily Budget"
+                  label="תקציב יומי"
                   value={`$${draft.blocks.campaignPlan.dailyBudget}`}
                 />
                 <div className="md:col-span-2 rounded-2xl border border-slate-700 bg-[#0d1430] p-3 text-sm text-slate-300">
@@ -614,8 +627,8 @@ export default function CampaignBuilder() {
           </BlockCard>
 
           <BlockCard
-            title="Audience"
-            subtitle="Geo, age, interests, and lookalike hints."
+            title="קהל יעד"
+            subtitle="גיאוגרפיה, גיל, תחומי עניין ורמזי Lookalike."
             loading={regeneratingBlock === "AUDIENCE" && regenerateMutation.isPending}
             onEdit={() => setEditing((prev) => ({ ...prev, audience: !prev.audience }))}
             onRegenerate={() => setRegenOpen((prev) => ({ ...prev, audience: !prev.audience }))}
@@ -631,7 +644,7 @@ export default function CampaignBuilder() {
             {editing.audience ? (
               <div className="space-y-3">
                 <InputField
-                  label="Geo (comma separated)"
+                  label="מדינות יעד (מופרד בפסיקים)"
                   value={audienceForm.countriesCsv}
                   onChange={(value) =>
                     setAudienceForm((prev) => ({ ...prev, countriesCsv: value }))
@@ -639,31 +652,33 @@ export default function CampaignBuilder() {
                 />
                 <div className="grid grid-cols-2 gap-3">
                   <InputField
-                    label="Age Min"
+                    label="גיל מינימום"
                     type="number"
                     value={String(audienceForm.ageMin)}
                     onChange={(value) =>
                       setAudienceForm((prev) => ({ ...prev, ageMin: Number(value || 21) }))
                     }
+                    dir="ltr"
                   />
                   <InputField
-                    label="Age Max"
+                    label="גיל מקסימום"
                     type="number"
                     value={String(audienceForm.ageMax)}
                     onChange={(value) =>
                       setAudienceForm((prev) => ({ ...prev, ageMax: Number(value || 55) }))
                     }
+                    dir="ltr"
                   />
                 </div>
                 <InputField
-                  label="Interests"
+                  label="תחומי עניין"
                   value={audienceForm.interestsText}
                   onChange={(value) =>
                     setAudienceForm((prev) => ({ ...prev, interestsText: value }))
                   }
                 />
                 <InputField
-                  label="Lookalike Hints"
+                  label="רמזי Lookalike"
                   value={audienceForm.strategyNote}
                   onChange={(value) =>
                     setAudienceForm((prev) => ({ ...prev, strategyNote: value }))
@@ -674,25 +689,25 @@ export default function CampaignBuilder() {
                   disabled={busy}
                   className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-indigo-500 px-4 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50 sm:w-auto"
                 >
-                  Save Audience
+                  שמירת קהל
                 </button>
               </div>
             ) : (
               <div className="grid gap-3 md:grid-cols-2">
                 <ReadOnlyField
-                  label="Geo"
+                  label="מדינות יעד"
                   value={(draft.blocks.audiencePlan.geo?.countries ?? []).join(", ") || "-"}
                 />
                 <ReadOnlyField
-                  label="Age"
+                  label="טווח גיל"
                   value={`${draft.blocks.audiencePlan.ageRange?.min}-${draft.blocks.audiencePlan.ageRange?.max}`}
                 />
                 <ReadOnlyField
-                  label="Interests"
+                  label="תחומי עניין"
                   value={(draft.blocks.audiencePlan.interests ?? []).join(", ") || "-"}
                 />
                 <ReadOnlyField
-                  label="Lookalike Hints"
+                  label="רמזי Lookalike"
                   value={(draft.blocks.audiencePlan.lookalikeHints ?? []).join(", ") || "-"}
                 />
               </div>
@@ -700,8 +715,8 @@ export default function CampaignBuilder() {
           </BlockCard>
 
           <BlockCard
-            title="Creative"
-            subtitle="Primary texts, headlines, hooks, and generated image concepts."
+            title="קריאייטיב"
+            subtitle="טקסטים ראשיים, כותרות, הוקים וקונספטים לתמונות."
             loading={regeneratingBlock === "CREATIVE" && regenerateMutation.isPending}
             onEdit={() => setEditing((prev) => ({ ...prev, creative: !prev.creative }))}
             onRegenerate={() => setRegenOpen((prev) => ({ ...prev, creative: !prev.creative }))}
@@ -718,7 +733,7 @@ export default function CampaignBuilder() {
               <div className="space-y-3">
                 <label className="block">
                   <span className="mb-1 block text-xs font-medium text-slate-300">
-                    Primary Texts (one per line)
+                    טקסטים ראשיים (שורה לכל וריאציה)
                   </span>
                   <textarea
                     rows={5}
@@ -731,7 +746,7 @@ export default function CampaignBuilder() {
                 </label>
                 <label className="block">
                   <span className="mb-1 block text-xs font-medium text-slate-300">
-                    Headlines (one per line)
+                    כותרות (שורה לכל וריאציה)
                   </span>
                   <textarea
                     rows={4}
@@ -743,7 +758,7 @@ export default function CampaignBuilder() {
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-slate-300">Hooks (one per line)</span>
+                  <span className="mb-1 block text-xs font-medium text-slate-300">הוקים (שורה לכל וריאציה)</span>
                   <textarea
                     rows={4}
                     value={creativeForm.hooks}
@@ -758,31 +773,31 @@ export default function CampaignBuilder() {
                   disabled={busy}
                   className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-indigo-500 px-4 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50 sm:w-auto"
                 >
-                  Save Creative
+                  שמירת קריאייטיב
                 </button>
               </div>
             ) : (
               <div className="grid gap-4 lg:grid-cols-3">
                 <ListPanel
-                  title="Primary Texts"
+                  title="טקסטים ראשיים"
                   values={(draft.blocks.creativePlan.primaryTexts ?? []).filter((value) =>
                     String(value).trim()
                   )}
-                  empty="No primary texts generated yet."
+                  empty="עדיין לא נוצרו טקסטים ראשיים."
                 />
                 <ListPanel
-                  title="Headlines"
+                  title="כותרות"
                   values={(draft.blocks.creativePlan.headlines ?? []).filter((value) =>
                     String(value).trim()
                   )}
-                  empty="No headlines generated yet."
+                  empty="עדיין לא נוצרו כותרות."
                 />
                 <ListPanel
-                  title="Hooks"
+                  title="הוקים"
                   values={(draft.blocks.creativePlan.angles ?? []).filter((value) =>
                     String(value).trim()
                   )}
-                  empty="No hooks generated yet."
+                  empty="עדיין לא נוצרו הוקים."
                 />
               </div>
             )}
@@ -800,13 +815,13 @@ export default function CampaignBuilder() {
               className="inline-flex min-h-11 w-full items-center justify-center gap-1 rounded-xl border border-slate-700 bg-[#0e1630] px-3 text-sm text-slate-200 hover:bg-[#162041] sm:w-auto"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back to Brief
+              חזרה לבריף
             </button>
             <button
               onClick={() => setStep(3)}
               className="inline-flex min-h-11 w-full items-center justify-center gap-1 rounded-xl bg-indigo-500 px-4 text-sm font-semibold text-white hover:bg-indigo-400 sm:w-auto"
             >
-              Review and Publish
+              בדיקה ופרסום
               <ArrowRight className="h-4 w-4" />
             </button>
           </div>
@@ -817,23 +832,23 @@ export default function CampaignBuilder() {
         <section className="space-y-4 pb-24 md:pb-0">
           <div className="rounded-3xl border border-slate-800 bg-[#070d1f] p-5 shadow-[0_22px_65px_-48px_rgba(16,185,129,0.65)] sm:p-6">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-emerald-200">
-              3. Review & Publish
+              3. בדיקה ופרסום
             </h2>
 
             <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <ReadOnlyField label="Campaign" value={draft.blocks.campaignPlan.name} />
-              <ReadOnlyField label="Objective" value={draft.blocks.campaignPlan.objective} />
-              <ReadOnlyField label="Budget" value={`$${draft.blocks.campaignPlan.dailyBudget}/day`} />
+              <ReadOnlyField label="קמפיין" value={draft.blocks.campaignPlan.name} />
+              <ReadOnlyField label="יעד" value={objectiveLabel(draft.blocks.campaignPlan.objective)} />
+              <ReadOnlyField label="תקציב" value={`$${draft.blocks.campaignPlan.dailyBudget} ליום`} />
               <ReadOnlyField
-                label="Geo"
+                label="מדינות יעד"
                 value={(draft.blocks.audiencePlan.geo?.countries ?? []).join(", ") || "-"}
               />
               <ReadOnlyField
-                label="Primary Text Variations"
+                label="כמות וריאציות טקסט"
                 value={String((draft.blocks.creativePlan.primaryTexts ?? []).length)}
               />
               <ReadOnlyField
-                label="Generated Images"
+                label="כמות תמונות שנוצרו"
                 value={String((draft.blocks.imageConcepts?.imageUrls ?? []).length)}
               />
             </div>
@@ -841,7 +856,7 @@ export default function CampaignBuilder() {
 
           {!publishValidation.valid && (
             <div className="rounded-2xl border border-rose-400/35 bg-rose-500/12 p-4 text-sm text-rose-100">
-              <p className="font-semibold">Fix these before publishing:</p>
+              <p className="font-semibold">צריך לתקן לפני פרסום:</p>
               <ul className="mt-1 list-disc pl-5">
                 {publishValidation.errors.map((error, index) => (
                   <li key={index}>{error}</li>
@@ -856,7 +871,7 @@ export default function CampaignBuilder() {
               className="inline-flex min-h-11 items-center gap-1 rounded-xl border border-slate-700 bg-[#0e1630] px-3 text-sm text-slate-200 hover:bg-[#162041]"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back to AI Draft
+              חזרה לטיוטת AI
             </button>
             <button
               onClick={handlePublish}
@@ -866,12 +881,12 @@ export default function CampaignBuilder() {
               {publishMutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Publishing
+                  מפרסם
                 </>
               ) : (
                 <>
                   <Rocket className="h-4 w-4" />
-                  Publish to Meta
+                  פרסום ל־Meta Ads
                 </>
               )}
             </button>
@@ -887,7 +902,7 @@ export default function CampaignBuilder() {
               className="inline-flex min-h-11 w-full items-center justify-center gap-1 rounded-xl border border-slate-700 bg-[#111a34] text-sm text-slate-100"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back to AI Draft
+              חזרה לטיוטת AI
             </button>
             <button
               onClick={handlePublish}
@@ -897,12 +912,12 @@ export default function CampaignBuilder() {
               {publishMutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Publishing
+                  מפרסם
                 </>
               ) : (
                 <>
                   <Rocket className="h-4 w-4" />
-                  Publish to Meta
+                  פרסום ל־Meta Ads
                 </>
               )}
             </button>
@@ -931,13 +946,13 @@ export default function CampaignBuilder() {
 function WizardSteps({ step }: { step: Step }) {
   return (
     <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-      <StepItem step={1} active={step === 1} done={step > 1} label="Brief" />
-      <StepItem step={2} active={step === 2} done={step > 2} label="AI Draft" />
+      <StepItem step={1} active={step === 1} done={step > 1} label="בריף" />
+      <StepItem step={2} active={step === 2} done={step > 2} label="טיוטת AI" />
       <StepItem
         step={3}
         active={step === 3}
         done={false}
-        label="Review & Publish"
+        label="בדיקה ופרסום"
       />
     </div>
   );
@@ -964,7 +979,7 @@ function StepItem({
           : "border-slate-700 bg-[#0d152d] text-slate-400"
       }`}
     >
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em]">Step {step}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em]">שלב {step}</p>
       <p className="truncate font-medium">{label}</p>
     </div>
   );
@@ -998,14 +1013,14 @@ function BlockCard({
             className="inline-flex min-h-10 items-center gap-1 rounded-xl border border-slate-700 bg-[#111a34] px-3 text-xs font-medium text-slate-200 hover:bg-[#182345]"
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            Regenerate
+            צור מחדש
           </button>
           <button
             onClick={onEdit}
             className="inline-flex min-h-10 items-center gap-1 rounded-xl border border-slate-700 bg-[#111a34] px-3 text-xs font-medium text-slate-200 hover:bg-[#182345]"
           >
             <Pencil className="h-3.5 w-3.5" />
-            Edit
+            עריכה
           </button>
         </div>
       </div>
@@ -1043,13 +1058,11 @@ function RegeneratePrompt({
 
   return (
     <div className="mb-4 rounded-2xl border border-indigo-400/30 bg-indigo-500/12 p-3">
-      <label className="block text-xs font-medium text-indigo-100">
-        Regeneration Instructions
-      </label>
+      <label className="block text-xs font-medium text-indigo-100">הנחיות לשחזור</label>
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Example: More premium tone with stronger urgency"
+        placeholder="לדוגמה: טון יותר פרימיום עם דחיפות גבוהה יותר"
         className="mt-1 w-full rounded-xl border border-indigo-400/30 bg-[#0c1430] px-3 py-2 text-sm text-slate-100"
       />
       <button
@@ -1058,7 +1071,7 @@ function RegeneratePrompt({
         className="mt-2 inline-flex min-h-10 w-full items-center justify-center gap-1 rounded-xl bg-indigo-500 px-3 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50 sm:w-auto"
       >
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <WandSparkles className="h-4 w-4" />}
-        Regenerate Block
+        שחזור בלוק
       </button>
     </div>
   );
@@ -1089,7 +1102,7 @@ function ImageGallery({
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <ImageIcon className="h-4 w-4 text-cyan-300" />
-          <p className="text-sm font-semibold text-slate-100">Nano Banana Image Gallery</p>
+          <p className="text-sm font-semibold text-slate-100">גלריית תמונות Nano Banana</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -1097,7 +1110,7 @@ function ImageGallery({
             className="inline-flex min-h-10 items-center gap-1 rounded-xl border border-slate-700 bg-[#101935] px-3 text-xs font-medium text-slate-200"
           >
             <WandSparkles className="h-3.5 w-3.5" />
-            Add Prompt
+            הוסף הנחיה
           </button>
           <button
             onClick={() => onRegenerate(prompt.trim() || undefined)}
@@ -1105,18 +1118,18 @@ function ImageGallery({
             className="inline-flex min-h-10 items-center gap-1 rounded-xl bg-cyan-500 px-3 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
           >
             {regenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            Regenerate Images
+            צור תמונות מחדש
           </button>
         </div>
       </div>
 
       {promptOpen && (
         <div className="mb-3 rounded-xl border border-cyan-400/30 bg-cyan-500/10 p-3">
-          <label className="block text-xs font-medium text-cyan-100">Image Direction</label>
+          <label className="block text-xs font-medium text-cyan-100">כיוון קריאייטיב לתמונה</label>
           <input
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
-            placeholder="Example: Brighter lifestyle visuals with high contrast"
+            placeholder="לדוגמה: ויז'ואלים חיים יותר עם קונטרסט גבוה"
             className="mt-1 w-full rounded-xl border border-cyan-400/30 bg-[#0b1228] px-3 py-2 text-sm text-slate-100"
           />
         </div>
@@ -1139,7 +1152,7 @@ function ImageGallery({
                 >
                   <img
                     src={url}
-                    alt={`Concept ${index + 1}`}
+                    alt={`קונספט ${index + 1}`}
                     className="aspect-square w-full object-cover"
                     loading="lazy"
                   />
@@ -1150,7 +1163,7 @@ function ImageGallery({
             <div className="hidden md:columns-3 md:gap-3">
               {urls.map((url, index) => (
                 <div key={`${url}-${index}`} className="mb-3 break-inside-avoid overflow-hidden rounded-xl border border-slate-700">
-                  <img src={url} alt={`Concept ${index + 1}`} className="w-full object-cover" loading="lazy" />
+                  <img src={url} alt={`קונספט ${index + 1}`} className="w-full object-cover" loading="lazy" />
                   {prompts[index] && (
                     <p className="border-t border-slate-700 bg-[#0c1329] p-2 text-xs text-slate-300">{prompts[index]}</p>
                   )}
@@ -1160,7 +1173,7 @@ function ImageGallery({
           </>
         ) : prompts.length > 0 ? (
           <div className="space-y-2">
-            <p className="text-xs text-slate-400">Prompt set generated, waiting for image URLs:</p>
+            <p className="text-xs text-slate-400">נוצר סט פרומפטים, ממתין לכתובות תמונה:</p>
             {prompts.map((value, index) => (
               <p key={index} className="rounded-xl border border-slate-700 bg-[#111936] p-2 text-xs text-slate-300">
                 {index + 1}. {value}
@@ -1169,7 +1182,7 @@ function ImageGallery({
           </div>
         ) : (
           <p className="rounded-xl border border-dashed border-slate-700 bg-[#0b1227] p-4 text-sm text-slate-400">
-            No images yet. Use "Regenerate Images" to create a fresh creative set.
+            עדיין אין תמונות. לחץ על "צור תמונות מחדש" כדי לקבל סט קריאייטיב חדש.
           </p>
         )}
 
@@ -1177,7 +1190,7 @@ function ImageGallery({
           <div className="absolute inset-0 z-20 rounded-xl bg-[#070d1f]/85 p-3 backdrop-blur-sm">
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-cyan-100">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Generating new image set
+              יוצר סט תמונות חדש
             </div>
             <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
               {Array.from({ length: 6 }).map((_, index) => (
@@ -1236,7 +1249,7 @@ function BriefFieldCard({
 }
 
 const BRIEF_INPUT_BASE =
-  "w-full rounded-xl border border-slate-300 bg-white/90 py-2.5 pl-10 pr-3 text-sm text-slate-900 shadow-[inset_0_1px_2px_rgba(15,23,42,0.12)] outline-none transition-all placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/50 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:shadow-[inset_0_1px_2px_rgba(2,6,23,0.65)] dark:placeholder:text-slate-500";
+  "w-full rounded-xl border border-slate-300 bg-white/90 py-2.5 pl-3 pr-10 text-sm text-slate-900 shadow-[inset_0_1px_2px_rgba(15,23,42,0.12)] outline-none transition-all placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/50 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:shadow-[inset_0_1px_2px_rgba(2,6,23,0.65)] dark:placeholder:text-slate-500";
 
 function IconInputField({
   label,
@@ -1245,6 +1258,7 @@ function IconInputField({
   icon: Icon,
   helperText,
   type = "text",
+  dir = "rtl",
 }: {
   label: string;
   value: string;
@@ -1252,17 +1266,19 @@ function IconInputField({
   icon: LucideIcon;
   helperText?: string;
   type?: "text" | "number";
+  dir?: "rtl" | "ltr";
 }) {
   return (
     <label className="block">
       <span className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-300">{label}</span>
       <div className="relative">
-        <Icon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+        <Icon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
         <input
           value={value}
           type={type}
+          dir={dir}
           onChange={(event) => onChange(event.target.value)}
-          className={BRIEF_INPUT_BASE}
+          className={`${BRIEF_INPUT_BASE} ${dir === "ltr" ? "ltr" : ""}`}
         />
       </div>
       {helperText && <p className="mt-1 text-[11px] text-slate-500">{helperText}</p>}
@@ -1289,7 +1305,7 @@ function IconSelectField({
     <label className="block">
       <span className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-300">{label}</span>
       <div className="relative">
-        <Icon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+        <Icon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
         <select
           value={value}
           onChange={(event) => onChange(event.target.value)}
@@ -1324,7 +1340,7 @@ function IconTextareaField({
     <label className="block">
       <span className="mb-1 block text-xs font-medium text-slate-700 dark:text-slate-300">{label}</span>
       <div className="relative">
-        <Icon className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
+        <Icon className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
         <textarea
           rows={rows}
           value={value}
@@ -1343,11 +1359,13 @@ function InputField({
   value,
   onChange,
   type = "text",
+  dir = "rtl",
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: "text" | "number";
+  dir?: "rtl" | "ltr";
 }) {
   return (
     <label className="block">
@@ -1355,8 +1373,11 @@ function InputField({
       <input
         value={value}
         type={type}
+        dir={dir}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-xl border border-slate-700 bg-[#0c1328] px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400"
+        className={`w-full rounded-xl border border-slate-700 bg-[#0c1328] px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400 ${
+          dir === "ltr" ? "ltr" : ""
+        }`}
       />
     </label>
   );

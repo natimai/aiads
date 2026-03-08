@@ -63,10 +63,10 @@ export function useKeyboardShortcuts() {
 }
 
 export const SHORTCUTS = [
-  { key: "R", description: "Refresh all data" },
-  { key: "0", description: "Switch to All Accounts" },
-  { key: "1-9", description: "Switch to account by index" },
-  { key: "/", description: "Focus search input" },
-  { key: "?", description: "Toggle shortcuts help" },
-  { key: "Esc", description: "Close dialogs" },
+  { key: "R", description: "רענון כל הנתונים" },
+  { key: "0", description: "מעבר לכל החשבונות" },
+  { key: "1-9", description: "מעבר לחשבון לפי אינדקס" },
+  { key: "/", description: "פוקוס לשדה חיפוש" },
+  { key: "?", description: "פתיחה/סגירה של חלון קיצורים" },
+  { key: "Esc", description: "סגירת חלונות פתוחים" },
 ];

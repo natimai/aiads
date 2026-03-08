@@ -14,8 +14,8 @@ export function AccountSwitcher() {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+    function handleClick(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
         setOpen(false);
       }
     }
@@ -26,57 +26,58 @@ export function AccountSwitcher() {
   const isAllSelected = selectedAccountIds.length === 0;
 
   const displayLabel = isAllSelected
-    ? "All Active Accounts"
+    ? "כל החשבונות הפעילים"
     : selectedAccountIds.length === 1
-    ? (activeAccounts.find((a) => a.id === selectedAccountIds[0])?.accountName ?? "1 Account")
-    : `${selectedAccountIds.length} Accounts`;
+    ? (activeAccounts.find((item) => item.id === selectedAccountIds[0])?.accountName ?? "חשבון אחד")
+    : `${selectedAccountIds.length} חשבונות`;
 
   return (
     <div ref={ref} className="relative">
       <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
+        onClick={() => setOpen((value) => !value)}
+        className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--bg-soft)] px-3 text-[13px] font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--line-strong)]"
       >
         {isAllSelected ? (
-          <Globe className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+          <Globe className="h-3.5 w-3.5 shrink-0 text-[var(--accent-2)]" />
         ) : (
-          <Building2 className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+          <Building2 className="h-3.5 w-3.5 shrink-0 text-[var(--accent-2)]" />
         )}
         <span className="max-w-[180px] truncate">{displayLabel}</span>
         <ChevronDown
-          className={`h-3.5 w-3.5 text-slate-400 transition-transform shrink-0 ${open ? "rotate-180" : ""}`}
+          className={`h-3.5 w-3.5 shrink-0 text-[var(--text-muted)] transition-transform ${open ? "rotate-180" : ""}`}
         />
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1.5 w-72 rounded-xl border border-slate-200 bg-white py-1.5 shadow-lg">
-          {/* All Active option */}
+        <div className="panel absolute left-0 top-full z-50 mt-2 w-80 rounded-2xl py-2">
           <button
             onClick={() => {
               setSelectedAccountIds([]);
               setOpen(false);
             }}
-            className={`flex w-full items-center gap-3 px-3 py-2.5 text-left text-[13px] transition-colors hover:bg-slate-50 ${
-              isAllSelected ? "text-indigo-600" : "text-slate-700"
+            className={`flex w-full items-center gap-3 px-3 py-2.5 text-right text-[13px] transition-colors hover:bg-[var(--bg-soft)] ${
+              isAllSelected ? "text-[var(--accent)]" : "text-[var(--text-primary)]"
             }`}
           >
-            <div className={`flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors ${
-              isAllSelected ? "border-indigo-600 bg-indigo-600" : "border-slate-300"
-            }`}>
-              {isAllSelected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+            <div
+              className={`flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors ${
+                isAllSelected
+                  ? "border-[var(--accent)] bg-[var(--accent)]"
+                  : "border-[var(--line-strong)]"
+              }`}
+            >
+              {isAllSelected && <Check className="h-3 w-3 text-[#041325]" strokeWidth={3} />}
             </div>
-            <Globe className="h-4 w-4 text-slate-400 shrink-0" />
+            <Globe className="h-4 w-4 shrink-0 text-[var(--text-muted)]" />
             <div>
-              <div className="font-medium">All Active Accounts</div>
-              <div className="text-[11px] text-slate-400">
-                {activeAccounts.length} account{activeAccounts.length !== 1 ? "s" : ""} active
+              <div className="font-medium">כל החשבונות הפעילים</div>
+              <div className="text-[11px] text-[var(--text-muted)]">
+                {activeAccounts.length} חשבונות פעילים
               </div>
             </div>
           </button>
 
-          {activeAccounts.length > 0 && (
-            <div className="mx-3 my-1 border-t border-slate-100" />
-          )}
+          {activeAccounts.length > 0 && <div className="mx-3 my-1 border-t border-[var(--line)]" />}
 
           {activeAccounts.map((account) => {
             const isSelected = selectedAccountIds.includes(account.id);
@@ -84,20 +85,22 @@ export function AccountSwitcher() {
               <button
                 key={account.id}
                 onClick={() => toggleSelectedAccountId(account.id)}
-                className={`flex w-full items-center gap-3 px-3 py-2.5 text-left text-[13px] transition-colors hover:bg-slate-50 ${
-                  isSelected ? "text-indigo-600" : "text-slate-700"
+                className={`flex w-full items-center gap-3 px-3 py-2.5 text-right text-[13px] transition-colors hover:bg-[var(--bg-soft)] ${
+                  isSelected ? "text-[var(--accent)]" : "text-[var(--text-primary)]"
                 }`}
               >
-                <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors ${
-                  isSelected ? "border-indigo-600 bg-indigo-600" : "border-slate-300"
-                }`}>
-                  {isSelected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+                <div
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors ${
+                    isSelected ? "border-[var(--accent)] bg-[var(--accent)]" : "border-[var(--line-strong)]"
+                  }`}
+                >
+                  {isSelected && <Check className="h-3 w-3 text-[#041325]" strokeWidth={3} />}
                 </div>
-                <Building2 className="h-4 w-4 text-slate-400 shrink-0" />
+                <Building2 className="h-4 w-4 shrink-0 text-[var(--text-muted)]" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{account.accountName}</div>
-                  <div className="text-[11px] text-slate-400">
-                    {account.currency}
+                  <div className="text-[11px] text-[var(--text-muted)]">
+                    <span className="ltr">{account.currency}</span>
                     {account.businessName ? ` · ${account.businessName}` : ""}
                   </div>
                 </div>
@@ -106,22 +109,27 @@ export function AccountSwitcher() {
           })}
 
           {activeAccounts.length === 0 && (
-            <div className="px-3 py-3 text-[12px] text-slate-400 text-center">
-              No active accounts. <br />
-              <Link to="/settings/accounts" onClick={() => setOpen(false)} className="text-indigo-600 underline underline-offset-2">
-                Add one in Settings
+            <div className="px-3 py-3 text-center text-[12px] text-[var(--text-muted)]">
+              אין חשבונות פעילים.
+              <br />
+              <Link
+                to="/settings/accounts"
+                onClick={() => setOpen(false)}
+                className="text-[var(--accent-2)] underline underline-offset-2"
+              >
+                מעבר לניהול חשבונות
               </Link>
             </div>
           )}
 
-          <div className="mx-3 my-1 border-t border-slate-100" />
+          <div className="mx-3 my-1 border-t border-[var(--line)]" />
           <Link
             to="/settings/accounts"
             onClick={() => setOpen(false)}
-            className="flex w-full items-center gap-2 px-3 py-2 text-[12px] text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
+            className="flex w-full items-center gap-2 px-3 py-2 text-[12px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-soft)] hover:text-[var(--text-primary)]"
           >
             <Settings className="h-3.5 w-3.5" />
-            Manage Accounts
+            ניהול חשבונות
           </Link>
         </div>
       )}

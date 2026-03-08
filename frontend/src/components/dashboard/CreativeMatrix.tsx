@@ -21,9 +21,9 @@ interface CreativeMatrixProps {
 export function CreativeMatrix({ campaigns, currency = "USD", loading }: CreativeMatrixProps) {
   if (loading) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-6">
-        <div className="mb-4 h-5 w-40 rounded bg-slate-800 skeleton" />
-        <div className="h-64 rounded bg-slate-800 skeleton" />
+      <div className="panel p-6">
+        <div className="mb-4 h-5 w-40 rounded bg-[var(--line)] skeleton" />
+        <div className="h-64 rounded bg-[var(--line)] skeleton" />
       </div>
     );
   }
@@ -39,10 +39,10 @@ export function CreativeMatrix({ campaigns, currency = "USD", loading }: Creativ
     }));
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5">
+    <div className="panel p-5">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-900">Spend vs. ROAS</h3>
-        <div className="flex gap-3 text-[11px] text-slate-500">
+        <h3 className="text-sm font-semibold text-[var(--text-primary)]">הוצאה מול ROAS</h3>
+        <div className="flex gap-3 text-[11px] text-[var(--text-muted)]">
           <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-green-500" /> {">"}1.5x</span>
           <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-yellow-500" /> 1–1.5x</span>
           <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-red-500" /> {"<"}1x</span>
@@ -56,13 +56,13 @@ export function CreativeMatrix({ campaigns, currency = "USD", loading }: Creativ
             <XAxis
               type="number"
               dataKey="x"
-              name="Spend"
+              name="הוצאה"
               tick={{ fill: "#64748b", fontSize: 11 }}
               stroke="transparent"
               axisLine={false}
               tickLine={false}
               tickFormatter={(v) => `$${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
-              label={{ value: "Spend", position: "insideBottom", offset: -10, fill: "#475569", fontSize: 11 }}
+              label={{ value: "הוצאה", position: "insideBottom", offset: -10, fill: "#475569", fontSize: 11 }}
             />
             <YAxis
               type="number"
@@ -86,9 +86,9 @@ export function CreativeMatrix({ campaigns, currency = "USD", loading }: Creativ
               }}
               labelStyle={{ display: "none" }}
               formatter={(value: number, name: string) => {
-                if (name === "Spend") return [formatCurrency(value, currency), "Spend"];
+                if (name === "הוצאה") return [formatCurrency(value, currency), "הוצאה"];
                 if (name === "ROAS") return [formatROAS(value), "ROAS"];
-                return [value.toLocaleString(), "Impressions"];
+                return [value.toLocaleString(), "חשיפות"];
               }}
               labelFormatter={(_, payload) => {
                 const item = payload?.[0]?.payload as { name?: string } | undefined;
@@ -103,8 +103,8 @@ export function CreativeMatrix({ campaigns, currency = "USD", loading }: Creativ
           </ScatterChart>
         </ResponsiveContainer>
       ) : (
-        <div className="flex h-48 items-center justify-center text-sm text-slate-500">
-          No campaign data available
+        <div className="flex h-48 items-center justify-center text-sm text-[var(--text-muted)]">
+          אין נתוני קמפיינים זמינים
         </div>
       )}
     </div>

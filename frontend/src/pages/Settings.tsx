@@ -1,35 +1,27 @@
 import { Link } from "react-router-dom";
-import { Building2, Bell, FileText, ChevronRight } from "lucide-react";
+import { Building2, Bell, FileText, ChevronLeft, ShieldCheck } from "lucide-react";
 
 const settingsGroups = [
   {
-    title: "Account Management",
+    title: "ניהול מערכת",
     items: [
       {
         to: "/settings/accounts",
         icon: Building2,
-        label: "Meta Ad Accounts",
-        description: "Connect accounts and toggle which ones Nati AI should manage",
-        color: "bg-indigo-100 text-indigo-600",
+        label: "חשבונות Meta",
+        description: "חיבור, סנכרון והגדרת חשבונות פעילים",
       },
-    ],
-  },
-  {
-    title: "Notifications",
-    items: [
       {
         to: "/alerts/config",
         icon: Bell,
-        label: "Alert Configuration",
-        description: "Set alert thresholds and delivery channels",
-        color: "bg-amber-100 text-amber-600",
+        label: "חוקי התראות",
+        description: "ניהול ספים, קירור וערוצי התראה",
       },
       {
         to: "/reports",
         icon: FileText,
-        label: "Report Schedule",
-        description: "Configure automated daily and weekly reports",
-        color: "bg-slate-100 text-slate-600",
+        label: "תזמון דוחות",
+        description: "הפקה אוטומטית והפצה לערוצים נבחרים",
       },
     ],
   },
@@ -37,15 +29,22 @@ const settingsGroups = [
 
 export default function SettingsPage() {
   return (
-    <div className="space-y-6 max-w-2xl">
-      <div>
-        <h2 className="text-xl font-bold text-slate-900">Settings</h2>
-        <p className="mt-1 text-sm text-slate-500">Manage your Nati AI account and preferences</p>
-      </div>
+    <div className="space-y-6 max-w-3xl reveal-up">
+      <section className="panel p-5 sm:p-6">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--bg-soft)]">
+            <ShieldCheck className="h-5 w-5 text-[var(--accent-2)]" />
+          </div>
+          <div>
+            <h2 className="brand-display text-2xl text-[var(--text-primary)]">הגדרות מערכת</h2>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">שליטה מלאה בהרשאות, ניטור ותזמון</p>
+          </div>
+        </div>
+      </section>
 
       {settingsGroups.map((group) => (
-        <div key={group.title}>
-          <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+        <section key={group.title} className="space-y-3">
+          <h3 className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
             {group.title}
           </h3>
           <div className="space-y-2">
@@ -53,20 +52,20 @@ export default function SettingsPage() {
               <Link
                 key={item.to}
                 to={item.to}
-                className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-colors hover:border-slate-300 hover:shadow"
+                className="panel focus-ring flex items-center gap-4 px-4 py-4 transition-colors hover:border-[var(--line-strong)]"
               >
-                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${item.color}`}>
-                  <item.icon className="h-5 w-5" />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--bg-soft)]">
+                  <item.icon className="h-5 w-5 text-[var(--accent-2)]" />
                 </div>
                 <div className="flex-1">
-                  <div className="text-sm font-semibold text-slate-800">{item.label}</div>
-                  <div className="text-xs text-slate-500">{item.description}</div>
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">{item.label}</div>
+                  <div className="text-xs text-[var(--text-secondary)]">{item.description}</div>
                 </div>
-                <ChevronRight className="h-4 w-4 text-slate-300 shrink-0" />
+                <ChevronLeft className="h-4 w-4 shrink-0 text-[var(--text-muted)]" />
               </Link>
             ))}
           </div>
-        </div>
+        </section>
       ))}
     </div>
   );
