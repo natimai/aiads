@@ -20,6 +20,7 @@ export default function Campaigns() {
   return (
     <div className="space-y-6 reveal-up">
       <div className="panel p-5 sm:p-6">
+        <p className="section-kicker">Campaign Explorer</p>
         <h2 className="brand-display text-2xl text-[var(--text-primary)]">סייר קמפיינים</h2>
         <p className="mt-2 max-w-3xl text-sm text-[var(--text-secondary)]">
           חקירת היררכיית החשבון המלאה במקום אחד: קמפיינים, קבוצות מודעות ומודעות.

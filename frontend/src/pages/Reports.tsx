@@ -65,13 +65,14 @@ export default function Reports() {
       <section className="panel p-5 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
+            <p className="section-kicker">Reporting Hub</p>
             <h2 className="brand-display text-2xl text-[var(--text-primary)]">דוחות ביצועים</h2>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">הפקה, תזמון והפצה אוטומטית בלחיצה אחת</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setShowConfig((value) => !value)}
-              className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--bg-soft)] px-4 text-sm font-medium text-[var(--text-primary)]"
+              className="focus-ring btn-secondary inline-flex min-h-11 items-center gap-2 px-4 text-sm font-medium"
             >
               <Settings2 className="h-4 w-4" />
               הגדרות תזמון
@@ -79,7 +80,7 @@ export default function Reports() {
             <button
               onClick={() => generate.mutate(reportType)}
               disabled={generate.isPending}
-              className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--line-strong)] bg-[linear-gradient(135deg,#5fe8c2_0%,#81b8ff_100%)] px-4 text-sm font-semibold text-[#041325] disabled:opacity-50"
+              className="focus-ring btn-primary inline-flex min-h-11 items-center gap-2 px-4 text-sm disabled:opacity-50"
             >
               <Play className="h-4 w-4" />
               {generate.isPending ? "מייצר דוח..." : "יצירת דוח עכשיו"}
@@ -143,7 +144,7 @@ export default function Reports() {
             <button
               onClick={() => save.mutate()}
               disabled={save.isPending}
-              className="focus-ring mt-4 inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--bg-soft)] px-3 text-xs font-semibold text-[var(--text-primary)]"
+              className="focus-ring btn-secondary mt-4 inline-flex min-h-10 items-center gap-2 px-3 text-xs font-semibold"
             >
               <Save className="h-3.5 w-3.5" />
               {save.isPending ? "שומר..." : "שמירת תצורה"}

@@ -135,6 +135,7 @@ export default function AccountSettings() {
               <ArrowLeft className="h-5 w-5" />
             </Link>
             <div>
+              <p className="section-kicker">Accounts</p>
               <h2 className="brand-display text-2xl text-[var(--text-primary)]">ניהול חשבונות</h2>
               <p className="text-sm text-[var(--text-secondary)]">
                 חיבור, הפעלה וסנכרון חשבונות שינוהלו אוטומטית במערכת.
@@ -146,7 +147,7 @@ export default function AccountSettings() {
               <button
                 onClick={() => syncAll.mutate()}
                 disabled={syncAll.isPending}
-                className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-4 text-sm font-medium text-[var(--text-primary)] disabled:opacity-50"
+                className="focus-ring btn-secondary inline-flex min-h-11 items-center gap-2 px-4 text-sm font-medium disabled:opacity-50"
               >
                 {syncAll.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 סנכרון הכל
@@ -155,7 +156,7 @@ export default function AccountSettings() {
             <button
               onClick={() => connect.mutate()}
               disabled={connect.isPending}
-              className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--line-strong)] bg-[linear-gradient(135deg,#5fe8c2_0%,#81b8ff_100%)] px-4 text-sm font-semibold text-[#041325] disabled:opacity-50"
+              className="focus-ring btn-primary inline-flex min-h-11 items-center gap-2 px-4 text-sm disabled:opacity-50"
             >
               {connect.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               חיבור חשבון

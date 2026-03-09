@@ -5,9 +5,9 @@ import { useAlerts, useAcknowledgeAlert } from "../hooks/useAlerts";
 import type { AlertSeverity, AlertType } from "../types";
 
 const SEVERITY_STYLES: Record<AlertSeverity, string> = {
-  critical: "border-rose-400/35 bg-rose-500/12 text-rose-100",
-  warning: "border-amber-400/35 bg-amber-500/12 text-amber-100",
-  info: "border-sky-400/35 bg-sky-500/12 text-sky-100",
+  critical: "border-rose-500/35 bg-rose-500/12 text-[var(--text-primary)]",
+  warning: "border-amber-500/35 bg-amber-500/12 text-[var(--text-primary)]",
+  info: "border-cyan-500/35 bg-cyan-500/12 text-[var(--text-primary)]",
 };
 
 const TYPE_LABELS: Record<AlertType, string> = {
@@ -39,6 +39,7 @@ export default function Alerts() {
       <section className="panel p-5 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
+            <p className="section-kicker">Monitor</p>
             <h2 className="brand-display text-2xl text-[var(--text-primary)]">מרכז התראות</h2>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">
               סדר עבודה: חומרה → השפעה → פעולה.
@@ -46,7 +47,7 @@ export default function Alerts() {
           </div>
           <Link
             to="/alerts/config"
-            className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--bg-soft)] px-4 text-sm font-medium text-[var(--text-primary)] hover:border-[var(--line-strong)]"
+            className="focus-ring btn-secondary inline-flex min-h-11 items-center gap-2 px-4 text-sm font-medium"
           >
             <Settings2 className="h-4 w-4" />
             הגדרת התראות
@@ -94,14 +95,14 @@ export default function Alerts() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center rounded-full border border-white/20 px-2 py-0.5 text-xs font-semibold">
+                    <span className="inline-flex items-center rounded-full border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--text-secondary)]">
                       {TYPE_LABELS[alert.type] ?? alert.type}
                     </span>
-                    <span className="rounded-full border border-white/20 px-2 py-0.5 text-xs">
+                    <span className="rounded-full border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-0.5 text-xs text-[var(--text-secondary)]">
                       {SEVERITY_LABELS[alert.severity]}
                     </span>
                     {alert.acknowledged && (
-                      <span className="rounded-full border border-emerald-300/35 bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-100">
+                      <span className="rounded-full border border-emerald-400/35 bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-200">
                         טופל
                       </span>
                     )}
@@ -123,7 +124,7 @@ export default function Alerts() {
                 {!alert.acknowledged && (
                   <button
                     onClick={() => acknowledge.mutate({ accountId: alert.accountId, alertId: alert.id })}
-                    className="focus-ring inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-3 text-xs font-medium text-white hover:bg-white/15"
+                    className="focus-ring btn-secondary inline-flex min-h-11 shrink-0 items-center gap-1.5 px-3 text-xs font-medium"
                   >
                     <Check className="h-3.5 w-3.5" />
                     סימון כטופל

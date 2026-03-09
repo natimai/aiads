@@ -28,6 +28,7 @@ export default function CreativeLab() {
     <div className="space-y-6 reveal-up">
       <section className="panel p-5 sm:p-6">
         <div>
+          <p className="section-kicker">Creative Intelligence</p>
           <h2 className="brand-display text-2xl text-[var(--text-primary)]">מעבדת קריאייטיב</h2>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">
             זיהוי עייפות קריאייטיב, ניתוח ביצועים ומיפוי נכסים חזותיים פעילים.

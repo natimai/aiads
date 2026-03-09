@@ -105,10 +105,10 @@ export function PerformanceChart({ data, loading }: PerformanceChartProps) {
       {chartData.length > 0 ? (
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={chartData} margin={{ top: 5, right: hasRightAxis ? 10 : 4, left: hasLeftAxis ? 0 : 4, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="2 4" stroke="#f1f5f9" vertical={false} />
+            <CartesianGrid strokeDasharray="2 4" stroke="var(--line)" vertical={false} />
             <XAxis
               dataKey="date"
-              tick={{ fill: "#94a3b8", fontSize: 11 }}
+              tick={{ fill: "var(--text-muted)", fontSize: 11 }}
               stroke="transparent"
               axisLine={false}
               tickLine={false}
@@ -116,7 +116,7 @@ export function PerformanceChart({ data, loading }: PerformanceChartProps) {
             {hasLeftAxis && (
               <YAxis
                 yAxisId="left"
-                tick={{ fill: "#94a3b8", fontSize: 11 }}
+                tick={{ fill: "var(--text-muted)", fontSize: 11 }}
                 stroke="transparent"
                 axisLine={false}
                 tickLine={false}
@@ -127,24 +127,24 @@ export function PerformanceChart({ data, loading }: PerformanceChartProps) {
               <YAxis
                 yAxisId="right"
                 orientation="right"
-                tick={{ fill: "#94a3b8", fontSize: 11 }}
+                tick={{ fill: "var(--text-muted)", fontSize: 11 }}
                 stroke="transparent"
                 axisLine={false}
                 tickLine={false}
               />
             )}
             <Tooltip
-              cursor={{ stroke: "#e2e8f0", strokeWidth: 1 }}
+              cursor={{ stroke: "var(--line-strong)", strokeWidth: 1 }}
               contentStyle={{
-                backgroundColor: "#ffffff",
-                border: "1px solid #e2e8f0",
+                backgroundColor: "var(--bg-elevated)",
+                border: "1px solid var(--line)",
                 borderRadius: 8,
                 padding: "8px 12px",
                 fontSize: 12,
-                boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                boxShadow: "var(--shadow-soft)",
               }}
-              labelStyle={{ color: "#1e293b", fontWeight: 600, marginBottom: 4 }}
-              itemStyle={{ color: "#64748b", padding: "1px 0" }}
+              labelStyle={{ color: "var(--text-primary)", fontWeight: 600, marginBottom: 4 }}
+              itemStyle={{ color: "var(--text-secondary)", padding: "1px 0" }}
               formatter={(value: number, name: string) => {
                 const metric = METRICS.find((m) => m.label === name);
                 if (!metric) return [value, name];

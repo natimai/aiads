@@ -32,10 +32,11 @@ export default function SettingsPage() {
     <div className="space-y-6 max-w-3xl reveal-up">
       <section className="panel p-5 sm:p-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--bg-soft)]">
-            <ShieldCheck className="h-5 w-5 text-[var(--accent-2)]" />
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--line-strong)] bg-[linear-gradient(135deg,var(--accent)_0%,var(--accent-2)_100%)]">
+            <ShieldCheck className="h-5 w-5 text-[#061321]" />
           </div>
           <div>
+            <p className="section-kicker">System</p>
             <h2 className="brand-display text-2xl text-[var(--text-primary)]">הגדרות מערכת</h2>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">שליטה מלאה בהרשאות, ניטור ותזמון</p>
           </div>

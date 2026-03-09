@@ -154,8 +154,58 @@ export interface AIInsight {
   accountId: string;
   insightType: string;
   content: string;
+  structured?: MetaDiagnosisReport | Record<string, unknown> | null;
+  engineVersion?: string;
+  policyChecks?: Array<Record<string, unknown>>;
+  alignment?: Record<string, unknown>;
   generatedAt: string;
   expiresAt: string;
+}
+
+export type AnalysisType =
+  | "daily_summary"
+  | "budget_optimization"
+  | "creative_recommendations"
+  | "creative_copy"
+  | "meta_diagnosis";
+
+export interface MetaDiagnosisFinding {
+  statement: string;
+  evidence: string;
+  impact?: string;
+}
+
+export interface MetaDiagnosisHypothesis {
+  breakdownType?: string;
+  hypothesis: string;
+  evidence?: string;
+  testPlan?: string;
+}
+
+export interface MetaDiagnosisExperiment {
+  hypothesis: string;
+  action: string;
+  validationWindow?: string;
+  expectedImpact?: string;
+}
+
+export interface MetaDiagnosisAlignment {
+  checkedAgainstOfficialRecommendations: boolean;
+  officialCount: number;
+  requiresDivergenceReason: boolean;
+  divergenceReason?: string;
+}
+
+export interface MetaDiagnosisReport {
+  engineVersion: string;
+  generatedAt: string;
+  language: string;
+  evaluationLevel: string;
+  aggregateFindings: MetaDiagnosisFinding[];
+  breakdownHypotheses: MetaDiagnosisHypothesis[];
+  recommendationExperiments: MetaDiagnosisExperiment[];
+  alignment: MetaDiagnosisAlignment;
+  policyChecks: Array<Record<string, unknown>>;
 }
 
 export type RecommendationType =

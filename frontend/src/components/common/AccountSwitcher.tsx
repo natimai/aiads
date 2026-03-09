@@ -35,7 +35,7 @@ export function AccountSwitcher() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((value) => !value)}
-        className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--bg-soft)] px-3 text-[13px] font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--line-strong)]"
+        className="focus-ring btn-secondary inline-flex min-h-11 items-center gap-2 px-3 text-[13px] font-medium"
       >
         {isAllSelected ? (
           <Globe className="h-3.5 w-3.5 shrink-0 text-[var(--accent-2)]" />

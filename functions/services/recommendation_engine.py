@@ -7,6 +7,7 @@ from typing import Any
 
 from services.ai_analyzer import AIAnalyzer
 from services.feature_builder import FeatureBuilder
+from services.meta_ads_policy_enforcer import MetaAdsPolicyEnforcer
 from services.performance_scoring import PerformanceScoring
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ class RecommendationEngine:
         self.feature_builder = FeatureBuilder(db)
         self.scoring = PerformanceScoring()
         self.ai = AIAnalyzer()
+        self.policy_enforcer = MetaAdsPolicyEnforcer()
 
     def generate(
         self,
@@ -85,6 +87,7 @@ class RecommendationEngine:
         if guardrail_error:
             return {"recommendations": [], "meta": {"guardrailBlocked": True, "reason": guardrail_error}}
 
+        official_recommendations = self._load_official_recommendations(user_id, account_id)
         scored_campaigns = self.scoring.score_campaigns(features.get("campaigns", []))
         context = {
             "account": {
@@ -98,6 +101,7 @@ class RecommendationEngine:
             "breakdowns": features.get("breakdowns", []),
             "breakdownSummary": features.get("breakdownSummary", {}),
             "scores": scored_campaigns,
+            "officialRecommendations": official_recommendations,
         }
 
         if batch_type == "MORNING_BRIEF":
@@ -114,16 +118,63 @@ class RecommendationEngine:
             for rec in [*recommendations, *proactive]
         ]
         deduped = self._sort_by_priority(self._dedup(normalized))
+        enforced, policy_summary = self.policy_enforcer.enforce_recommendation_list(
+            deduped,
+            official_recommendations=official_recommendations,
+        )
         return {
-            "recommendations": deduped,
+            "recommendations": enforced,
             "meta": {
                 "guardrailBlocked": False,
                 "generatedAt": now.isoformat(),
                 "campaignsAnalyzed": len(features.get("campaigns", [])),
                 "reactiveTasksInjected": len(proactive),
                 "batchType": batch_type,
+                "alignment": {
+                    "officialCount": len(official_recommendations),
+                    "aligned": policy_summary.get("aligned", 0),
+                    "diverged": policy_summary.get("diverged", 0),
+                },
+                "policyViolations": policy_summary.get("policyViolations", 0),
             },
         }
+
+    def _load_official_recommendations(self, user_id: str, account_id: str) -> list[dict[str, Any]]:
+        """Load active recommendations to enforce strict alignment metadata."""
+        rec_ref = (
+            self.db.collection("users")
+            .document(user_id)
+            .collection("metaAccounts")
+            .document(account_id)
+            .collection("recommendations")
+        )
+        docs = rec_ref.stream()
+
+        results: list[dict[str, Any]] = []
+        for doc in docs:
+            payload = doc.to_dict() or {}
+            status = str(payload.get("status") or "").lower()
+            if status not in {"pending", "approved"}:
+                continue
+            results.append(
+                {
+                    "id": doc.id,
+                    "type": payload.get("type"),
+                    "title": payload.get("title"),
+                    "reasoning": payload.get("reasoning"),
+                    "entityId": payload.get("entityId"),
+                    "status": payload.get("status"),
+                    "createdAt": payload.get("createdAt"),
+                    "executionPlan": payload.get("executionPlan")
+                    if isinstance(payload.get("executionPlan"), dict)
+                    else {},
+                }
+            )
+        results.sort(
+            key=lambda item: str(item.get("createdAt") or ""),
+            reverse=True,
+        )
+        return results[:60]
 
     def _validate_data_readiness(self, features: dict[str, Any]) -> str | None:
         campaigns = features.get("campaigns", [])

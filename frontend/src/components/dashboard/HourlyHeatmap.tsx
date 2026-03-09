@@ -63,30 +63,30 @@ export function HourlyHeatmap({ data, loading }: DayPerformanceChartProps) {
       {hasData ? (
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="2 4" stroke="#1e293b" vertical={false} />
+            <CartesianGrid strokeDasharray="2 4" stroke="var(--line)" vertical={false} />
             <XAxis
               dataKey="day"
-              tick={{ fill: "#64748b", fontSize: 11 }}
+              tick={{ fill: "var(--text-muted)", fontSize: 11 }}
               stroke="transparent"
               axisLine={false}
               tickLine={false}
             />
             <YAxis
-              tick={{ fill: "#64748b", fontSize: 11 }}
+              tick={{ fill: "var(--text-muted)", fontSize: 11 }}
               stroke="transparent"
               axisLine={false}
               tickLine={false}
               tickFormatter={(v) => `$${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
             />
             <Tooltip
-              cursor={{ fill: "rgba(255,255,255,0.04)" }}
+              cursor={{ fill: "color-mix(in srgb, var(--accent) 10%, transparent)" }}
               contentStyle={{
-                backgroundColor: "#0f172a",
-                border: "1px solid #334155",
+                backgroundColor: "var(--bg-elevated)",
+                border: "1px solid var(--line)",
                 borderRadius: 6,
                 padding: "6px 10px",
               }}
-              labelStyle={{ color: "#e2e8f0", fontSize: 12, fontWeight: 600, marginBottom: 4 }}
+              labelStyle={{ color: "var(--text-primary)", fontSize: 12, fontWeight: 600, marginBottom: 4 }}
               formatter={(value: number, name: string) => {
                 if (name === "spend") return [`$${value.toLocaleString()}`, "הוצאה"];
                 return [`${value}%`, "CTR"];

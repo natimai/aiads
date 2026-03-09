@@ -346,24 +346,24 @@ export function CampaignExplorer({
     ) : null;
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-slate-800/80 bg-[#070d1f]/70 shadow-[0_20px_80px_-50px_rgba(56,189,248,0.55)]">
-      <div className="border-b border-slate-800/80 px-4 py-4 sm:px-5">
+    <div className="panel overflow-hidden">
+      <div className="border-b border-[var(--line)] bg-[var(--bg-soft)]/60 px-4 py-4 sm:px-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h3 className="text-base font-semibold text-slate-100">סייר קמפיינים</h3>
-            <p className="text-xs text-slate-400">
+            <h3 className="text-base font-semibold text-[var(--text-primary)]">סייר קמפיינים</h3>
+            <p className="text-xs text-[var(--text-muted)]">
               {totals.campaigns} קמפיינים · {totals.adsets} קבוצות מודעות · {totals.ads} מודעות
             </p>
           </div>
 
           <div className="relative w-full lg:w-80">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               type="text"
               placeholder="חיפוש קמפיין, קבוצת מודעות או מודעה"
-              className="w-full rounded-xl border border-slate-700/80 bg-slate-900/80 py-2.5 pl-9 pr-3 text-sm text-slate-200 outline-none transition-colors placeholder:text-slate-500 focus:border-cyan-400/40 focus:ring-2 focus:ring-cyan-400/20"
+              className="focus-ring w-full rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)] py-2.5 pl-9 pr-3 text-sm text-[var(--text-primary)] outline-none transition-colors placeholder:text-[var(--text-muted)]"
             />
           </div>
         </div>

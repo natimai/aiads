@@ -45,10 +45,10 @@ export function TopBottomPerformers({ campaigns, loading }: TopBottomPerformersP
       {data.length > 0 ? (
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={data} layout="vertical" margin={{ top: 4, right: 8, left: 4, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="2 4" stroke="#1e293b" horizontal={false} />
+            <CartesianGrid strokeDasharray="2 4" stroke="var(--line)" horizontal={false} />
             <XAxis
               type="number"
-              tick={{ fill: "#64748b", fontSize: 11 }}
+              tick={{ fill: "var(--text-muted)", fontSize: 11 }}
               stroke="transparent"
               axisLine={false}
               tickLine={false}
@@ -57,21 +57,21 @@ export function TopBottomPerformers({ campaigns, loading }: TopBottomPerformersP
               type="category"
               dataKey="name"
               width={110}
-              tick={{ fill: "#94a3b8", fontSize: 11 }}
+              tick={{ fill: "var(--text-secondary)", fontSize: 11 }}
               stroke="transparent"
               axisLine={false}
               tickLine={false}
             />
             <Tooltip
-              cursor={{ fill: "rgba(255,255,255,0.04)" }}
+              cursor={{ fill: "color-mix(in srgb, var(--accent) 10%, transparent)" }}
               contentStyle={{
-                backgroundColor: "#0f172a",
-                border: "1px solid #334155",
+                backgroundColor: "var(--bg-elevated)",
+                border: "1px solid var(--line)",
                 borderRadius: 6,
                 padding: "6px 10px",
                 fontSize: 12,
               }}
-              labelStyle={{ color: "#e2e8f0", fontWeight: 600, marginBottom: 2 }}
+              labelStyle={{ color: "var(--text-primary)", fontWeight: 600, marginBottom: 2 }}
               formatter={(value: number) => [formatROAS(value), "ROAS"]}
             />
             <Bar dataKey="roas" name="ROAS" radius={[0, 3, 3, 0]} maxBarSize={18}>

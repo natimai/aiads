@@ -28,6 +28,7 @@ import { getRouteMeta, t } from "./utils/copy";
 const Login = lazy(() => import("./pages/Login"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Cockpit = lazy(() => import("./pages/Cockpit"));
+const AIInsights = lazy(() => import("./pages/AIInsights"));
 const Campaigns = lazy(() => import("./pages/Campaigns"));
 const Alerts = lazy(() => import("./pages/Alerts"));
 const AlertConfig = lazy(() => import("./pages/AlertConfig"));
@@ -40,7 +41,7 @@ const AccountSettings = lazy(() => import("./pages/AccountSettings"));
 function PageLoader() {
   return (
     <div className="flex h-64 items-center justify-center">
-      <div className="h-10 w-10 animate-spin rounded-full border-2 border-[var(--line-strong)] border-t-[var(--accent-2)]" />
+      <div className="h-10 w-10 animate-spin rounded-full border-2 border-[var(--line-strong)] border-t-[var(--accent)]" />
     </div>
   );
 }
@@ -53,7 +54,7 @@ export default function App() {
   if (user === undefined) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="h-10 w-10 animate-spin rounded-full border-2 border-[var(--line-strong)] border-t-[var(--accent-2)]" />
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-[var(--line-strong)] border-t-[var(--accent)]" />
       </div>
     );
   }
@@ -113,14 +114,11 @@ function AuthenticatedApp() {
         collapsed={sidebarCollapsed}
       />
 
-      <div
-        className={`min-h-screen transition-[padding-right] duration-300 ${
-          sidebarCollapsed ? "lg:pr-24" : "lg:pr-72"
-        }`}
-      >
-        <header className="sticky top-0 z-30 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--bg-elevated)_84%,transparent)] px-4 py-3 backdrop-blur-xl sm:px-6">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2.5">
+      <div className={`min-h-screen transition-[padding-right] duration-300 ${sidebarCollapsed ? "lg:pr-24" : "lg:pr-72"}`}>
+        <header className="sticky top-0 z-30 px-4 pb-2 pt-3 sm:px-6">
+          <div className="glass-strip rounded-2xl px-3 py-3 sm:px-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2.5">
               <button
                 onClick={() => setSidebarOpen(true)}
                 className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--line)] text-[var(--text-primary)] lg:hidden"
@@ -141,57 +139,58 @@ function AuthenticatedApp() {
                 )}
               </button>
 
-              <div className="min-w-0">
-                <p className="truncate text-base font-semibold text-[var(--text-primary)]">{routeMeta.title}</p>
-                <p className="truncate text-xs text-[var(--text-muted)]">{routeMeta.subtitle}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="hidden md:block">
-                <AccountSwitcher />
-              </div>
-              <div className="hidden lg:block">
-                <DateRangePicker />
+                <div className="min-w-0">
+                  <p className="truncate text-base font-semibold text-[var(--text-primary)]">{routeMeta.title}</p>
+                  <p className="truncate text-xs text-[var(--text-muted)]">{routeMeta.subtitle}</p>
+                </div>
               </div>
 
-              <button
-                onClick={toggleTheme}
-                className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--line)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-soft)]"
-                title={theme === "dark" ? t("app.theme.light") : t("app.theme.dark")}
-                aria-label="שינוי ערכת צבע"
-              >
-                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              </button>
+              <div className="flex items-center gap-2">
+                <div className="hidden md:block">
+                  <AccountSwitcher />
+                </div>
+                <div className="hidden lg:block">
+                  <DateRangePicker />
+                </div>
 
-              <button
-                onClick={() => setShowHelp(true)}
-                className="focus-ring hidden min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--line)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-soft)] md:inline-flex"
-                title={t("app.shortcuts")}
-              >
-                <Keyboard className="h-4 w-4" />
-              </button>
+                <button
+                  onClick={toggleTheme}
+                  className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--line)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-soft)]"
+                  title={theme === "dark" ? t("app.theme.light") : t("app.theme.dark")}
+                  aria-label="שינוי ערכת צבע"
+                >
+                  {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                </button>
 
-              <button
-                onClick={handleRefresh}
-                className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--line)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-soft)]"
-                title={t("app.refresh")}
-                aria-label={t("app.refresh")}
-              >
-                <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-              </button>
+                <button
+                  onClick={() => setShowHelp(true)}
+                  className="focus-ring hidden min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--line)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-soft)] md:inline-flex"
+                  title={t("app.shortcuts")}
+                >
+                  <Keyboard className="h-4 w-4" />
+                </button>
+
+                <button
+                  onClick={handleRefresh}
+                  className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--line)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-soft)]"
+                  title={t("app.refresh")}
+                  aria-label={t("app.refresh")}
+                >
+                  <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                </button>
+              </div>
             </div>
           </div>
         </header>
 
-        <main className="px-4 pb-28 pt-4 sm:px-6 sm:pt-6 lg:pb-6">
+        <main className="px-4 pb-28 pt-3 sm:px-6 sm:pt-4 lg:pb-6">
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/inbox" element={<Navigate to="/" replace />} />
               <Route path="/cockpit" element={<Cockpit />} />
               <Route path="/dashboard" element={<Navigate to="/cockpit" replace />} />
-              <Route path="/ai-insights" element={<Navigate to="/" replace />} />
+              <Route path="/ai-insights" element={<AIInsights />} />
               <Route path="/campaigns" element={<Campaigns />} />
               <Route path="/campaigns/:accountId" element={<Campaigns />} />
               <Route path="/alerts" element={<Alerts />} />
@@ -206,7 +205,7 @@ function AuthenticatedApp() {
         </main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--line)] bg-[color-mix(in_srgb,var(--bg-elevated)_92%,transparent)] px-3 pb-[max(env(safe-area-inset-bottom),10px)] pt-2 md:hidden">
+      <nav className="glass-strip fixed inset-x-3 bottom-2 z-40 rounded-2xl px-3 pb-[max(env(safe-area-inset-bottom),8px)] pt-2 md:hidden">
         <div className="grid grid-cols-4 gap-1.5">
           {[
             { to: "/", label: "תיבה", icon: Inbox },

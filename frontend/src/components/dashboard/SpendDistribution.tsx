@@ -55,8 +55,8 @@ export function SpendDistribution({ campaigns, currency = "USD", loading }: Spen
               </Pie>
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#0f172a",
-                  border: "1px solid #334155",
+                  backgroundColor: "var(--bg-elevated)",
+                  border: "1px solid var(--line)",
                   borderRadius: 6,
                   padding: "6px 10px",
                   fontSize: 12,

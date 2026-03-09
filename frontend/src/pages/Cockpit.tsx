@@ -81,7 +81,7 @@ export default function Cockpit() {
         </p>
         <Link
           to="/settings/accounts"
-          className="focus-ring mt-6 inline-flex min-h-11 items-center rounded-xl border border-[var(--line-strong)] bg-[linear-gradient(135deg,#5fe8c2_0%,#81b8ff_100%)] px-5 text-sm font-semibold text-[#041325]"
+          className="focus-ring btn-primary mt-6 inline-flex min-h-11 items-center px-5 text-sm"
         >
           מעבר לניהול חשבונות
         </Link>
@@ -94,7 +94,7 @@ export default function Cockpit() {
       <section className="panel p-5 sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">קוקפיט אנליטיקה</p>
+            <p className="section-kicker">קוקפיט אנליטיקה</p>
             <h1 className="brand-display mt-2 text-3xl text-[var(--text-primary)]">קוקפיט ביצועים</h1>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">
               טווח: {dateRange.label} · {formatDateDisplay(dateRange.from)}
@@ -105,7 +105,7 @@ export default function Cockpit() {
           <button
             onClick={handleSyncAll}
             disabled={syncing}
-            className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--bg-soft)] px-4 text-sm font-medium text-[var(--text-primary)] disabled:opacity-60"
+            className="focus-ring btn-secondary inline-flex min-h-11 items-center gap-2 px-4 text-sm font-medium disabled:opacity-60"
           >
             {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             סנכרון כל החשבונות
@@ -161,10 +161,10 @@ function MetricCard({
   icon?: ElementType;
 }) {
   return (
-    <div className="panel-soft px-3 py-3">
+    <div className="panel-soft px-3 py-3 shadow-[0_10px_20px_-20px_rgba(41,153,119,0.9)]">
       <div className="mb-2 flex items-center justify-between">
         <p className="text-xs text-[var(--text-muted)]">{title}</p>
-        {Icon ? <Icon className="h-3.5 w-3.5 text-[var(--accent-2)]" /> : <BarChart3 className="h-3.5 w-3.5 text-[var(--accent-2)]" />}
+        {Icon ? <Icon className="h-3.5 w-3.5 text-[var(--accent)]" /> : <BarChart3 className="h-3.5 w-3.5 text-[var(--accent)]" />}
       </div>
       <p className="ltr text-lg font-bold text-[var(--text-primary)]">{value}</p>
     </div>

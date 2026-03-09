@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getAIInsights, triggerAIAnalysis } from "../services/api";
 import { useAccounts } from "../contexts/AccountContext";
+import type { AnalysisType } from "../types";
 
 export function useAIInsights() {
   const { selectedAccountId, accounts } = useAccounts();
@@ -21,14 +22,16 @@ export function useTriggerAIAnalysis() {
 
   return useMutation({
     mutationFn: async (payload: {
-      type: "daily_summary" | "budget_optimization" | "creative_recommendations" | "creative_copy";
+      type: AnalysisType;
       campaignName?: string;
       objective?: string;
+      language?: string;
     }) => {
       if (!accountId) throw new Error("No account selected");
       return triggerAIAnalysis(accountId, payload.type, {
         campaignName: payload.campaignName,
         objective: payload.objective,
+        language: payload.language,
       });
     },
     onSuccess: () => {

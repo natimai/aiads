@@ -32,7 +32,7 @@ export function DateRangePicker() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((value) => !value)}
-        className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--bg-soft)] px-3 text-[13px] font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--line-strong)]"
+        className="focus-ring btn-secondary inline-flex min-h-11 items-center gap-2 px-3 text-[13px] font-medium"
       >
         <Calendar className="h-3.5 w-3.5 shrink-0 text-[var(--accent-2)]" />
         <span>{dateRange.label}</span>
@@ -113,7 +113,7 @@ export function DateRangePicker() {
                     setOpen(false);
                     setCustomMode(false);
                   }}
-                  className="focus-ring flex-1 rounded-lg border border-[var(--line-strong)] bg-[linear-gradient(135deg,#5fe8c2_0%,#81b8ff_100%)] px-3 py-1.5 text-[13px] font-semibold text-[#041325]"
+                  className="focus-ring btn-primary flex-1 px-3 py-1.5 text-[13px]"
                 >
                   החל
                 </button>

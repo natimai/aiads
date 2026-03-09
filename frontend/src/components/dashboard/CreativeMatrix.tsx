@@ -52,34 +52,34 @@ export function CreativeMatrix({ campaigns, currency = "USD", loading }: Creativ
       {data.length > 0 ? (
         <ResponsiveContainer width="100%" height={220}>
           <ScatterChart margin={{ top: 8, right: 8, bottom: 16, left: 0 }}>
-            <CartesianGrid strokeDasharray="2 4" stroke="#1e293b" />
+            <CartesianGrid strokeDasharray="2 4" stroke="var(--line)" />
             <XAxis
               type="number"
               dataKey="x"
               name="הוצאה"
-              tick={{ fill: "#64748b", fontSize: 11 }}
+              tick={{ fill: "var(--text-muted)", fontSize: 11 }}
               stroke="transparent"
               axisLine={false}
               tickLine={false}
               tickFormatter={(v) => `$${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
-              label={{ value: "הוצאה", position: "insideBottom", offset: -10, fill: "#475569", fontSize: 11 }}
+              label={{ value: "הוצאה", position: "insideBottom", offset: -10, fill: "var(--text-muted)", fontSize: 11 }}
             />
             <YAxis
               type="number"
               dataKey="y"
               name="ROAS"
-              tick={{ fill: "#64748b", fontSize: 11 }}
+              tick={{ fill: "var(--text-muted)", fontSize: 11 }}
               stroke="transparent"
               axisLine={false}
               tickLine={false}
-              label={{ value: "ROAS", angle: -90, position: "insideLeft", fill: "#475569", fontSize: 11 }}
+              label={{ value: "ROAS", angle: -90, position: "insideLeft", fill: "var(--text-muted)", fontSize: 11 }}
             />
             <ZAxis type="number" dataKey="z" range={[30, 300]} name="Impressions" />
             <Tooltip
-              cursor={{ strokeDasharray: "2 4", stroke: "#334155" }}
+              cursor={{ strokeDasharray: "2 4", stroke: "var(--line-strong)" }}
               contentStyle={{
-                backgroundColor: "#0f172a",
-                border: "1px solid #334155",
+                backgroundColor: "var(--bg-elevated)",
+                border: "1px solid var(--line)",
                 borderRadius: 6,
                 padding: "6px 10px",
                 fontSize: 12,

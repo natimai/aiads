@@ -349,19 +349,30 @@ class CampaignBuilderService:
             proposed_daily_budget=proposed_budget,
         )
 
-        page_id = str(
-            inputs.get("pageId")
-            or account_data.get("defaultPageId")
-            or account_data.get("pageId")
-            or account_data.get("metaPageId")
-            or ""
-        ).strip()
-        destination_url = str(
-            inputs.get("destinationUrl")
-            or account_data.get("defaultDestinationUrl")
-            or account_data.get("websiteUrl")
-            or "https://example.com"
-        ).strip()
+        page_id = self._resolve_page_id(inputs, account_data if isinstance(account_data, dict) else {})
+        destination_url = self._resolve_destination_url(inputs, account_data if isinstance(account_data, dict) else {})
+
+        token: str = ""
+        if not page_id:
+            try:
+                from services.meta_auth import fetch_pages, get_decrypted_token
+
+                token, _ = get_decrypted_token(user_id, account_id)
+                pages = fetch_pages(token)
+                if pages:
+                    page_id = str(pages[0].get("pageId") or "").strip()
+                    if page_id:
+                        account_ref.set(
+                            {
+                                "defaultPageId": page_id,
+                                "defaultPageName": str(pages[0].get("pageName") or ""),
+                                "updatedAt": datetime.now(timezone.utc),
+                            },
+                            merge=True,
+                        )
+            except Exception as exc:  # pragma: no cover - external token/page fetch
+                logger.warning("Failed to auto-resolve pageId for %s/%s: %s", user_id, account_id, exc)
+
         if not page_id:
             raise ValueError("pageId is required for publish (set it in Step 1 advanced fields or account defaults)")
         if not destination_url:
@@ -371,7 +382,8 @@ class CampaignBuilderService:
         from services.meta_auth import get_decrypted_token
 
         try:
-            token, _ = get_decrypted_token(user_id, account_id)
+            if not token:
+                token, _ = get_decrypted_token(user_id, account_id)
             api = MetaAPIService(access_token=token, account_id=account_id)
             campaign_id = api.create_campaign(
                 name=str(campaign_plan.get("name") or inputs.get("campaignName") or "AI Campaign"),
@@ -1672,6 +1684,51 @@ class CampaignBuilderService:
             "destinationUrl": str(payload.get("destinationUrl") or "").strip(),
             "brandVoice": str(payload.get("brandVoice") or "").strip(),
         }
+
+    @staticmethod
+    def _resolve_page_id(inputs: dict[str, Any], account_data: dict[str, Any]) -> str:
+        defaults = account_data.get("defaults", {}) if isinstance(account_data.get("defaults"), dict) else {}
+        settings = account_data.get("settings", {}) if isinstance(account_data.get("settings"), dict) else {}
+        candidates = [
+            inputs.get("pageId"),
+            inputs.get("pageID"),
+            account_data.get("defaultPageId"),
+            account_data.get("defaultPageID"),
+            account_data.get("pageId"),
+            account_data.get("pageID"),
+            account_data.get("metaPageId"),
+            account_data.get("facebookPageId"),
+            account_data.get("fbPageId"),
+            defaults.get("pageId"),
+            defaults.get("defaultPageId"),
+            settings.get("pageId"),
+            settings.get("defaultPageId"),
+        ]
+        for candidate in candidates:
+            value = str(candidate or "").strip()
+            if value:
+                return value
+        return ""
+
+    @staticmethod
+    def _resolve_destination_url(inputs: dict[str, Any], account_data: dict[str, Any]) -> str:
+        defaults = account_data.get("defaults", {}) if isinstance(account_data.get("defaults"), dict) else {}
+        settings = account_data.get("settings", {}) if isinstance(account_data.get("settings"), dict) else {}
+        candidates = [
+            inputs.get("destinationUrl"),
+            account_data.get("defaultDestinationUrl"),
+            account_data.get("destinationUrl"),
+            account_data.get("websiteUrl"),
+            account_data.get("landingPageUrl"),
+            defaults.get("destinationUrl"),
+            defaults.get("defaultDestinationUrl"),
+            settings.get("destinationUrl"),
+        ]
+        for candidate in candidates:
+            value = str(candidate or "").strip()
+            if value:
+                return value
+        return "https://example.com"
 
     @staticmethod
     def _is_hebrew_language(language: str) -> bool:

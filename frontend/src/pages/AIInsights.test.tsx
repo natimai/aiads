@@ -143,10 +143,10 @@ describe("AIInsights", () => {
   it("renders AI Campaign Manager and recommendations", async () => {
     render(<AIInsights />);
 
-    expect(screen.getByText("AI Campaign Manager")).toBeInTheDocument();
+    expect(screen.getByText("מרכז ניהול המלצות AI")).toBeInTheDocument();
     expect(screen.getByText("Increase budget on winner")).toBeInTheDocument();
 
-    const approveButtons = screen.getAllByRole("button", { name: /^Approve$/i });
+    const approveButtons = screen.getAllByRole("button", { name: /^אישור$/ });
     expect(approveButtons.length).toBeGreaterThan(0);
     await userEvent.click(approveButtons[0]!);
     expect(reviewMutate).toHaveBeenCalledWith({
@@ -158,30 +158,30 @@ describe("AIInsights", () => {
   it("triggers generation action", async () => {
     render(<AIInsights />);
 
-    const generateButtons = screen.getAllByRole("button", { name: /Generate Recommendations/i });
+    const generateButtons = screen.getAllByRole("button", { name: /יצירת המלצות/ });
     await userEvent.click(generateButtons[0]!);
     expect(generateMutate).toHaveBeenCalledTimes(1);
   });
 
   it("shows execute flow for approved recommendation", async () => {
     render(<AIInsights />);
-    const previewButtons = screen.getAllByRole("button", { name: /Preview Execution/i });
+    const previewButtons = screen.getAllByRole("button", { name: /תצוגת ביצוע/ });
     expect(previewButtons.length).toBeGreaterThan(0);
     await userEvent.click(previewButtons[0]!);
-    const executeButtons = screen.getAllByRole("button", { name: /^Execute$/i });
+    const executeButtons = screen.getAllByRole("button", { name: /^ביצוע$/ });
     await userEvent.click(executeButtons[0]!);
     expect(executeMutate).toHaveBeenCalledTimes(1);
   });
 
   it("shows execution history toggle for executed recommendations", () => {
     render(<AIInsights />);
-    const historyButtons = screen.getAllByRole("button", { name: /Execution History/i });
+    const historyButtons = screen.getAllByRole("button", { name: /היסטוריית ביצוע/ });
     expect(historyButtons.length).toBeGreaterThan(0);
   });
 
   it("allows rollback action on executed recommendation", async () => {
     render(<AIInsights />);
-    const previewButtons = screen.getAllByRole("button", { name: /Preview Rollback/i });
+    const previewButtons = screen.getAllByRole("button", { name: /תצוגת Rollback/ });
     expect(previewButtons.length).toBeGreaterThan(0);
     await userEvent.click(previewButtons[0]!);
     const rollbackButtons = screen.getAllByRole("button", { name: "Rollback" });
@@ -191,9 +191,9 @@ describe("AIInsights", () => {
 
   it("saves execution policy", async () => {
     render(<AIInsights />);
-    const policyTabButtons = screen.getAllByRole("button", { name: /^Policy$/i });
+    const policyTabButtons = screen.getAllByRole("button", { name: /^מדיניות$/ });
     await userEvent.click(policyTabButtons[0]!);
-    const saveButtons = screen.getAllByRole("button", { name: /Save Policy/i });
+    const saveButtons = screen.getAllByRole("button", { name: /שמירת מדיניות/ });
     await userEvent.click(saveButtons[0]!);
     expect(savePolicyMutate).toHaveBeenCalledTimes(1);
   });

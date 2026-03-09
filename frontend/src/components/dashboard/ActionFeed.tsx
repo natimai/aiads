@@ -915,7 +915,7 @@ export function ActionFeed({
 
   if (loading) {
     return (
-      <div className="space-y-3 rounded-2xl border border-slate-800 bg-[#080f23] p-4">
+      <div className="panel space-y-3 p-4">
         {Array.from({ length: 4 }).map((_, index) => (
           <div key={index} className="h-28 animate-pulse rounded-xl bg-slate-800/80" />
         ))}
@@ -925,19 +925,19 @@ export function ActionFeed({
 
   return (
     <section className="space-y-4">
-      <header className="rounded-2xl border border-slate-800 bg-[#080f23] p-4 shadow-[0_18px_60px_-45px_rgba(56,189,248,0.65)]">
+      <header className="panel p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-semibold text-slate-100">תיבת החלטות AI</h2>
-          <span className="rounded-full border border-indigo-400/30 bg-indigo-500/15 px-2.5 py-1 text-xs font-semibold text-indigo-200">
+          <h2 className="text-lg font-semibold text-[var(--text-primary)]">תיבת החלטות AI</h2>
+          <span className="rounded-full border border-[var(--line-strong)] bg-[var(--bg-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--accent)]">
             {pending.length} ממתינות
           </span>
           {highCount > 0 && (
-            <span className="rounded-full border border-rose-400/35 bg-rose-500/15 px-2.5 py-1 text-xs font-semibold text-rose-200">
+            <span className="rounded-full border border-rose-400/35 bg-rose-500/12 px-2.5 py-1 text-xs font-semibold text-rose-200">
               {highCount} דחופות
             </span>
           )}
         </div>
-        <p className="mt-1 text-sm text-slate-400">
+        <p className="mt-1 text-sm text-[var(--text-secondary)]">
           אישור או דחייה מהירה של המלצות, בפורמט תפעולי נקי.
         </p>
       </header>

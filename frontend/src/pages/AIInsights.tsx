@@ -32,20 +32,26 @@ import {
   useReviewRecommendation,
 } from "../hooks/useRecommendations";
 import { useAIInsights, useTriggerAIAnalysis } from "../hooks/useAIAnalysis";
-import type { Recommendation, RecommendationStatus, RecommendationType } from "../types";
+import type {
+  AnalysisType,
+  MetaDiagnosisReport,
+  Recommendation,
+  RecommendationStatus,
+  RecommendationType,
+} from "../types";
 
 const TYPE_LABELS: Record<RecommendationType, string> = {
-  budget_optimization: "Budget",
-  audience_optimization: "Audience",
-  audience_discovery: "Audience Discovery",
-  targeting_optimization: "Targeting Optimization",
-  creative_optimization: "Creative",
-  ab_test: "A/B Test",
-  campaign_build: "New Campaign",
-  monitor_launch: "Launch Watch",
-  ghost_draft: "Ghost Draft",
-  audience_build: "New Audience",
-  creative_copy: "Ad Copy",
+  budget_optimization: "תקציב",
+  audience_optimization: "קהל",
+  audience_discovery: "גילוי קהלים",
+  targeting_optimization: "אופטימיזציית טרגוט",
+  creative_optimization: "קריאייטיב",
+  ab_test: "טסט A/B",
+  campaign_build: "קמפיין חדש",
+  monitor_launch: "מעקב השקה",
+  ghost_draft: "טיוטת Ghost",
+  audience_build: "קהל חדש",
+  creative_copy: "קופי מודעה",
 };
 
 const TYPE_ICONS: Record<RecommendationType, React.ElementType> = {
@@ -65,13 +71,37 @@ const TYPE_ICONS: Record<RecommendationType, React.ElementType> = {
 const PRIORITY_STYLES = {
   high: "bg-rose-50 text-rose-700 border border-rose-200",
   medium: "bg-amber-50 text-amber-700 border border-amber-200",
-  low: "bg-slate-100 text-slate-600 border border-slate-200",
+  low: "bg-[var(--bg-soft-2)] text-[var(--text-secondary)] border border-[var(--line)]",
 } as const;
 
 type TabId = "tasks" | "analysis" | "policy";
 
+const STATUS_FILTER_LABELS: Record<RecommendationStatus | "all", string> = {
+  all: "הכל",
+  pending: "ממתין",
+  approved: "אושר",
+  rejected: "נדחה",
+  executed: "בוצע",
+  failed: "נכשל",
+};
+
 function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text);
+}
+
+function extractMetaDiagnosisReport(
+  payload: unknown
+): MetaDiagnosisReport | null {
+  if (!payload || typeof payload !== "object") return null;
+  const data = payload as Record<string, unknown>;
+  if (
+    !Array.isArray(data.aggregateFindings) ||
+    !Array.isArray(data.breakdownHypotheses) ||
+    !Array.isArray(data.recommendationExperiments)
+  ) {
+    return null;
+  }
+  return data as unknown as MetaDiagnosisReport;
 }
 
 export default function AIInsights() {
@@ -87,6 +117,7 @@ export default function AIInsights() {
   const [draftAllowExecute, setDraftAllowExecute] = useState(true);
   const [draftAllowRollback, setDraftAllowRollback] = useState(true);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
+  const [analysisStructured, setAnalysisStructured] = useState<MetaDiagnosisReport | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const accountId = selectedAccountId ?? accounts[0]?.id;
@@ -176,22 +207,32 @@ export default function AIInsights() {
   };
 
   const handleRunAnalysis = async (
-    type: "daily_summary" | "budget_optimization" | "creative_recommendations" | "creative_copy",
-    options?: { campaignName?: string; objective?: string }
+    type: AnalysisType,
+    options?: { campaignName?: string; objective?: string; language?: string }
   ) => {
     try {
       const res = await triggerAnalysisMutation.mutateAsync({ type, ...options });
+      setAnalysisStructured(null);
       if (type === "creative_copy" && res.copyVariations?.length) {
         setAnalysisResult(
           res.copyVariations
             .map((v: { text: string; hook?: string }) => `• ${v.text}${v.hook ? ` [${v.hook}]` : ""}`)
             .join("\n\n")
         );
+      } else if (type === "meta_diagnosis") {
+        const structured = extractMetaDiagnosisReport(res.structured);
+        if (structured) {
+          setAnalysisStructured(structured);
+        }
+        if (res.content) {
+          setAnalysisResult(res.content);
+        }
       } else if (res.content) {
         setAnalysisResult(res.content);
       }
     } catch {
-      setAnalysisResult("Analysis failed. Please try again.");
+      setAnalysisStructured(null);
+      setAnalysisResult("הניתוח נכשל, נסה שוב בעוד רגע.");
     }
   };
 
@@ -202,25 +243,26 @@ export default function AIInsights() {
   };
 
   const tabs: { id: TabId; label: string; icon: React.ElementType }[] = [
-    { id: "tasks", label: "Tasks", icon: Zap },
-    { id: "analysis", label: "Analysis", icon: Brain },
-    { id: "policy", label: "Policy", icon: Settings2 },
+    { id: "tasks", label: "משימות", icon: Zap },
+    { id: "analysis", label: "ניתוח", icon: Brain },
+    { id: "policy", label: "מדיניות", icon: Settings2 },
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 reveal-up">
       {/* Header */}
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)] p-6 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100">
-                <Brain className="h-5 w-5 text-indigo-600" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--line-strong)] bg-[linear-gradient(135deg,var(--accent)_0%,var(--accent-2)_100%)]">
+                <Brain className="h-5 w-5 text-[#062035]" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-slate-900">AI Campaign Manager</h1>
-                <p className="text-sm text-slate-500">
-                  Review and approve AI recommendations for your campaigns.
+                <p className="section-kicker">AI Ops</p>
+                <h1 className="text-xl font-bold text-[var(--text-primary)]">מרכז ניהול המלצות AI</h1>
+                <p className="text-sm text-[var(--text-muted)]">
+                  סקירה, אישור וביצוע המלצות אוטומטיות לכל החשבונות.
                 </p>
               </div>
             </div>
@@ -228,23 +270,23 @@ export default function AIInsights() {
           <button
             onClick={() => generateMutation.mutate()}
             disabled={busy || !accountId}
-            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50 shadow-sm"
+            className="btn-primary flex min-h-11 items-center gap-2 px-4 py-2.5 text-sm disabled:opacity-50 shadow-sm"
           >
             <RefreshCw className={`h-4 w-4 ${generateMutation.isPending ? "animate-spin" : ""}`} />
-            {generateMutation.isPending ? "Generating..." : "🧠 Generate Recommendations"}
+            {generateMutation.isPending ? "מייצר..." : "יצירת המלצות"}
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="mt-5 flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
+        <div className="mt-5 flex gap-1 rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] p-1">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
                 activeTab === tab.id
-                  ? "bg-white text-indigo-600 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
+                  ? "bg-[var(--bg-soft-2)] text-[var(--accent)] shadow-sm"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               }`}
             >
               <tab.icon className="h-4 w-4" />
@@ -260,20 +302,20 @@ export default function AIInsights() {
           {/* Stats row */}
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap gap-3">
-              <StatBadge label="Pending" value={stats.pending} color="amber" />
-              <StatBadge label="Approved" value={stats.approved} color="blue" />
-              <StatBadge label="Executed" value={stats.executed} color="emerald" />
+              <StatBadge label="ממתינות" value={stats.pending} color="amber" />
+              <StatBadge label="מאושרות" value={stats.approved} color="blue" />
+              <StatBadge label="בוצעו" value={stats.executed} color="emerald" />
               {executableCount > 0 && (
-                <StatBadge label="Ready to Run" value={executableCount} color="indigo" />
+                <StatBadge label="מוכן לביצוע" value={executableCount} color="indigo" />
               )}
             </div>
             {pendingTasks.filter((r) => r.priority === "high").length > 0 && (
               <button
                 onClick={handleApproveAllHigh}
                 disabled={busy}
-                className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 transition-colors"
+                className="rounded-lg border border-emerald-400/30 bg-emerald-500/12 px-4 py-2 text-sm font-medium text-emerald-200 disabled:opacity-50 transition-colors"
               >
-                ✓ Approve all high-priority
+                אישור מהיר לכל הדחופות
               </button>
             )}
           </div>
@@ -287,10 +329,10 @@ export default function AIInsights() {
                 className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
                   statusFilter === status
                     ? "border-indigo-300 bg-indigo-50 text-indigo-700"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                    : "border-[var(--line)] bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:border-slate-300"
                 }`}
               >
-                {status === "all" ? "All" : status}
+                {STATUS_FILTER_LABELS[status]}
               </button>
             ))}
           </div>
@@ -304,10 +346,10 @@ export default function AIInsights() {
                 className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
                   typeFilter === type
                     ? "border-indigo-300 bg-indigo-50 text-indigo-700"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                    : "border-[var(--line)] bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:border-slate-300"
                 }`}
               >
-                {type === "all" ? "All Types" : TYPE_LABELS[type]}
+                {type === "all" ? "כל הסוגים" : TYPE_LABELS[type]}
               </button>
             ))}
           </div>
@@ -315,17 +357,17 @@ export default function AIInsights() {
           {/* Task cards */}
           <div className="space-y-4">
             {isLoading ? (
-              <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm text-slate-500">
-                Loading tasks...
+              <div className="rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)] p-8 text-center shadow-sm text-[var(--text-muted)]">
+                טוען משימות...
               </div>
             ) : recommendations.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white py-16 shadow-sm">
-                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50">
-                  <Brain className="h-8 w-8 text-indigo-400" />
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--line)] bg-[var(--bg-elevated)] py-16 shadow-sm">
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-[var(--line)] bg-[var(--bg-soft)]">
+                  <Brain className="h-8 w-8 text-[var(--accent)]" />
                 </div>
-                <p className="text-base font-semibold text-slate-700">No tasks yet</p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Click &ldquo;Generate Recommendations&rdquo; to analyze your campaigns
+                <p className="text-base font-semibold text-[var(--text-primary)]">אין משימות פתוחות כרגע</p>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">
+                  לחץ על "יצירת המלצות" כדי להפעיל ניתוח חדש.
                 </p>
               </div>
             ) : (
@@ -365,72 +407,84 @@ export default function AIInsights() {
       {/* Analysis Tab */}
       {activeTab === "analysis" && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <AnalysisCard
               icon={BarChart3}
-              title="Daily Summary"
-              desc="Today's performance overview"
+              title="סיכום יומי"
+              desc="סקירה מהירה של ביצועי היום"
               color="blue"
               onRun={() => handleRunAnalysis("daily_summary")}
               loading={triggerAnalysisMutation.isPending}
             />
             <AnalysisCard
               icon={BarChart3}
-              title="Budget Optimization"
-              desc="Budget allocation recommendations"
+              title="אופטימיזציית תקציב"
+              desc="המלצות חלוקה וסקייל"
               color="emerald"
               onRun={() => handleRunAnalysis("budget_optimization")}
               loading={triggerAnalysisMutation.isPending}
             />
             <AnalysisCard
               icon={Sparkles}
-              title="Creative Recommendations"
-              desc="Detect creative fatigue"
+              title="המלצות קריאייטיב"
+              desc="זיהוי עייפות והצעות שיפור"
               color="violet"
               onRun={() => handleRunAnalysis("creative_recommendations")}
               loading={triggerAnalysisMutation.isPending}
             />
             <AnalysisCard
               icon={FileText}
-              title="Ad Copy Generator"
-              desc="AI-generated ad variations"
+              title="מחולל קופי"
+              desc="וריאציות מודעה אוטומטיות"
               color="amber"
               onRun={() => handleRunAnalysis("creative_copy")}
               loading={triggerAnalysisMutation.isPending}
             />
+            <AnalysisCard
+              icon={Brain}
+              title="אבחון Meta"
+              desc="דיאגנוזה מפורטת ותכנית ניסויים"
+              color="indigo"
+              onRun={() => handleRunAnalysis("meta_diagnosis", { language: "he" })}
+              loading={triggerAnalysisMutation.isPending}
+            />
           </div>
 
-          {analysisResult && (
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          {(analysisResult || analysisStructured) && (
+            <div className="rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)] p-5 shadow-sm">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-800">Analysis Result</h3>
+                <h3 className="text-sm font-semibold text-[var(--text-primary)]">תוצאת ניתוח</h3>
                 <button
-                  onClick={() => copyToClipboard(analysisResult)}
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-50"
+                  onClick={() => copyToClipboard(analysisResult ?? "")}
+                  className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] px-2.5 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--bg-soft)]"
                 >
                   <Copy className="h-3 w-3" />
-                  Copy
+                  העתקה
                 </button>
               </div>
-              <div className="whitespace-pre-wrap rounded-lg border border-slate-100 bg-slate-50 p-4 text-sm text-slate-700 leading-relaxed">
-                {analysisResult}
-              </div>
+              {analysisStructured ? (
+                <MetaDiagnosisView report={analysisStructured} fallbackText={analysisResult} />
+              ) : (
+                <div className="whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] p-4 text-sm text-[var(--text-primary)] leading-relaxed">
+                  {analysisResult}
+                </div>
+              )}
             </div>
           )}
 
           {insightsQuery.data && insightsQuery.data.length > 0 && (
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="mb-3 text-sm font-semibold text-slate-800">Recent Analysis</h3>
+            <div className="rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)] p-5 shadow-sm">
+              <h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">ניתוחים אחרונים</h3>
               <div className="space-y-2">
                 {insightsQuery.data.slice(0, 5).map((insight) => (
                   <div
                     key={insight.id}
-                    className="rounded-lg border border-slate-100 bg-slate-50 p-3"
+                    className="rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] p-3"
                   >
-                    <span className="text-[11px] text-slate-400">
-                      {insight.insightType} · {new Date(insight.generatedAt).toLocaleString("en-US")}
+                    <span className="text-[11px] text-[var(--text-muted)]">
+                      {insight.insightType} · {new Date(insight.generatedAt).toLocaleString("he-IL")}
                     </span>
-                    <p className="mt-1 line-clamp-2 text-sm text-slate-700">{insight.content}</p>
+                    <p className="mt-1 line-clamp-2 text-sm text-[var(--text-primary)]">{insight.content}</p>
                   </div>
                 ))}
               </div>
@@ -441,15 +495,15 @@ export default function AIInsights() {
 
       {/* Policy Tab */}
       {activeTab === "policy" && (
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="mb-1 text-sm font-semibold text-slate-800">Execution Policy</h3>
-          <p className="mb-5 text-xs text-slate-500">
-            Configure when Nati AI is allowed to automatically execute recommendations.
+        <div className="rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)] p-6 shadow-sm">
+          <h3 className="mb-1 text-sm font-semibold text-[var(--text-primary)]">מדיניות ביצוע</h3>
+          <p className="mb-5 text-xs text-[var(--text-muted)]">
+            קבע מתי המערכת יכולה לבצע המלצות אוטומטית.
           </p>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
-                Minimum confidence to execute
+              <label className="block text-xs font-medium text-[var(--text-primary)] mb-1">
+                מינימום ביטחון לביצוע אוטומטי
               </label>
               <div className="flex items-center gap-3">
                 <input
@@ -467,8 +521,8 @@ export default function AIInsights() {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
-                Max budget change per action (%)
+              <label className="block text-xs font-medium text-[var(--text-primary)] mb-1">
+                שינוי תקציב מקסימלי לפעולה (%)
               </label>
               <div className="flex items-center gap-3">
                 <input
@@ -487,14 +541,14 @@ export default function AIInsights() {
             </div>
 
             <ToggleRow
-              label="Allow auto-execution"
-              description="Nati AI can execute approved recommendations automatically"
+              label="לאפשר ביצוע אוטומטי"
+              description="המערכת תוכל לבצע המלצות שאושרו"
               checked={draftAllowExecute}
               onChange={setDraftAllowExecute}
             />
             <ToggleRow
-              label="Allow rollback"
-              description="Allow undoing executed actions"
+              label="לאפשר Rollback"
+              description="אפשרות לבטל פעולות שבוצעו"
               checked={draftAllowRollback}
               onChange={setDraftAllowRollback}
             />
@@ -513,13 +567,13 @@ export default function AIInsights() {
               disabled={policyBusy}
               className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
             >
-              {policyBusy ? "Saving..." : "Save Policy"}
+              {policyBusy ? "שומר..." : "שמירת מדיניות"}
             </button>
             <button
               onClick={syncPolicyDraftFromServer}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+              className="rounded-lg border border-[var(--line)] px-4 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-soft)] transition-colors"
             >
-              Reset
+              איפוס
             </button>
           </div>
         </div>
@@ -575,8 +629,8 @@ function ToggleRow({
   return (
     <div className="flex items-start justify-between gap-4">
       <div>
-        <p className="text-sm font-medium text-slate-700">{label}</p>
-        <p className="text-xs text-slate-500">{description}</p>
+        <p className="text-sm font-medium text-[var(--text-primary)]">{label}</p>
+        <p className="text-xs text-[var(--text-muted)]">{description}</p>
       </div>
       <button
         onClick={() => onChange(!checked)}
@@ -585,7 +639,7 @@ function ToggleRow({
         }`}
       >
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+          className={`absolute top-0.5 h-5 w-5 rounded-full bg-[var(--bg-elevated)] shadow transition-transform ${
             checked ? "translate-x-[22px]" : "translate-x-0.5"
           }`}
         />
@@ -605,7 +659,7 @@ function AnalysisCard({
   icon: React.ElementType;
   title: string;
   desc: string;
-  color: "blue" | "emerald" | "violet" | "amber";
+  color: "blue" | "emerald" | "violet" | "amber" | "indigo";
   onRun: () => void;
   loading: boolean;
 }) {
@@ -614,23 +668,98 @@ function AnalysisCard({
     emerald: { bg: "bg-emerald-50", icon: "text-emerald-600", btn: "bg-emerald-600 hover:bg-emerald-700" },
     violet: { bg: "bg-violet-50", icon: "text-violet-600", btn: "bg-violet-600 hover:bg-violet-700" },
     amber: { bg: "bg-amber-50", icon: "text-amber-600", btn: "bg-amber-600 hover:bg-amber-700" },
+    indigo: { bg: "bg-indigo-50", icon: "text-indigo-600", btn: "bg-indigo-600 hover:bg-indigo-700" },
   };
   const c = colorMap[color];
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-colors hover:border-slate-300">
+    <div className="rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)] p-4 shadow-sm transition-colors hover:border-slate-300">
       <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl ${c.bg}`}>
         <Icon className={`h-5 w-5 ${c.icon}`} />
       </div>
-      <h3 className="font-semibold text-slate-800">{title}</h3>
-      <p className="mt-1 text-xs text-slate-500">{desc}</p>
+      <h3 className="font-semibold text-[var(--text-primary)]">{title}</h3>
+      <p className="mt-1 text-xs text-[var(--text-muted)]">{desc}</p>
       <button
         onClick={onRun}
         disabled={loading}
         className={`mt-4 rounded-lg px-3 py-1.5 text-xs font-medium text-white ${c.btn} disabled:opacity-50 transition-colors`}
       >
-        {loading ? "Running..." : "Run Analysis"}
+        {loading ? "מריץ..." : "הרצת ניתוח"}
       </button>
+    </div>
+  );
+}
+
+function MetaDiagnosisView({
+  report,
+  fallbackText,
+}: {
+  report: MetaDiagnosisReport;
+  fallbackText: string | null;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] p-3 text-xs text-[var(--text-secondary)]">
+          <span className="font-semibold text-[var(--text-primary)]">Evaluation Level:</span> {report.evaluationLevel}
+        </div>
+        <div className="rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] p-3 text-xs text-[var(--text-secondary)]">
+          <span className="font-semibold text-[var(--text-primary)]">Engine:</span> {report.engineVersion}
+        </div>
+        <div className="rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] p-3 text-xs text-[var(--text-secondary)]">
+          <span className="font-semibold text-[var(--text-primary)]">Official Count:</span> {report.alignment?.officialCount ?? 0}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] p-4">
+        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Aggregate Findings</h4>
+        <div className="space-y-2 text-sm text-[var(--text-primary)]">
+          {report.aggregateFindings.map((item, idx) => (
+            <div key={idx} className="rounded-md border border-[var(--line)] bg-[var(--bg-elevated)] p-2">
+              <p className="font-medium text-[var(--text-primary)]">{item.statement}</p>
+              <p className="text-xs text-[var(--text-muted)]">{item.evidence}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] p-4">
+        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Breakdown Hypotheses</h4>
+        <div className="space-y-2 text-sm text-[var(--text-primary)]">
+          {report.breakdownHypotheses.map((item, idx) => (
+            <div key={idx} className="rounded-md border border-[var(--line)] bg-[var(--bg-elevated)] p-2">
+              <p className="font-medium text-[var(--text-primary)]">{item.hypothesis}</p>
+              {item.testPlan && <p className="text-xs text-[var(--text-muted)]">Test: {item.testPlan}</p>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] p-4">
+        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Recommendation Experiments</h4>
+        <div className="space-y-2 text-sm text-[var(--text-primary)]">
+          {report.recommendationExperiments.map((item, idx) => (
+            <div key={idx} className="rounded-md border border-[var(--line)] bg-[var(--bg-elevated)] p-2">
+              <p className="font-medium text-[var(--text-primary)]">{item.hypothesis}</p>
+              <p className="text-xs text-[var(--text-secondary)]">פעולה: {item.action}</p>
+              {item.validationWindow && <p className="text-xs text-[var(--text-muted)]">Window: {item.validationWindow}</p>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {report.alignment?.divergenceReason && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+          <span className="font-semibold">Divergence reason:</span> {report.alignment.divergenceReason}
+        </div>
+      )}
+
+      {fallbackText && (
+        <details className="rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] p-3">
+          <summary className="cursor-pointer text-xs font-semibold text-[var(--text-secondary)]">Raw Text Output</summary>
+          <pre className="mt-2 whitespace-pre-wrap text-xs text-[var(--text-secondary)]">{fallbackText}</pre>
+        </details>
+      )}
     </div>
   );
 }
@@ -684,10 +813,10 @@ function TaskCardFull({
     rec.confidence >= (policyData?.minConfidenceToExecute ?? 0.65);
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)] p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
+          <div className="rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] p-2">
             <TypeIcon className="h-5 w-5 text-indigo-500" />
           </div>
           <div className="space-y-1">
@@ -698,20 +827,20 @@ function TaskCardFull({
               <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[rec.priority]}`}>
                 {rec.priority}
               </span>
-              <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+              <span className="rounded-md bg-[var(--bg-soft-2)] px-2 py-0.5 text-xs text-[var(--text-secondary)]">
                 {rec.status}
               </span>
             </div>
-            <h3 className="text-base font-semibold text-slate-900">{rec.title}</h3>
-            <p className="text-sm text-slate-600">{rec.why || rec.reasoning}</p>
+            <h3 className="text-base font-semibold text-[var(--text-primary)]">{rec.title}</h3>
+            <p className="text-sm text-[var(--text-secondary)]">{rec.why || rec.reasoning}</p>
           </div>
         </div>
-        <div className="text-xs text-slate-400">
+        <div className="text-xs text-[var(--text-muted)]">
           <div className="flex items-center gap-1">
             <Clock className="h-3.5 w-3.5" />
-            {new Date(rec.createdAt).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })}
+            {new Date(rec.createdAt).toLocaleString("he-IL", { dateStyle: "short", timeStyle: "short" })}
           </div>
-          <div className="mt-1">Confidence: {(rec.confidence * 100).toFixed(0)}%</div>
+          <div className="mt-1">ביטחון: {(rec.confidence * 100).toFixed(0)}%</div>
         </div>
       </div>
 
@@ -721,26 +850,26 @@ function TaskCardFull({
           {rec.suggestedContent.creativeCopy && (
             <div className="rounded-lg border border-violet-100 bg-violet-50 p-3">
               <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-violet-500">
-                Suggested Copy
+                קופי מוצע
               </p>
               <p className="text-sm text-violet-900">&ldquo;{rec.suggestedContent.creativeCopy}&rdquo;</p>
               <button
                 onClick={() => onCopy(rec.suggestedContent!.creativeCopy!)}
-                className="mt-2 flex items-center gap-1 rounded-md border border-violet-200 bg-white px-2 py-1 text-xs text-violet-700 hover:bg-violet-50"
+                className="mt-2 flex items-center gap-1 rounded-md border border-violet-200 bg-[var(--bg-elevated)] px-2 py-1 text-xs text-violet-700 hover:bg-violet-50"
               >
                 <Copy className="h-3 w-3" />
-                {copiedId === rec.id ? "Copied!" : "Copy"}
+                {copiedId === rec.id ? "הועתק" : "העתק"}
               </button>
             </div>
           )}
           {rec.suggestedContent.audienceSuggestions && rec.suggestedContent.audienceSuggestions.length > 0 && (
             <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
               <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-blue-500">
-                Audience Suggestions
+                הצעות קהל
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {rec.suggestedContent.audienceSuggestions.map((s, i) => (
-                  <span key={i} className="rounded-full border border-blue-200 bg-white px-2 py-0.5 text-xs text-blue-700">
+                  <span key={i} className="rounded-full border border-blue-200 bg-[var(--bg-elevated)] px-2 py-0.5 text-xs text-blue-700">
                     {s}
                   </span>
                 ))}
@@ -751,8 +880,8 @@ function TaskCardFull({
       )}
 
       {rec.expectedImpact?.summary && (
-        <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-          <span className="font-medium">Expected impact: </span>
+        <div className="mt-3 rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+          <span className="font-medium">השפעה צפויה: </span>
           {rec.expectedImpact.summary}
         </div>
       )}
@@ -767,7 +896,7 @@ function TaskCardFull({
               className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60 transition-colors"
             >
               <CheckCircle2 className="h-4 w-4" />
-              Approve & Execute
+              אישור וביצוע
             </button>
           ) : (
             <button
@@ -776,7 +905,7 @@ function TaskCardFull({
               className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60 transition-colors"
             >
               <CheckCircle2 className="h-4 w-4" />
-              Approve
+              אישור
             </button>
           )}
           <button
@@ -785,7 +914,7 @@ function TaskCardFull({
             className="flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-600 hover:bg-rose-100 disabled:opacity-60 transition-colors"
           >
             <XCircle className="h-4 w-4" />
-            Dismiss
+            דחייה
           </button>
         </div>
       )}
@@ -797,14 +926,14 @@ function TaskCardFull({
             disabled={busy}
             className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
           >
-            {executePreviewId === rec.id ? "Hide Preview" : "Preview Execution"}
+            {executePreviewId === rec.id ? "הסתרת תצוגה" : "תצוגת ביצוע"}
           </button>
           <button
             onClick={onExecute}
             disabled={busy || executePreviewId !== rec.id}
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
-            Execute
+            ביצוע
           </button>
         </div>
       )}
@@ -813,12 +942,12 @@ function TaskCardFull({
         <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-800">
           {executePreviewQuery.data.canExecute ? (
             executePreviewQuery.data.action === "adjust_budget" ? (
-              <p>Budget: ${executePreviewQuery.data.currentBudget} → ${executePreviewQuery.data.newBudget}</p>
+              <p>תקציב: ${executePreviewQuery.data.currentBudget} → ${executePreviewQuery.data.newBudget}</p>
             ) : (
-              <p>Status: {executePreviewQuery.data.currentStatus} → {executePreviewQuery.data.desiredStatus}</p>
+              <p>סטטוס: {executePreviewQuery.data.currentStatus} → {executePreviewQuery.data.desiredStatus}</p>
             )
           ) : (
-            <p>Cannot execute: {executePreviewQuery.data.reason}</p>
+            <p>לא ניתן לבצע: {executePreviewQuery.data.reason}</p>
           )}
         </div>
       )}
@@ -838,7 +967,7 @@ function TaskCardFull({
                 disabled={busy}
                 className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100 transition-colors"
               >
-                {rollbackPreviewId === rec.id ? "Hide Rollback" : "Preview Rollback"}
+                {rollbackPreviewId === rec.id ? "הסתרת Rollback" : "תצוגת Rollback"}
               </button>
               <button
                 onClick={onRollback}
@@ -851,27 +980,27 @@ function TaskCardFull({
           )}
           <button
             onClick={() => setExpandedHistoryId(expandedHistoryId === rec.id ? null : rec.id)}
-            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 transition-colors"
+            className="rounded-md border border-[var(--line)] bg-[var(--bg-elevated)] px-2 py-1 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-soft)] transition-colors"
           >
             {expandedHistoryId === rec.id ? (
-              <><ChevronUp className="inline h-3 w-3" /> Hide History</>
+              <><ChevronUp className="inline h-3 w-3" /> הסתר היסטוריה</>
             ) : (
-              <><ChevronDown className="inline h-3 w-3" /> Execution History</>
+              <><ChevronDown className="inline h-3 w-3" /> היסטוריית ביצוע</>
             )}
           </button>
         </div>
       )}
 
       {expandedHistoryId === rec.id && executionsQuery.data && executionsQuery.data.length > 0 && (
-        <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs text-slate-700">
+        <div className="mt-2 rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] p-3 text-xs text-[var(--text-primary)]">
           {executionsQuery.data.map((exe) => (
-            <div key={exe.id} className="rounded border border-slate-200 bg-white px-2 py-2 mb-1 last:mb-0">
+            <div key={exe.id} className="rounded border border-[var(--line)] bg-[var(--bg-elevated)] px-2 py-2 mb-1 last:mb-0">
               <span className="font-medium">{exe.status}</span>
-              <span className="ml-2 text-slate-400">
-                {exe.requestedAt ? new Date(exe.requestedAt).toLocaleString("en-US") : ""}
+              <span className="ml-2 text-[var(--text-muted)]">
+                {exe.requestedAt ? new Date(exe.requestedAt).toLocaleString("he-IL") : ""}
               </span>
-              {exe.action && <p className="mt-1 text-slate-600">Action: {exe.action}</p>}
-              {exe.error && <p className="text-rose-600">Error: {exe.error}</p>}
+              {exe.action && <p className="mt-1 text-[var(--text-secondary)]">פעולה: {exe.action}</p>}
+              {exe.error && <p className="text-rose-600">שגיאה: {exe.error}</p>}
             </div>
           ))}
         </div>
@@ -894,32 +1023,32 @@ function ToastMessages({
   return (
     <>
       {(generateMutation.isError || reviewMutation.isError || executeMutation.isError || rollbackMutation.isError) && (
-        <div className="fixed bottom-4 right-4 rounded-xl border border-rose-200 bg-white px-4 py-3 text-sm text-rose-700 shadow-lg">
+        <div className="fixed bottom-4 right-4 rounded-xl border border-rose-200 bg-[var(--bg-elevated)] px-4 py-3 text-sm text-rose-700 shadow-lg">
           {(generateMutation.error as Error)?.message ??
             (reviewMutation.error as Error)?.message ??
             (executeMutation.error as Error)?.message ??
             (rollbackMutation.error as Error)?.message ??
-            "An error occurred"}
+            "אירעה שגיאה"}
         </div>
       )}
       {generateMutation.isSuccess && (
-        <div className="fixed bottom-4 right-4 rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm text-emerald-700 shadow-lg">
-          ✓ Recommendations generated successfully.
+        <div className="fixed bottom-4 right-4 rounded-xl border border-emerald-200 bg-[var(--bg-elevated)] px-4 py-3 text-sm text-emerald-700 shadow-lg">
+          ✓ ההמלצות נוצרו בהצלחה.
         </div>
       )}
       {reviewMutation.isSuccess && (
-        <div className="fixed bottom-4 right-4 rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm text-emerald-700 shadow-lg">
-          ✓ Status updated.
+        <div className="fixed bottom-4 right-4 rounded-xl border border-emerald-200 bg-[var(--bg-elevated)] px-4 py-3 text-sm text-emerald-700 shadow-lg">
+          ✓ הסטטוס עודכן.
         </div>
       )}
       {executeMutation.isSuccess && (
-        <div className="fixed bottom-4 right-4 rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm text-emerald-700 shadow-lg">
-          ✓ Action executed successfully.
+        <div className="fixed bottom-4 right-4 rounded-xl border border-emerald-200 bg-[var(--bg-elevated)] px-4 py-3 text-sm text-emerald-700 shadow-lg">
+          ✓ הפעולה בוצעה בהצלחה.
         </div>
       )}
       {rollbackMutation.isSuccess && (
-        <div className="fixed bottom-4 right-4 rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm text-emerald-700 shadow-lg">
-          ✓ Rollback completed.
+        <div className="fixed bottom-4 right-4 rounded-xl border border-emerald-200 bg-[var(--bg-elevated)] px-4 py-3 text-sm text-emerald-700 shadow-lg">
+          ✓ ה-Rollback הושלם.
         </div>
       )}
     </>

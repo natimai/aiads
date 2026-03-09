@@ -79,20 +79,39 @@ class ReportGenerator:
 
         ai_summary = ""
         try:
-            from services.ai_analyzer import AIAnalyzer
-            analyzer = AIAnalyzer()
+            from services.meta_ads_analyzer_v2 import MetaAdsAnalyzerV2
+
+            analyzer = MetaAdsAnalyzerV2()
             acc_doc = next(accounts_ref.stream(), None)
             if acc_doc:
                 acc_data = acc_doc.to_dict()
                 kpi_summary = acc_data.get("kpiSummary", {})
+                campaigns_for_ai = [
+                    {
+                        "name": c.get("name", ""),
+                        "status": "ACTIVE",
+                        "todayInsights": {
+                            "spend": c.get("spend", 0),
+                            "roas": c.get("roas", 0),
+                            "cpa": c.get("cpi", 0),
+                            "ctr": c.get("ctr", 0),
+                            "cpm": c.get("cpm", 0),
+                            "impressions": c.get("impressions", 0),
+                        },
+                    }
+                    for c in all_campaigns
+                ]
                 ai_data = {
                     "accountName": acc_data.get("accountName", ""),
                     "currency": acc_data.get("currency", "USD"),
                     "kpiSummary": kpi_summary,
-                    "campaigns": all_campaigns,
+                    "campaigns": campaigns_for_ai,
+                    "breakdowns": [],
+                    "officialRecommendations": [],
                     "date": yesterday,
                 }
-                ai_summary = analyzer.daily_summary(ai_data)
+                structured = analyzer.analyze(ai_data, official_recommendations=[], language="en")
+                ai_summary = analyzer.to_text_report(structured)
         except Exception as e:
             logger.warning(f"AI summary failed: {e}")
 

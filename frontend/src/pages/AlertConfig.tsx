@@ -105,6 +105,7 @@ export default function AlertConfig() {
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div>
+            <p className="section-kicker">Automation Rules</p>
             <h2 className="brand-display text-2xl text-[var(--text-primary)]">תצורת התראות</h2>
             <p className="text-sm text-[var(--text-secondary)]">הגדרת ספים, קירור וערוצי התראה לכל חשבון</p>
           </div>
@@ -157,7 +158,7 @@ export default function AlertConfig() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleSave(alertType.value)}
-                      className="focus-ring inline-flex min-h-10 items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--bg-soft)] px-3 text-xs font-semibold text-[var(--text-primary)]"
+                      className="focus-ring btn-secondary inline-flex min-h-10 items-center gap-1 px-3 text-xs font-semibold"
                     >
                       <Save className="h-3.5 w-3.5" />
                       שמירה
