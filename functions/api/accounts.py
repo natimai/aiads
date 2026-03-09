@@ -77,6 +77,9 @@ def handle_accounts(request):
         elif path.startswith("/api/accounts/") and path.endswith("/defaults/page") and request.method == "POST":
             account_id = path.split("/api/accounts/")[1].split("/defaults/page")[0]
             return _set_default_page(request, user_id, account_id)
+        elif path.startswith("/api/accounts/") and path.endswith("/defaults/page") and request.method == "DELETE":
+            account_id = path.split("/api/accounts/")[1].split("/defaults/page")[0]
+            return _clear_default_page(user_id, account_id)
         elif path.endswith("/managed") and request.method == "POST":
             account_id = path.split("/api/accounts/")[1].split("/managed")[0]
             return _toggle_managed(request, user_id, account_id)
@@ -181,6 +184,9 @@ def _set_default_page(request, user_id: str, account_id: str):
     payload = request.get_json(silent=True) or {}
     page_id = str(payload.get("pageId") or "").strip()
     page_name = str(payload.get("pageName") or "").strip()
+    clear_default = bool(payload.get("clear", False))
+    if clear_default:
+        return _clear_default_page(user_id, account_id)
     if not page_id:
         return _cors_response(json.dumps({"error": "pageId required"}), 400)
 
@@ -226,6 +232,33 @@ def _set_default_page(request, user_id: str, account_id: str):
                 "success": True,
                 "defaultPageId": page_id,
                 "defaultPageName": page_name,
+            }
+        )
+    )
+
+
+def _clear_default_page(user_id: str, account_id: str):
+    doc_ref = _account_ref(user_id, account_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        return _cors_response(json.dumps({"error": "Account not found"}), 404)
+
+    now = datetime.now(timezone.utc)
+    doc_ref.set(
+        {
+            "defaultPageId": "",
+            "defaultPageName": "",
+            "updatedAt": now,
+        },
+        merge=True,
+    )
+    logger.info("Default page cleared user=%s account=%s", user_id, account_id)
+    return _cors_response(
+        json.dumps(
+            {
+                "success": True,
+                "defaultPageId": "",
+                "defaultPageName": "",
             }
         )
     )
@@ -283,10 +316,15 @@ def _handle_callback(request):
 
         # Auto-fetch Facebook Pages so we can store defaultPageId
         pages, page_access_status = fetch_pages_with_status(access_token)
-        first_page_id = pages[0]["pageId"] if pages else ""
-        first_page_name = pages[0]["pageName"] if pages else ""
-        if pages:
+        first_page_id = pages[0]["pageId"] if len(pages) == 1 else ""
+        first_page_name = pages[0]["pageName"] if len(pages) == 1 else ""
+        if len(pages) == 1:
             logger.info(f"Found {len(pages)} Facebook Pages, using '{first_page_name}' ({first_page_id}) as default")
+        elif len(pages) > 1:
+            logger.info(
+                "Found %s Facebook Pages; skipping auto default page assignment to avoid cross-account mismatch",
+                len(pages),
+            )
         else:
             logger.info("No Facebook pages found during connect: status=%s", page_access_status)
 

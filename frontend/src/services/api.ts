@@ -144,6 +144,14 @@ export async function setAccountDefaultPage(
   });
 }
 
+export async function clearAccountDefaultPage(
+  accountId: string
+): Promise<{ success: boolean; defaultPageId: string; defaultPageName?: string }> {
+  return apiFetch(`/api/accounts/${accountId}/defaults/page`, {
+    method: "DELETE",
+  });
+}
+
 export async function disconnectAccount(accountId: string): Promise<void> {
   await apiFetch(`/api/accounts/${accountId}`, { method: "DELETE" });
 }

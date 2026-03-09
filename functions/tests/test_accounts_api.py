@@ -116,6 +116,68 @@ class AccountsApiTest(unittest.TestCase):
         self.assertEqual(saved["defaultPageId"], "pg-777")
         self.assertEqual(saved["defaultPageName"], "My Page")
 
+    @patch("api.accounts.verify_auth", return_value="user-1")
+    @patch("api.accounts.get_db")
+    def test_clear_default_page_endpoint(self, mock_get_db, _mock_auth):
+        db, account_doc_ref = _mock_db_for_account_doc("acc-1", {"defaultPageId": "pg-777"})
+        mock_get_db.return_value = db
+
+        req = FakeRequest(
+            "DELETE",
+            "/api/accounts/acc-1/defaults/page",
+        )
+        body, status, _ = handle_accounts(req)
+        payload = json.loads(body)
+
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["success"])
+        saved = account_doc_ref.set.call_args.args[0]
+        self.assertEqual(saved["defaultPageId"], "")
+        self.assertEqual(saved["defaultPageName"], "")
+
+    @patch("services.meta_auth.store_account_with_token")
+    @patch("services.meta_auth.fetch_pages_with_status")
+    @patch("services.meta_auth.fetch_ad_accounts")
+    @patch("services.meta_auth.exchange_code_for_token")
+    @patch("services.meta_auth.decode_state", return_value="user-1")
+    def test_callback_skips_auto_default_when_multiple_pages(
+        self,
+        _mock_decode_state,
+        mock_exchange_code_for_token,
+        mock_fetch_ad_accounts,
+        mock_fetch_pages_with_status,
+        mock_store_account_with_token,
+    ):
+        mock_exchange_code_for_token.return_value = {
+            "access_token": "token-1",
+            "token_expiry": "2026-05-01T00:00:00Z",
+        }
+        mock_fetch_ad_accounts.return_value = [
+            {"metaAccountId": "acc-1", "accountName": "A", "currency": "USD"},
+            {"metaAccountId": "acc-2", "accountName": "B", "currency": "USD"},
+        ]
+        mock_fetch_pages_with_status.return_value = (
+            [
+                {"pageId": "pg-1", "pageName": "Page 1"},
+                {"pageId": "pg-2", "pageName": "Page 2"},
+            ],
+            "ok",
+        )
+        mock_store_account_with_token.side_effect = ["acc-1", "acc-2"]
+
+        req = FakeRequest(
+            "GET",
+            "/api/accounts/callback",
+            args={"code": "code-1", "state": "state-1"},
+        )
+        _, status, headers = handle_accounts(req)
+
+        self.assertEqual(status, 302)
+        self.assertIn("success=true", headers["Location"])
+        for call in mock_store_account_with_token.call_args_list:
+            self.assertEqual(call.kwargs["default_page_id"], "")
+            self.assertEqual(call.kwargs["default_page_name"], "")
+
 
 if __name__ == "__main__":
     unittest.main()

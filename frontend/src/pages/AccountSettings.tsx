@@ -15,18 +15,26 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAccounts } from "../contexts/AccountContext";
 import {
+  clearAccountDefaultPage,
   connectAccount,
   disconnectAccount,
+  getAccountPages,
+  setAccountDefaultPage,
   syncAccount,
   syncAllAccounts,
   toggleManagedAccount,
 } from "../services/api";
+import type { MetaPageOption } from "../types";
 
 export default function AccountSettings() {
   const { accounts } = useAccounts();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [pageEditorOpenByAccount, setPageEditorOpenByAccount] = useState<Record<string, boolean>>({});
+  const [pageDraftByAccount, setPageDraftByAccount] = useState<Record<string, string>>({});
+  const [pageOptionsByAccount, setPageOptionsByAccount] = useState<Record<string, MetaPageOption[]>>({});
+  const [pageStatusByAccount, setPageStatusByAccount] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const success = searchParams.get("success");
@@ -103,8 +111,70 @@ export default function AccountSettings() {
     onError: (err: Error) => setToast({ type: "error", message: err.message }),
   });
 
+  const loadPagesForAccount = useMutation({
+    mutationFn: getAccountPages,
+    onSuccess: (data, accountId) => {
+      setPageOptionsByAccount((prev) => ({ ...prev, [accountId]: data.pages || [] }));
+      setPageStatusByAccount((prev) => ({ ...prev, [accountId]: data.pageAccessStatus || "" }));
+      setPageDraftByAccount((prev) => {
+        const current = String(prev[accountId] || "").trim();
+        if (current) return prev;
+        const firstPageId = String(data.pages?.[0]?.pageId || "").trim();
+        if (!firstPageId) return prev;
+        return { ...prev, [accountId]: firstPageId };
+      });
+    },
+    onError: (err: Error, accountId) => {
+      setPageStatusByAccount((prev) => ({ ...prev, [accountId]: "token_error" }));
+      setToast({ type: "error", message: `טעינת עמודים נכשלה (${accountId}): ${err.message}` });
+    },
+  });
+
+  const saveDefaultPage = useMutation({
+    mutationFn: ({
+      accountId,
+      pageId,
+      pageName,
+    }: {
+      accountId: string;
+      pageId: string;
+      pageName?: string;
+    }) => setAccountDefaultPage(accountId, pageId, pageName),
+    onSuccess: (_, payload) => {
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["accountPages", payload.accountId] });
+      setToast({ type: "success", message: "עמוד ברירת מחדל נשמר" });
+    },
+    onError: (err: Error) => setToast({ type: "error", message: err.message }),
+  });
+
+  const clearDefaultPage = useMutation({
+    mutationFn: (accountId: string) => clearAccountDefaultPage(accountId),
+    onSuccess: (_, accountId) => {
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["accountPages", accountId] });
+      setPageDraftByAccount((prev) => ({ ...prev, [accountId]: "" }));
+      setToast({ type: "success", message: "עמוד ברירת מחדל נוקה" });
+    },
+    onError: (err: Error) => setToast({ type: "error", message: err.message }),
+  });
+
   const managedCount = accounts.filter((account) => account.isManagedByPlatform).length;
   const reconnectRequired = accounts.some((account) => account.pageAccessStatus === "missing_permissions");
+
+  const togglePageEditor = (accountId: string, currentDefaultPageId: string) => {
+    const isOpening = !Boolean(pageEditorOpenByAccount[accountId]);
+    setPageEditorOpenByAccount((prev) => ({ ...prev, [accountId]: isOpening }));
+    if (!isOpening) return;
+
+    setPageDraftByAccount((prev) => ({
+      ...prev,
+      [accountId]: String(prev[accountId] || currentDefaultPageId || ""),
+    }));
+    if (!pageOptionsByAccount[accountId]) {
+      loadPagesForAccount.mutate(accountId);
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-4xl reveal-up">
@@ -208,102 +278,212 @@ export default function AccountSettings() {
             <span>פעולות</span>
           </div>
 
-          {accounts.map((account) => (
-            <div
-              key={account.id}
-              className={`grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 border-b border-[var(--line)] px-5 py-4 last:border-b-0 ${
-                account.isManagedByPlatform ? "" : "opacity-80"
-              }`}
-            >
-              <div>
-                <h3 className="text-sm font-semibold text-[var(--text-primary)]">{account.accountName}</h3>
-                <div className="mt-0.5 flex flex-wrap items-center gap-3 text-[11px] text-[var(--text-muted)]">
-                  <span className="ltr">ID: {account.id}</span>
-                  <span className="ltr">{account.currency}</span>
-                  {account.businessName && <span>{account.businessName}</span>}
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-secondary)]">
-                  <span className="rounded-full border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-0.5">
-                    עמוד ברירת מחדל: {account.defaultPageId ? `${account.defaultPageName || "Page"} (${account.defaultPageId})` : "לא הוגדר"}
-                  </span>
-                  {account.pageAccessStatus === "missing_permissions" && (
-                    <span className="rounded-full border border-amber-400/40 bg-amber-500/12 px-2 py-0.5 text-amber-200">
-                      חסרות הרשאות דפים
-                    </span>
-                  )}
-                  {account.pageAccessStatus === "token_error" && (
-                    <span className="rounded-full border border-rose-400/40 bg-rose-500/12 px-2 py-0.5 text-rose-200">
-                      בעיית טוקן גישה
-                    </span>
-                  )}
-                </div>
-                {account.tokenExpiry && (
-                  <div className="mt-1 flex items-center gap-1 text-[11px]">
-                    <Clock className="h-3 w-3 text-[var(--text-muted)]" />
-                    <span className="text-[var(--text-secondary)]">
-                      טוקן: {new Date(account.tokenExpiry).toLocaleDateString("he-IL")}
-                    </span>
+          {accounts.map((account) => {
+            const isPageEditorOpen = Boolean(pageEditorOpenByAccount[account.id]);
+            const accountPageOptions = pageOptionsByAccount[account.id] || [];
+            const accountPageStatus = pageStatusByAccount[account.id] || account.pageAccessStatus || "";
+            const pageDraft = String(pageDraftByAccount[account.id] ?? account.defaultPageId ?? "");
+            const isLoadingPages = loadPagesForAccount.isPending && loadPagesForAccount.variables === account.id;
+            const isSavingPage =
+              saveDefaultPage.isPending && saveDefaultPage.variables?.accountId === account.id;
+            const isClearingPage =
+              clearDefaultPage.isPending && clearDefaultPage.variables === account.id;
+
+            return (
+              <div
+                key={account.id}
+                className={`grid grid-cols-[1fr_auto_auto_auto] items-start gap-4 border-b border-[var(--line)] px-5 py-4 last:border-b-0 ${
+                  account.isManagedByPlatform ? "" : "opacity-80"
+                }`}
+              >
+                <div>
+                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">{account.accountName}</h3>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-3 text-[11px] text-[var(--text-muted)]">
+                    <span className="ltr">ID: {account.id}</span>
+                    <span className="ltr">{account.currency}</span>
+                    {account.businessName && <span>{account.businessName}</span>}
                   </div>
-                )}
-              </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-secondary)]">
+                    <span className="rounded-full border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-0.5">
+                      עמוד ברירת מחדל:{" "}
+                      {account.defaultPageId
+                        ? `${account.defaultPageName || "Page"} (${account.defaultPageId})`
+                        : "לא הוגדר"}
+                    </span>
+                    {account.pageAccessStatus === "missing_permissions" && (
+                      <span className="rounded-full border border-amber-400/40 bg-amber-500/12 px-2 py-0.5 text-amber-200">
+                        חסרות הרשאות דפים
+                      </span>
+                    )}
+                    {account.pageAccessStatus === "token_error" && (
+                      <span className="rounded-full border border-rose-400/40 bg-rose-500/12 px-2 py-0.5 text-rose-200">
+                        בעיית טוקן גישה
+                      </span>
+                    )}
+                  </div>
+                  {account.tokenExpiry && (
+                    <div className="mt-1 flex items-center gap-1 text-[11px]">
+                      <Clock className="h-3 w-3 text-[var(--text-muted)]" />
+                      <span className="text-[var(--text-secondary)]">
+                        טוקן: {new Date(account.tokenExpiry).toLocaleDateString("he-IL")}
+                      </span>
+                    </div>
+                  )}
 
-              <div className="flex flex-col items-center gap-1">
-                <button
-                  onClick={() =>
-                    toggleManaged.mutate({
-                      accountId: account.id,
-                      managed: !account.isManagedByPlatform,
-                    })
-                  }
-                  disabled={toggleManaged.isPending}
-                  className={`relative h-6 w-11 rounded-full transition-colors disabled:opacity-50 ${
-                    account.isManagedByPlatform ? "bg-[var(--accent-2)]" : "bg-[var(--bg-soft)]"
-                  }`}
-                  title={account.isManagedByPlatform ? "לחיצה לנטרול" : "לחיצה להפעלה"}
-                >
-                  <span
-                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                      account.isManagedByPlatform ? "-translate-x-[22px]" : "-translate-x-0.5"
+                  <button
+                    onClick={() => togglePageEditor(account.id, String(account.defaultPageId || ""))}
+                    className="focus-ring mt-2 inline-flex min-h-8 items-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)]"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    {isPageEditorOpen ? "סגירת עריכת עמוד" : "עריכת עמוד ברירת מחדל"}
+                  </button>
+
+                  {isPageEditorOpen && (
+                    <div className="mt-2 rounded-xl border border-[var(--line)] bg-[var(--bg-soft)] p-3">
+                      <p className="text-[11px] font-semibold text-[var(--text-primary)]">עריכת עמוד ברירת מחדל</p>
+                      <p className="text-[10px] text-[var(--text-secondary)]">
+                        בחר עמוד מהרשימה או הזן מזהה ידני. השינוי נשמר לחשבון הזה בלבד.
+                      </p>
+
+                      {isLoadingPages && (
+                        <p className="mt-2 text-[11px] text-[var(--text-secondary)]">טוען עמודים...</p>
+                      )}
+
+                      <div className="mt-2 space-y-2">
+                        <select
+                          value={pageDraft}
+                          onChange={(event) =>
+                            setPageDraftByAccount((prev) => ({
+                              ...prev,
+                              [account.id]: event.target.value,
+                            }))
+                          }
+                          className="w-full rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-2 text-xs text-[var(--text-primary)]"
+                        >
+                          <option value="">בחר עמוד מהרשימה</option>
+                          {accountPageOptions.map((page) => (
+                            <option key={page.pageId} value={page.pageId}>
+                              {page.pageName} ({page.pageId})
+                            </option>
+                          ))}
+                        </select>
+
+                        <input
+                          value={pageDraft}
+                          dir="ltr"
+                          onChange={(event) =>
+                            setPageDraftByAccount((prev) => ({
+                              ...prev,
+                              [account.id]: event.target.value,
+                            }))
+                          }
+                          placeholder="Manual pageId"
+                          className="w-full rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-2 text-xs text-[var(--text-primary)]"
+                        />
+
+                        {accountPageStatus === "missing_permissions" && (
+                          <p className="rounded-lg border border-amber-400/35 bg-amber-500/12 p-2 text-[10px] text-amber-100">
+                            חסרות הרשאות דפים לחשבון. בצע reconnect כדי למשוך רשימת עמודים.
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <button
+                          onClick={() => {
+                            const pageId = pageDraft.trim();
+                            if (!pageId) {
+                              setToast({ type: "error", message: "יש לבחור או להזין pageId לפני שמירה." });
+                              return;
+                            }
+                            const pageName =
+                              accountPageOptions.find((page) => page.pageId === pageId)?.pageName || undefined;
+                            saveDefaultPage.mutate({ accountId: account.id, pageId, pageName });
+                          }}
+                          disabled={isSavingPage}
+                          className="focus-ring inline-flex min-h-8 items-center gap-1 rounded-lg border border-emerald-400/35 bg-emerald-500/12 px-2 py-1 text-[10px] font-semibold text-emerald-200 disabled:opacity-50"
+                        >
+                          {isSavingPage ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                          שמירה
+                        </button>
+                        <button
+                          onClick={() => clearDefaultPage.mutate(account.id)}
+                          disabled={isClearingPage}
+                          className="focus-ring inline-flex min-h-8 items-center gap-1 rounded-lg border border-rose-400/35 bg-rose-500/12 px-2 py-1 text-[10px] font-semibold text-rose-200 disabled:opacity-50"
+                        >
+                          {isClearingPage ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                          ניקוי ברירת מחדל
+                        </button>
+                        <button
+                          onClick={() => loadPagesForAccount.mutate(account.id)}
+                          disabled={isLoadingPages}
+                          className="focus-ring inline-flex min-h-8 items-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--text-secondary)] disabled:opacity-50"
+                        >
+                          רענון עמודים
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col items-center gap-1">
+                  <button
+                    onClick={() =>
+                      toggleManaged.mutate({
+                        accountId: account.id,
+                        managed: !account.isManagedByPlatform,
+                      })
+                    }
+                    disabled={toggleManaged.isPending}
+                    className={`relative h-6 w-11 rounded-full transition-colors disabled:opacity-50 ${
+                      account.isManagedByPlatform ? "bg-[var(--accent-2)]" : "bg-[var(--bg-soft)]"
                     }`}
-                  />
-                </button>
-                <span className="text-[10px] font-medium text-[var(--text-secondary)]">
-                  {account.isManagedByPlatform ? "ON" : "OFF"}
-                </span>
-              </div>
+                    title={account.isManagedByPlatform ? "לחיצה לנטרול" : "לחיצה להפעלה"}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                        account.isManagedByPlatform ? "-translate-x-[22px]" : "-translate-x-0.5"
+                      }`}
+                    />
+                  </button>
+                  <span className="text-[10px] font-medium text-[var(--text-secondary)]">
+                    {account.isManagedByPlatform ? "ON" : "OFF"}
+                  </span>
+                </div>
 
-              <div>
-                <span
-                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                    account.isActive
-                      ? "bg-emerald-500/20 text-emerald-100"
-                      : "bg-rose-500/20 text-rose-200"
-                  }`}
-                >
-                  {account.isActive ? "פעיל" : "לא פעיל"}
-                </span>
-              </div>
+                <div>
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                      account.isActive
+                        ? "bg-emerald-500/20 text-emerald-100"
+                        : "bg-rose-500/20 text-rose-200"
+                    }`}
+                  >
+                    {account.isActive ? "פעיל" : "לא פעיל"}
+                  </span>
+                </div>
 
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => syncOne.mutate(account.id)}
-                  disabled={syncOne.isPending}
-                  className="focus-ring inline-flex min-h-9 items-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--text-primary)] disabled:opacity-50"
-                >
-                  {syncOne.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                  סנכרון
-                </button>
-                <button
-                  onClick={() => disconnect.mutate(account.id)}
-                  disabled={disconnect.isPending}
-                  className="focus-ring inline-flex min-h-9 items-center gap-1 rounded-lg border border-rose-400/35 bg-rose-500/12 px-2.5 py-1.5 text-[11px] font-medium text-rose-200 disabled:opacity-50"
-                >
-                  <Trash2 className="h-3 w-3" />
-                  הסרה
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => syncOne.mutate(account.id)}
+                    disabled={syncOne.isPending}
+                    className="focus-ring inline-flex min-h-9 items-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--text-primary)] disabled:opacity-50"
+                  >
+                    {syncOne.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                    סנכרון
+                  </button>
+                  <button
+                    onClick={() => disconnect.mutate(account.id)}
+                    disabled={disconnect.isPending}
+                    className="focus-ring inline-flex min-h-9 items-center gap-1 rounded-lg border border-rose-400/35 bg-rose-500/12 px-2.5 py-1.5 text-[11px] font-medium text-rose-200 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    הסרה
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="panel flex flex-col items-center justify-center py-16">
