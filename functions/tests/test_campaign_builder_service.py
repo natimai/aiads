@@ -421,6 +421,65 @@ class CampaignBuilderServiceTest(unittest.TestCase):
         self.assertEqual(getattr(exc_ctx.exception, "code", ""), "PAGE_ID_RESOLUTION_FAILED")
         self.assertEqual(exc_ctx.exception.diagnostics.get("pageAccessStatus"), "missing_permissions")
 
+    @patch("services.meta_api.MetaAPIService")
+    @patch("services.meta_auth.get_decrypted_token")
+    def test_publish_draft_surfaces_non_empty_error_when_publish_exception_is_blank(
+        self,
+        mock_get_token,
+        mock_meta_api_cls,
+    ):
+        self.service._ensure_account_exists = MagicMock()
+        self.service.preflight = MagicMock(return_value={"errors": [], "warnings": []})
+        self.service._enforce_publish_budget_guardrail = MagicMock()
+
+        draft_ref = MagicMock()
+        draft_doc = MagicMock()
+        draft_doc.exists = True
+        draft_doc.to_dict.return_value = {
+            "status": "draft",
+            "inputs": {"pageId": "", "destinationUrl": "https://landing.example", "campaignName": "AI Launch"},
+            "blocks": {
+                "campaignPlan": {"name": "AI Launch", "objective": "OUTCOME_SALES", "dailyBudget": 100},
+                "audiencePlan": {"name": "Audience 1", "geo": {"countries": ["US"]}},
+                "creativePlan": {"primaryTexts": ["Primary"], "headlines": ["Headline"]},
+            },
+        }
+        draft_ref.get.return_value = draft_doc
+        self.service._draft_ref = MagicMock(return_value=draft_ref)
+
+        account_ref = MagicMock()
+        account_doc = MagicMock()
+        account_doc.exists = True
+        account_doc.to_dict.return_value = {"defaultPageId": "pg-default-1"}
+        account_ref.get.return_value = account_doc
+
+        users_collection = MagicMock()
+        user_doc = MagicMock()
+        meta_accounts_collection = MagicMock()
+        users_collection.document.return_value = user_doc
+        user_doc.collection.return_value = meta_accounts_collection
+        meta_accounts_collection.document.return_value = account_ref
+        self.service.db.collection.return_value = users_collection
+
+        mock_get_token.return_value = ("token-123", datetime.now(timezone.utc))
+
+        api = MagicMock()
+        api.create_campaign.side_effect = Exception()
+        mock_meta_api_cls.return_value = api
+
+        with self.assertRaises(ValueError) as exc_ctx:
+            self.service.publish_draft(
+                user_id="u1",
+                account_id="acc-1",
+                draft_id="draft-1",
+                confirm_high_budget=False,
+            )
+
+        self.assertIn("Publish failed:", str(exc_ctx.exception))
+        self.assertIn("Exception", str(exc_ctx.exception))
+        update_payloads = [call.args[0] for call in draft_ref.update.call_args_list if call.args]
+        self.assertTrue(any(str(payload.get("publishError") or "").strip() for payload in update_payloads))
+
     def test_prompt_section_format_matches_priority_hierarchy(self):
         user_section = self.service._format_user_request_section(
             {

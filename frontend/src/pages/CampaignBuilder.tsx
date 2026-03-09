@@ -515,6 +515,12 @@ export default function CampaignBuilder() {
         setErrorMessage("התקציב חורג ממגבלות הבטיחות. עדכן את בלוק התקציב לפני פרסום.");
       } else if (err instanceof ApiError && err.code === "PAGE_ID_RESOLUTION_FAILED") {
         setErrorMessage("חסרה הרשאת דפים לחשבון. בצע חיבור מחדש או בחר pageId ידנית.");
+      } else if (
+        err instanceof ApiError &&
+        err.code === "PUBLISH_FAILED" &&
+        /^Publish failed:\s*$/i.test(message)
+      ) {
+        setErrorMessage("הפרסום נכשל אך Meta לא החזירה פירוט. נסה שוב בעוד דקה או עדכן אותי עם מזהה הטיוטה.");
       } else {
         setErrorMessage(message);
       }

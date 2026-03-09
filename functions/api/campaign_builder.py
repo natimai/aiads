@@ -71,7 +71,11 @@ def handle_campaign_builder(request):
     except ValidationError as exc:
         return _cors_response(json.dumps({"error": str(exc), "code": "VALIDATION_ERROR"}), 422)
     except ValueError as exc:
-        return _cors_response(json.dumps({"error": str(exc)}), 400)
+        error_text = str(exc)
+        payload = {"error": error_text}
+        if error_text.startswith("Publish failed:"):
+            payload["code"] = "PUBLISH_FAILED"
+        return _cors_response(json.dumps(payload), 400)
     except Exception as exc:
         logger.error("Campaign Builder API error: %s", exc, exc_info=True)
         return _cors_response(json.dumps({"error": "Internal server error"}), 500)

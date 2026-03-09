@@ -178,6 +178,26 @@ class CampaignBuilderApiTest(unittest.TestCase):
     @patch("api.campaign_builder.verify_auth", return_value="user-1")
     @patch("api.campaign_builder.get_db")
     @patch("api.campaign_builder.CampaignBuilderService")
+    def test_publish_value_error_maps_to_publish_failed_code(self, mock_service_cls, _mock_db, _mock_auth):
+        service = MagicMock()
+        service.publish_draft.side_effect = ValueError("Publish failed: Meta code: 100")
+        mock_service_cls.return_value = service
+
+        req = FakeRequest(
+            "POST",
+            "/api/ai/campaign-builder/drafts/draft-1/publish",
+            payload={"accountId": "acc-1"},
+        )
+        body, status, _ = handle_campaign_builder(req)
+        payload = json.loads(body)
+
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["code"], "PUBLISH_FAILED")
+        self.assertIn("Meta code: 100", payload["error"])
+
+    @patch("api.campaign_builder.verify_auth", return_value="user-1")
+    @patch("api.campaign_builder.get_db")
+    @patch("api.campaign_builder.CampaignBuilderService")
     def test_regenerate_requires_block_type(self, mock_service_cls, _mock_db, _mock_auth):
         mock_service_cls.return_value = MagicMock()
         req = FakeRequest(

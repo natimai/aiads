@@ -522,15 +522,23 @@ class CampaignBuilderService:
             publish_ids["adIds"] = ad_ids
 
         except Exception as exc:  # pragma: no cover - depends on external API
-            logger.error("Campaign draft publish failed for %s/%s: %s", user_id, draft_id, exc, exc_info=True)
+            publish_error = self._format_publish_exception(exc)
+            logger.error(
+                "Campaign draft publish failed for %s/%s: %s",
+                user_id,
+                draft_id,
+                publish_error,
+                exc_info=True,
+            )
             draft_ref.update(
                 {
                     "status": "draft",
-                    "publishError": str(exc),
+                    "publishError": publish_error,
+                    "publishErrorType": exc.__class__.__name__,
                     "updatedAt": datetime.now(timezone.utc),
                 }
             )
-            raise ValueError(f"Publish failed: {exc}") from exc
+            raise ValueError(f"Publish failed: {publish_error}") from exc
 
         now = datetime.now(timezone.utc)
         draft_ref.update(
@@ -559,6 +567,71 @@ class CampaignBuilderService:
             "watchCardId": watch_card_id,
             "warnings": safety.get("warnings", []),
         }
+
+    def _format_publish_exception(self, exc: Exception) -> str:
+        """Extract stable, non-empty publish error details for API/UI diagnostics."""
+        parts: list[str] = []
+
+        def _append(value: Any, *, label: str = ""):
+            text = str(value or "").strip()
+            if not text:
+                return
+            parts.append(f"{label}: {text}" if label else text)
+
+        _append(str(exc))
+
+        meta_error_fields = (
+            ("Meta message", "api_error_message"),
+            ("Meta user title", "api_error_user_title"),
+            ("Meta user message", "api_error_user_msg"),
+            ("Meta code", "api_error_code"),
+            ("Meta subcode", "api_error_subcode"),
+            ("HTTP status", "http_status"),
+        )
+        for label, attr_name in meta_error_fields:
+            attr = getattr(exc, attr_name, None)
+            if callable(attr):
+                try:
+                    _append(attr(), label=label)
+                except Exception:
+                    continue
+            elif attr is not None:
+                _append(attr, label=label)
+
+        api_error_data = getattr(exc, "api_error_data", None)
+        if callable(api_error_data):
+            try:
+                data = api_error_data()
+                if isinstance(data, (dict, list)):
+                    _append(json.dumps(data, ensure_ascii=False), label="Meta data")
+                else:
+                    _append(data, label="Meta data")
+            except Exception:
+                pass
+
+        if not parts:
+            for arg in getattr(exc, "args", ()):
+                _append(arg)
+
+        cause = exc.__cause__ or exc.__context__
+        if cause is not None:
+            _append(str(cause) or repr(cause), label="Cause")
+
+        if not parts:
+            _append(repr(exc) or exc.__class__.__name__)
+        if not parts:
+            _append("Unknown publish error")
+
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for item in parts:
+            key = item.strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            deduped.append(key)
+
+        return " | ".join(deduped)[:3000]
 
     def create_ghost_draft_for_theme(
         self,
