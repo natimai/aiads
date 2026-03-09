@@ -267,16 +267,28 @@ class MetaAPIService:
         promoted_object: dict[str, Any] | None = None,
     ) -> str:
         resolved_targeting = self._resolve_targeting_interests(targeting)
+        resolved_optimization_goal = str(optimization_goal or "OFFSITE_CONVERSIONS").strip().upper()
         resolved_promoted_object = self._resolve_promoted_object(
-            optimization_goal=optimization_goal,
+            optimization_goal=resolved_optimization_goal,
             promoted_object=promoted_object,
         )
+        if (
+            resolved_optimization_goal == "OFFSITE_CONVERSIONS"
+            and not self._promoted_object_supports_offsite_conversions(resolved_promoted_object)
+        ):
+            logger.warning(
+                "No valid promoted_object for OFFSITE_CONVERSIONS on act_%s; falling back to LINK_CLICKS",
+                self.account_id,
+            )
+            resolved_optimization_goal = "LINK_CLICKS"
+            resolved_promoted_object = None
+
         params = {
             "name": name,
             "campaign_id": campaign_id,
             "daily_budget": int(daily_budget),
             "targeting": resolved_targeting,
-            "optimization_goal": optimization_goal,
+            "optimization_goal": resolved_optimization_goal,
             "billing_event": billing_event,
             "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
             "status": status,
@@ -598,6 +610,17 @@ class MetaAPIService:
                 resolved["pixel_id"] = pixel_id
         resolved.setdefault("custom_event_type", "PURCHASE")
         return resolved or None
+
+    @staticmethod
+    def _promoted_object_supports_offsite_conversions(promoted_object: dict[str, Any] | None) -> bool:
+        if not isinstance(promoted_object, dict):
+            return False
+        pixel_id = str(promoted_object.get("pixel_id") or "").strip()
+        if pixel_id:
+            return True
+        application_id = str(promoted_object.get("application_id") or "").strip()
+        event_type = str(promoted_object.get("event_type") or "").strip()
+        return bool(application_id and event_type)
 
     @with_retry
     def _get_first_pixel_id(self) -> str:

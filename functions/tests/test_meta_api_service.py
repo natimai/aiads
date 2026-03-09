@@ -113,3 +113,30 @@ class MetaAPIServiceTest(unittest.TestCase):
             params["promoted_object"],
             {"pixel_id": "pixel_123", "custom_event_type": "LEAD"},
         )
+
+    @patch("services.meta_api.AdAccount")
+    @patch("services.meta_api.FacebookAdsApi.init")
+    @patch.object(MetaAPIService, "_get_first_pixel_id", return_value="")
+    def test_create_adset_falls_back_to_link_clicks_when_no_pixel_available(
+        self,
+        _mock_pixel_id,
+        _mock_api_init,
+        mock_ad_account_cls,
+    ):
+        mock_account = MagicMock()
+        mock_account.create_ad_set.return_value = {"id": "adset_999"}
+        mock_ad_account_cls.return_value = mock_account
+
+        service = MetaAPIService(access_token="token", account_id="1359536062226854")
+        service.create_adset(
+            campaign_id="camp_999",
+            name="Adset D",
+            daily_budget=10000,
+            targeting={"geo_locations": {"countries": ["IL"]}, "age_min": 25, "age_max": 65},
+            optimization_goal="OFFSITE_CONVERSIONS",
+            promoted_object={"custom_event_type": "LEAD"},
+        )
+
+        params = mock_account.create_ad_set.call_args.kwargs["params"]
+        self.assertEqual(params["optimization_goal"], "LINK_CLICKS")
+        self.assertNotIn("promoted_object", params)
