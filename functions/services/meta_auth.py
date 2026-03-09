@@ -1,20 +1,22 @@
 import os
 import json
 import logging
+import re
 import requests
 from urllib.parse import quote
 from datetime import datetime, timezone, timedelta
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from utils.firestore_helpers import get_db
 
 logger = logging.getLogger(__name__)
 
 GRAPH_API_BASE = "https://graph.facebook.com/v22.0"
 PAGE_ACCESS_STATUSES = {"ok", "missing_permissions", "no_pages", "token_error"}
+META_TOKEN_PREFIXES = ("EA", "IG")
 
 
-def get_fernet():
-    key = os.environ.get("TOKEN_ENCRYPTION_KEY")
+def get_fernet(key: str | bytes | None = None):
+    key = key or os.environ.get("TOKEN_ENCRYPTION_KEY")
     if not key:
         raise RuntimeError("TOKEN_ENCRYPTION_KEY not configured")
     return Fernet(key.encode() if isinstance(key, str) else key)
@@ -24,8 +26,51 @@ def encrypt_token(token: str) -> str:
     return get_fernet().encrypt(token.encode()).decode()
 
 
-def decrypt_token(encrypted: str) -> str:
-    return get_fernet().decrypt(encrypted.encode()).decode()
+def _get_fallback_encryption_keys() -> list[str]:
+    raw = str(os.environ.get("TOKEN_ENCRYPTION_KEY_FALLBACKS") or "").strip()
+    if not raw:
+        return []
+    return [k.strip() for k in re.split(r"[,\n;]+", raw) if k.strip()]
+
+
+def _looks_like_plain_meta_token(value: str) -> bool:
+    token = str(value or "").strip()
+    if not token:
+        return False
+    return token.startswith(META_TOKEN_PREFIXES) and len(token) > 24
+
+
+def decrypt_token(encrypted: str, *, return_source: bool = False) -> str | tuple[str, str]:
+    token_payload = str(encrypted or "").strip()
+    if not token_payload:
+        raise ValueError("Missing Meta access token payload")
+
+    primary_key = os.environ.get("TOKEN_ENCRYPTION_KEY")
+    if not primary_key:
+        raise RuntimeError("TOKEN_ENCRYPTION_KEY not configured")
+
+    attempted_keys: list[tuple[str, str]] = [("primary", primary_key)]
+    for fallback_key in _get_fallback_encryption_keys():
+        if fallback_key != primary_key:
+            attempted_keys.append(("fallback", fallback_key))
+
+    last_error: Exception | None = None
+    for key_type, key_value in attempted_keys:
+        try:
+            plain = get_fernet(key_value).decrypt(token_payload.encode()).decode()
+            if return_source:
+                return plain, key_type
+            return plain
+        except Exception as exc:
+            last_error = exc
+
+    if _looks_like_plain_meta_token(token_payload):
+        logger.warning("Detected legacy plaintext Meta token payload; using compatibility fallback.")
+        if return_source:
+            return token_payload, "plaintext"
+        return token_payload
+
+    raise InvalidToken("Failed to decrypt Meta access token") from last_error
 
 
 def encode_state(user_id: str) -> str:
@@ -226,18 +271,40 @@ def store_account_with_token(
 def get_decrypted_token(user_id: str, account_id: str) -> tuple[str, datetime]:
     """Retrieve and decrypt the access token for an account."""
     db = get_db()
-    doc = (
+    doc_ref = (
         db.collection("users")
         .document(user_id)
         .collection("metaAccounts")
         .document(account_id)
-        .get()
     )
+    doc = doc_ref.get()
     if not doc.exists:
         raise ValueError(f"Account {account_id} not found for user {user_id}")
 
     data = doc.to_dict()
-    token = decrypt_token(data["accessToken"])
+    access_token_payload = str(data.get("accessToken") or "").strip()
+    if not access_token_payload:
+        raise ValueError("Meta access token missing. Reconnect this account.")
+
+    try:
+        token, source = decrypt_token(access_token_payload, return_source=True)
+    except Exception as exc:
+        raise ValueError("Meta access token could not be decrypted. Please reconnect this account.") from exc
+
+    if source in {"fallback", "plaintext"}:
+        try:
+            now = datetime.now(timezone.utc)
+            doc_ref.set(
+                {
+                    "accessToken": encrypt_token(token),
+                    "tokenEncryptionMigratedAt": now,
+                    "updatedAt": now,
+                },
+                merge=True,
+            )
+        except Exception as migrate_exc:
+            logger.warning("Failed token re-encryption migration for %s/%s: %s", user_id, account_id, migrate_exc)
+
     expiry = data.get("tokenExpiry")
     return token, expiry
 
