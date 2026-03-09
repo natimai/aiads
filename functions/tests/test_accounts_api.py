@@ -6,12 +6,13 @@ from api.accounts import handle_accounts
 
 
 class FakeRequest:
-    def __init__(self, method: str, path: str, payload=None, args=None):
+    def __init__(self, method: str, path: str, payload=None, args=None, headers=None):
         self.method = method
         self.path = path
         self._payload = payload or {}
         self.args = args or {}
-        self.headers = {"Authorization": "Bearer token"}
+        self.headers = {"Authorization": "Bearer token", **(headers or {})}
+        self.url_root = "http://localhost:5001/"
 
     def get_json(self, silent=True):
         return self._payload
@@ -169,14 +170,34 @@ class AccountsApiTest(unittest.TestCase):
             "GET",
             "/api/accounts/callback",
             args={"code": "code-1", "state": "state-1"},
+            headers={"Host": "aiads-f0675.web.app", "X-Forwarded-Proto": "https"},
         )
         _, status, headers = handle_accounts(req)
 
         self.assertEqual(status, 302)
-        self.assertIn("success=true", headers["Location"])
+        self.assertIn("https://aiads-f0675.web.app/settings/accounts?success=true", headers["Location"])
         for call in mock_store_account_with_token.call_args_list:
             self.assertEqual(call.kwargs["default_page_id"], "")
             self.assertEqual(call.kwargs["default_page_name"], "")
+
+    @patch("api.accounts.verify_auth", return_value="user-1")
+    @patch("services.meta_auth.get_oauth_url")
+    @patch("services.meta_auth.encode_state", return_value="state-1")
+    def test_connect_uses_request_origin_for_callback(self, _mock_state, mock_get_oauth_url, _mock_auth):
+        mock_get_oauth_url.return_value = "https://facebook.test/oauth"
+
+        req = FakeRequest(
+            "POST",
+            "/api/accounts/connect",
+            headers={"Origin": "https://app.example.com"},
+        )
+        body, status, _ = handle_accounts(req)
+        payload = json.loads(body)
+
+        self.assertEqual(status, 200)
+        callback_uri = mock_get_oauth_url.call_args.args[0]
+        self.assertEqual(callback_uri, "https://app.example.com/api/accounts/callback")
+        self.assertEqual(payload["redirectUri"], "https://app.example.com/api/accounts/callback")
 
 
 if __name__ == "__main__":

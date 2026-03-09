@@ -264,9 +264,36 @@ def _clear_default_page(user_id: str, account_id: str):
     )
 
 
-def _get_callback_uri(_request) -> str:
-    """Build the OAuth callback URI — always through the frontend/proxy so Vite handles routing."""
-    return f"{FRONTEND_URL}/api/accounts/callback"
+def _normalize_base_url(value: str) -> str:
+    return str(value or "").strip().rstrip("/")
+
+
+def _resolve_frontend_base_url(request) -> str:
+    """Resolve frontend base URL from request first, then fallback to configured env."""
+    origin = _normalize_base_url(request.headers.get("Origin", ""))
+    if origin:
+        return origin
+
+    forwarded_host = _normalize_base_url(request.headers.get("X-Forwarded-Host", ""))
+    forwarded_proto = _normalize_base_url(request.headers.get("X-Forwarded-Proto", ""))
+    if forwarded_host:
+        return f"{forwarded_proto or 'https'}://{forwarded_host}"
+
+    host = _normalize_base_url(request.headers.get("Host", ""))
+    if host:
+        proto = forwarded_proto or ("http" if host.startswith("localhost") or host.startswith("127.0.0.1") else "https")
+        return f"{proto}://{host}"
+
+    url_root = _normalize_base_url(getattr(request, "url_root", ""))
+    if url_root:
+        return url_root
+
+    return _normalize_base_url(FRONTEND_URL) or "http://localhost:5173"
+
+
+def _get_callback_uri(request) -> str:
+    """Build OAuth callback URI from the current request domain to avoid localhost misrouting in production."""
+    return f"{_resolve_frontend_base_url(request)}/api/accounts/callback"
 
 
 def _initiate_connect(request, user_id: str):
@@ -283,22 +310,23 @@ def _handle_callback(request):
     code = request.args.get("code")
     state = request.args.get("state")
     error = request.args.get("error")
+    frontend_base = _resolve_frontend_base_url(request)
 
     if error:
         error_desc = request.args.get("error_description", "Unknown error")
         logger.warning(f"OAuth denied: {error} — {error_desc}")
-        redirect = f"{FRONTEND_URL}/settings/accounts?error={error}&error_description={error_desc}"
+        redirect = f"{frontend_base}/settings/accounts?error={error}&error_description={error_desc}"
         return "", 302, {"Location": redirect}
 
     if not code or not state:
-        return "", 302, {"Location": f"{FRONTEND_URL}/settings/accounts?error=missing_params"}
+        return "", 302, {"Location": f"{frontend_base}/settings/accounts?error=missing_params"}
 
     try:
         from services.meta_auth import decode_state
         user_id = decode_state(state)
     except Exception as e:
         logger.error(f"Invalid OAuth state: {e}")
-        return "", 302, {"Location": f"{FRONTEND_URL}/settings/accounts?error=invalid_state"}
+        return "", 302, {"Location": f"{frontend_base}/settings/accounts?error=invalid_state"}
 
     try:
         from services.meta_auth import (
@@ -342,12 +370,12 @@ def _handle_callback(request):
             connected.append(account_id)
 
         logger.info(f"Connected {len(connected)} accounts for user {user_id}")
-        redirect = f"{FRONTEND_URL}/settings/accounts?success=true&count={len(connected)}"
+        redirect = f"{frontend_base}/settings/accounts?success=true&count={len(connected)}"
         return "", 302, {"Location": redirect}
 
     except Exception as e:
         logger.error(f"OAuth token exchange failed: {e}", exc_info=True)
-        return "", 302, {"Location": f"{FRONTEND_URL}/settings/accounts?error=token_exchange_failed"}
+        return "", 302, {"Location": f"{frontend_base}/settings/accounts?error=token_exchange_failed"}
 
 
 def _toggle_managed(request, user_id: str, account_id: str):
