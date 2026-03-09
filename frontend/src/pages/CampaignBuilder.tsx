@@ -515,6 +515,10 @@ export default function CampaignBuilder() {
         setErrorMessage("התקציב חורג ממגבלות הבטיחות. עדכן את בלוק התקציב לפני פרסום.");
       } else if (err instanceof ApiError && err.code === "PAGE_ID_RESOLUTION_FAILED") {
         setErrorMessage("חסרה הרשאת דפים לחשבון. בצע חיבור מחדש או בחר pageId ידנית.");
+      } else if (err instanceof ApiError && err.code === "META_APP_DEVELOPMENT_MODE") {
+        setErrorMessage(
+          "אפליקציית Meta מחוברת במצב Development. יש להעביר אותה ל-Live/Public ב-Meta Developers ואז לנסות לפרסם שוב."
+        );
       } else if (
         err instanceof ApiError &&
         err.code === "PUBLISH_FAILED" &&

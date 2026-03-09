@@ -75,6 +75,8 @@ def handle_campaign_builder(request):
         payload = {"error": error_text}
         if error_text.startswith("Publish failed:"):
             payload["code"] = "PUBLISH_FAILED"
+            if "Meta subcode: 1885183" in error_text or "development mode" in error_text.lower():
+                payload["code"] = "META_APP_DEVELOPMENT_MODE"
         return _cors_response(json.dumps(payload), 400)
     except Exception as exc:
         logger.error("Campaign Builder API error: %s", exc, exc_info=True)
