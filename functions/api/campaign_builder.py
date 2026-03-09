@@ -175,6 +175,8 @@ def _publish(request, user_id: str, draft_id: str):
     payload = request.get_json(silent=True) or {}
     account_id = payload.get("accountId")
     confirm_high_budget = bool(payload.get("confirmHighBudget", False))
+    page_id_override = str(payload.get("pageId") or "").strip()
+    destination_url_override = str(payload.get("destinationUrl") or "").strip()
     if not account_id:
         return _cors_response(json.dumps({"error": "accountId required"}), 400)
 
@@ -184,6 +186,8 @@ def _publish(request, user_id: str, draft_id: str):
         account_id=account_id,
         draft_id=draft_id,
         confirm_high_budget=confirm_high_budget,
+        page_id_override=page_id_override,
+        destination_url_override=destination_url_override,
     )
     return _cors_response(json.dumps(result))
 

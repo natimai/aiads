@@ -91,6 +91,7 @@ export default function CampaignBuilder() {
 
   const [step, setStep] = useState<Step>(draftIdFromQuery ? 2 : 1);
   const [brief, setBrief] = useState<BriefForm>(DEFAULT_BRIEF);
+  const [briefHydratedDraftId, setBriefHydratedDraftId] = useState<string>("");
   const [activeDraftId, setActiveDraftId] = useState<string | undefined>(draftIdFromQuery);
   const [errorMessage, setErrorMessage] = useState("");
   const [publishSuccess, setPublishSuccess] = useState("");
@@ -180,7 +181,28 @@ export default function CampaignBuilder() {
       headlines: (cr?.headlines ?? []).join("\n"),
       hooks: (cr?.angles ?? []).join("\n"),
     });
-  }, [draft]);
+
+    if (draft.id !== briefHydratedDraftId) {
+      const objectiveRaw = String(draft.inputs?.objective ?? "").toLowerCase();
+      const objective: "lead" | "sales" = objectiveRaw.includes("lead") ? "lead" : "sales";
+      const budget = Number(draft.blocks?.campaignPlan?.dailyBudget ?? draft.inputs?.dailyBudget ?? 0);
+
+      setBrief((prev) => ({
+        ...prev,
+        objective,
+        offerProduct: String(draft.inputs?.offer ?? prev.offerProduct ?? ""),
+        targetGeo: String(draft.inputs?.country ?? prev.targetGeo ?? "IL"),
+        budget: Number.isFinite(budget) && budget > 0 ? budget : prev.budget,
+        language: String(draft.inputs?.language ?? prev.language ?? "he"),
+        campaignName: String(
+          draft.inputs?.campaignName ?? draft.blocks?.campaignPlan?.name ?? prev.campaignName ?? ""
+        ),
+        pageId: String(draft.inputs?.pageId ?? prev.pageId ?? ""),
+        destinationUrl: String(draft.inputs?.destinationUrl ?? prev.destinationUrl ?? ""),
+      }));
+      setBriefHydratedDraftId(draft.id);
+    }
+  }, [draft, briefHydratedDraftId]);
 
   const publishValidation = useMemo(() => {
     const errors: string[] = [];
@@ -387,7 +409,15 @@ export default function CampaignBuilder() {
     setPublishSuccess("");
 
     try {
-      const result = await publishMutation.mutateAsync({ draftId: activeDraftId });
+      const publishPageId = brief.pageId.trim() || String(draft?.inputs?.pageId ?? "").trim();
+      const publishDestinationUrl =
+        brief.destinationUrl.trim() || String(draft?.inputs?.destinationUrl ?? "").trim();
+
+      const result = await publishMutation.mutateAsync({
+        draftId: activeDraftId,
+        pageId: publishPageId || undefined,
+        destinationUrl: publishDestinationUrl || undefined,
+      });
       setPublishSuccess(`הקמפיין פורסם בהצלחה (ID: ${result.campaignId}).`);
 
       navigate("/", {

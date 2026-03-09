@@ -234,6 +234,76 @@ class CampaignBuilderServiceTest(unittest.TestCase):
         self.assertEqual(result["adsetId"], "adset-1")
         account_ref.set.assert_called()
 
+    @patch("services.meta_api.MetaAPIService")
+    @patch("services.meta_auth.fetch_pages")
+    @patch("services.meta_auth.get_decrypted_token")
+    def test_publish_draft_uses_page_id_override(
+        self,
+        mock_get_token,
+        mock_fetch_pages,
+        mock_meta_api_cls,
+    ):
+        self.service._ensure_account_exists = MagicMock()
+        self.service.preflight = MagicMock(return_value={"errors": [], "warnings": []})
+        self.service._enforce_publish_budget_guardrail = MagicMock()
+        self.service._create_launch_watch_card = MagicMock(return_value="watch-1")
+
+        draft_ref = MagicMock()
+        draft_doc = MagicMock()
+        draft_doc.exists = True
+        draft_doc.to_dict.return_value = {
+            "status": "draft",
+            "inputs": {
+                "pageId": "",
+                "destinationUrl": "",
+                "campaignName": "AI Launch",
+            },
+            "blocks": {
+                "campaignPlan": {"name": "AI Launch", "objective": "OUTCOME_SALES", "dailyBudget": 100},
+                "audiencePlan": {"name": "Audience 1", "geo": {"countries": ["US"]}},
+                "creativePlan": {"primaryTexts": ["Primary"], "headlines": ["Headline"]},
+            },
+        }
+        draft_ref.get.return_value = draft_doc
+        self.service._draft_ref = MagicMock(return_value=draft_ref)
+
+        account_ref = MagicMock()
+        account_doc = MagicMock()
+        account_doc.exists = True
+        account_doc.to_dict.return_value = {}
+        account_ref.get.return_value = account_doc
+
+        users_collection = MagicMock()
+        user_doc = MagicMock()
+        meta_accounts_collection = MagicMock()
+        users_collection.document.return_value = user_doc
+        user_doc.collection.return_value = meta_accounts_collection
+        meta_accounts_collection.document.return_value = account_ref
+        self.service.db.collection.return_value = users_collection
+
+        mock_get_token.return_value = ("token-123", datetime.now(timezone.utc))
+
+        api = MagicMock()
+        api.create_campaign.return_value = "camp-1"
+        api.create_adset.return_value = "adset-1"
+        api.create_ad_creative.return_value = "creative-1"
+        api.create_ad.return_value = "ad-1"
+        mock_meta_api_cls.return_value = api
+
+        result = self.service.publish_draft(
+            user_id="u1",
+            account_id="acc-1",
+            draft_id="draft-1",
+            confirm_high_budget=False,
+            page_id_override="pg-override-1",
+            destination_url_override="https://override.example/landing",
+        )
+
+        self.assertEqual(result["campaignId"], "camp-1")
+        self.assertEqual(api.create_ad_creative.call_args.kwargs["page_id"], "pg-override-1")
+        self.assertEqual(api.create_ad_creative.call_args.kwargs["link"], "https://override.example/landing")
+        mock_fetch_pages.assert_not_called()
+
     def test_prompt_section_format_matches_priority_hierarchy(self):
         user_section = self.service._format_user_request_section(
             {

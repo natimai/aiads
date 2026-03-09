@@ -123,6 +123,38 @@ class CampaignBuilderApiTest(unittest.TestCase):
     @patch("api.campaign_builder.verify_auth", return_value="user-1")
     @patch("api.campaign_builder.get_db")
     @patch("api.campaign_builder.CampaignBuilderService")
+    def test_publish_accepts_page_and_destination_overrides(self, mock_service_cls, _mock_db, _mock_auth):
+        service = MagicMock()
+        service.publish_draft.return_value = {
+            "campaignId": "camp-1",
+            "adsetId": "adset-1",
+            "adIds": ["ad-1"],
+            "watchCardId": "watch-1",
+            "warnings": [],
+        }
+        mock_service_cls.return_value = service
+
+        req = FakeRequest(
+            "POST",
+            "/api/ai/campaign-builder/drafts/draft-1/publish",
+            payload={
+                "accountId": "acc-1",
+                "pageId": "pg-123",
+                "destinationUrl": "https://example.com/landing",
+            },
+        )
+        body, status, _ = handle_campaign_builder(req)
+        payload = json.loads(body)
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["campaignId"], "camp-1")
+        kwargs = service.publish_draft.call_args.kwargs
+        self.assertEqual(kwargs["page_id_override"], "pg-123")
+        self.assertEqual(kwargs["destination_url_override"], "https://example.com/landing")
+
+    @patch("api.campaign_builder.verify_auth", return_value="user-1")
+    @patch("api.campaign_builder.get_db")
+    @patch("api.campaign_builder.CampaignBuilderService")
     def test_regenerate_requires_block_type(self, mock_service_cls, _mock_db, _mock_auth):
         mock_service_cls.return_value = MagicMock()
         req = FakeRequest(

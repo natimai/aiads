@@ -336,11 +336,13 @@ export async function preflightCampaignDraft(
 export async function publishCampaignDraft(
   accountId: string,
   draftId: string,
-  confirmHighBudget = false
+  confirmHighBudget = false,
+  pageId?: string,
+  destinationUrl?: string
 ): Promise<PublishDraftResult> {
   return apiFetch(`/api/ai/campaign-builder/drafts/${draftId}/publish`, {
     method: "POST",
-    body: JSON.stringify({ accountId, confirmHighBudget }),
+    body: JSON.stringify({ accountId, confirmHighBudget, pageId, destinationUrl }),
   });
 }
 

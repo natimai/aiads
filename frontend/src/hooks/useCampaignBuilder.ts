@@ -152,9 +152,20 @@ export function usePublishCampaignDraft(accountIdOverride?: string) {
   const accountId = accountIdOverride ?? selectedAccountId ?? accounts[0]?.id;
 
   return useMutation({
-    mutationFn: async (payload: { draftId: string; confirmHighBudget?: boolean }) => {
+    mutationFn: async (payload: {
+      draftId: string;
+      confirmHighBudget?: boolean;
+      pageId?: string;
+      destinationUrl?: string;
+    }) => {
       if (!accountId) throw new Error("No account selected");
-      return publishCampaignDraft(accountId, payload.draftId, Boolean(payload.confirmHighBudget));
+      return publishCampaignDraft(
+        accountId,
+        payload.draftId,
+        Boolean(payload.confirmHighBudget),
+        payload.pageId,
+        payload.destinationUrl
+      );
     },
     onSuccess: (_, payload) => {
       queryClient.invalidateQueries({ queryKey: ["campaignDraft", accountId, payload.draftId] });

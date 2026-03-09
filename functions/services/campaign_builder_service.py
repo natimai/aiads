@@ -311,6 +311,8 @@ class CampaignBuilderService:
         account_id: str,
         draft_id: str,
         confirm_high_budget: bool,
+        page_id_override: str = "",
+        destination_url_override: str = "",
     ) -> dict[str, Any]:
         self._ensure_account_exists(user_id, account_id)
         draft_ref = self._draft_ref(user_id, account_id, draft_id)
@@ -349,8 +351,28 @@ class CampaignBuilderService:
             proposed_daily_budget=proposed_budget,
         )
 
-        page_id = self._resolve_page_id(inputs, account_data if isinstance(account_data, dict) else {})
-        destination_url = self._resolve_destination_url(inputs, account_data if isinstance(account_data, dict) else {})
+        override_page_id = str(page_id_override or "").strip()
+        override_destination_url = str(destination_url_override or "").strip()
+        page_id = override_page_id or self._resolve_page_id(inputs, account_data if isinstance(account_data, dict) else {})
+        destination_url = (
+            override_destination_url
+            or self._resolve_destination_url(inputs, account_data if isinstance(account_data, dict) else {})
+        )
+
+        if override_page_id or override_destination_url:
+            draft_update: dict[str, Any] = {"updatedAt": datetime.now(timezone.utc)}
+            if override_page_id:
+                draft_update["inputs.pageId"] = override_page_id
+            if override_destination_url:
+                draft_update["inputs.destinationUrl"] = override_destination_url
+            draft_ref.update(draft_update)
+
+            account_update: dict[str, Any] = {"updatedAt": datetime.now(timezone.utc)}
+            if override_page_id:
+                account_update["defaultPageId"] = override_page_id
+            if override_destination_url:
+                account_update["defaultDestinationUrl"] = override_destination_url
+            account_ref.set(account_update, merge=True)
 
         token: str = ""
         if not page_id:
