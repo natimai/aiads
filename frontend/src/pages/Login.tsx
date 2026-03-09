@@ -5,6 +5,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
 } from "firebase/auth";
+import { Link } from "react-router-dom";
 import { auth } from "../services/firebase";
 import { LogIn, Mail, Sparkles } from "lucide-react";
 import { t } from "../utils/copy";
@@ -156,6 +157,22 @@ export default function Login() {
             >
               {isSignUp ? "כניסה" : "פתיחת חשבון"}
             </button>
+          </p>
+
+          <p className="mt-4 text-center text-[11px] leading-5 text-[var(--text-muted)]">
+            By continuing you agree to our{" "}
+            <Link className="font-semibold text-[var(--accent-2)] hover:underline" to="/terms">
+              Terms of Service
+            </Link>
+            ,{" "}
+            <Link className="font-semibold text-[var(--accent-2)] hover:underline" to="/privacy">
+              Privacy Policy
+            </Link>
+            , and{" "}
+            <Link className="font-semibold text-[var(--accent-2)] hover:underline" to="/privacy-login-app">
+              Login Dialog Privacy Policy
+            </Link>
+            .
           </p>
         </div>
       </div>

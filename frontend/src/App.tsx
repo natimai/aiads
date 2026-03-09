@@ -37,6 +37,27 @@ const Reports = lazy(() => import("./pages/Reports"));
 const CreativeLab = lazy(() => import("./pages/CreativeLab"));
 const SettingsPage = lazy(() => import("./pages/Settings"));
 const AccountSettings = lazy(() => import("./pages/AccountSettings"));
+const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const PrivacyPolicyLoginApp = lazy(() => import("./pages/PrivacyPolicyLoginApp"));
+const TermsOfService = lazy(() => import("./pages/TermsOfService"));
+
+const PUBLIC_LEGAL_PATHS = new Set([
+  "/privacy",
+  "/privacy-policy",
+  "/privacy-login-app",
+  "/privacy-login-dialog",
+  "/terms",
+  "/terms-of-service",
+]);
+
+function normalizePathname(pathname: string): string {
+  const normalized = String(pathname || "/").replace(/\/+$/, "");
+  return normalized || "/";
+}
+
+function isPublicLegalPath(pathname: string): boolean {
+  return PUBLIC_LEGAL_PATHS.has(normalizePathname(pathname));
+}
 
 function PageLoader() {
   return (
@@ -48,8 +69,13 @@ function PageLoader() {
 
 export default function App() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
+  const location = useLocation();
 
   useEffect(() => onAuthStateChanged(auth, setUser), []);
+
+  if (isPublicLegalPath(location.pathname)) {
+    return <PublicLegalApp />;
+  }
 
   if (user === undefined) {
     return (
@@ -68,6 +94,21 @@ export default function App() {
   }
 
   return <AuthenticatedApp />;
+}
+
+function PublicLegalApp() {
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <Routes>
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/privacy-policy" element={<Navigate to="/privacy" replace />} />
+        <Route path="/privacy-login-app" element={<PrivacyPolicyLoginApp />} />
+        <Route path="/privacy-login-dialog" element={<Navigate to="/privacy-login-app" replace />} />
+        <Route path="/terms" element={<TermsOfService />} />
+        <Route path="/terms-of-service" element={<Navigate to="/terms" replace />} />
+      </Routes>
+    </Suspense>
+  );
 }
 
 function AuthenticatedApp() {
