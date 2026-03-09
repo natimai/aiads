@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime
 from typing import Any
+import requests
 from facebook_business.api import FacebookAdsApi
 from facebook_business.adobjects.adaccount import AdAccount
 from facebook_business.adobjects.campaign import Campaign
@@ -263,8 +264,13 @@ class MetaAPIService:
         optimization_goal: str = "OFFSITE_CONVERSIONS",
         billing_event: str = "IMPRESSIONS",
         status: str = "PAUSED",
+        promoted_object: dict[str, Any] | None = None,
     ) -> str:
         resolved_targeting = self._resolve_targeting_interests(targeting)
+        resolved_promoted_object = self._resolve_promoted_object(
+            optimization_goal=optimization_goal,
+            promoted_object=promoted_object,
+        )
         params = {
             "name": name,
             "campaign_id": campaign_id,
@@ -275,6 +281,8 @@ class MetaAPIService:
             "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
             "status": status,
         }
+        if resolved_promoted_object:
+            params["promoted_object"] = resolved_promoted_object
         created = self.account.create_ad_set(params=params)
         return str(created.get("id"))
 
@@ -567,6 +575,54 @@ class MetaAPIService:
             "id": selected_id,
             "name": str(selected.get("name") or query).strip(),
         }
+
+    def _resolve_promoted_object(
+        self,
+        *,
+        optimization_goal: str,
+        promoted_object: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        if isinstance(promoted_object, dict):
+            resolved = {
+                str(k): v for k, v in promoted_object.items() if v not in (None, "", [])
+            }
+        else:
+            resolved = {}
+
+        if str(optimization_goal or "").strip().upper() != "OFFSITE_CONVERSIONS":
+            return resolved or None
+
+        if not resolved.get("pixel_id"):
+            pixel_id = self._get_first_pixel_id()
+            if pixel_id:
+                resolved["pixel_id"] = pixel_id
+        resolved.setdefault("custom_event_type", "PURCHASE")
+        return resolved or None
+
+    @with_retry
+    def _get_first_pixel_id(self) -> str:
+        try:
+            response = requests.get(
+                f"https://graph.facebook.com/v24.0/act_{self.account_id}/adspixels",
+                params={
+                    "access_token": self.access_token,
+                    "fields": "id,name",
+                    "limit": 1,
+                },
+                timeout=20,
+            )
+            payload = response.json() if response.content else {}
+            if response.status_code >= 400:
+                logger.warning("Failed to fetch ad pixels for act_%s: %s", self.account_id, payload)
+                return ""
+
+            pixels = payload.get("data", []) if isinstance(payload, dict) else []
+            if not isinstance(pixels, list) or not pixels:
+                return ""
+            return str((pixels[0] or {}).get("id") or "").strip()
+        except Exception as exc:
+            logger.warning("Error while fetching ad pixels for act_%s: %s", self.account_id, exc)
+            return ""
 
     @staticmethod
     def _extract_custom_audiences_from_targeting(targeting: Any) -> list[str]:

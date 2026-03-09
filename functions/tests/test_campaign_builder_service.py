@@ -302,6 +302,10 @@ class CampaignBuilderServiceTest(unittest.TestCase):
         self.assertEqual(result["campaignId"], "camp-1")
         self.assertEqual(api.create_ad_creative.call_args.kwargs["page_id"], "pg-override-1")
         self.assertEqual(api.create_ad_creative.call_args.kwargs["link"], "https://override.example/landing")
+        self.assertEqual(
+            api.create_adset.call_args.kwargs["promoted_object"]["custom_event_type"],
+            "PURCHASE",
+        )
         mock_fetch_pages_with_status.assert_not_called()
 
     @patch("services.meta_api.MetaAPIService")

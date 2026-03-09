@@ -487,6 +487,8 @@ class CampaignBuilderService:
                 status="PAUSED",
             )
             publish_ids["campaignId"] = campaign_id
+            objective = str(campaign_plan.get("objective") or DEFAULT_OBJECTIVE).strip().upper()
+            preferred_event_type = "LEAD" if objective == "OUTCOME_LEADS" else "PURCHASE"
 
             adset_id = api.create_adset(
                 campaign_id=campaign_id,
@@ -496,6 +498,7 @@ class CampaignBuilderService:
                 optimization_goal=str(audience_plan.get("optimizationGoal") or "OFFSITE_CONVERSIONS"),
                 billing_event=str(audience_plan.get("billingEvent") or "IMPRESSIONS"),
                 status="PAUSED",
+                promoted_object={"custom_event_type": preferred_event_type},
             )
             publish_ids["adsetId"] = adset_id
 
