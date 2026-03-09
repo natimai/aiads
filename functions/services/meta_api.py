@@ -6,6 +6,7 @@ from facebook_business.adobjects.adaccount import AdAccount
 from facebook_business.adobjects.campaign import Campaign
 from facebook_business.adobjects.adset import AdSet
 from facebook_business.adobjects.ad import Ad
+from facebook_business.adobjects.targetingsearch import TargetingSearch
 from utils.rate_limiter import with_retry
 
 logger = logging.getLogger(__name__)
@@ -263,11 +264,12 @@ class MetaAPIService:
         billing_event: str = "IMPRESSIONS",
         status: str = "PAUSED",
     ) -> str:
+        resolved_targeting = self._resolve_targeting_interests(targeting)
         params = {
             "name": name,
             "campaign_id": campaign_id,
             "daily_budget": int(daily_budget),
-            "targeting": targeting,
+            "targeting": resolved_targeting,
             "optimization_goal": optimization_goal,
             "billing_event": billing_event,
             "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
@@ -487,6 +489,84 @@ class MetaAPIService:
             seen.add(lowered)
             unique.append(name)
         return unique[:20]
+
+    def _resolve_targeting_interests(self, targeting: dict[str, Any]) -> dict[str, Any]:
+        payload = dict(targeting) if isinstance(targeting, dict) else {}
+        interests_raw = payload.get("interests")
+        if not isinstance(interests_raw, list) or not interests_raw:
+            return payload
+
+        resolved: list[dict[str, str]] = []
+        unresolved: list[str] = []
+
+        for item in interests_raw:
+            if isinstance(item, dict):
+                interest_id = str(item.get("id") or "").strip()
+                interest_name = str(item.get("name") or "").strip()
+                if interest_id:
+                    resolved.append({"id": interest_id, "name": interest_name or interest_id})
+                    continue
+                lookup_name = interest_name
+            else:
+                lookup_name = str(item or "").strip()
+
+            if not lookup_name:
+                continue
+            match = self._find_interest_by_name(lookup_name)
+            if match:
+                resolved.append(match)
+            else:
+                unresolved.append(lookup_name)
+
+        if resolved:
+            payload["interests"] = resolved
+        else:
+            payload.pop("interests", None)
+
+        if unresolved:
+            logger.warning("Dropping unresolved interests from targeting: %s", unresolved[:10])
+        return payload
+
+    @with_retry
+    def _find_interest_by_name(self, interest_name: str) -> dict[str, str] | None:
+        query = str(interest_name or "").strip()
+        if not query:
+            return None
+
+        results = TargetingSearch.search(params={"q": query, "type": "adinterest", "limit": 25})
+        if not isinstance(results, list) or not results:
+            return None
+
+        normalized_query = query.casefold()
+        selected: dict[str, Any] | None = None
+
+        for row in results:
+            if isinstance(row, dict):
+                candidate = row
+            else:
+                try:
+                    candidate = dict(row)
+                except Exception:
+                    continue
+            candidate_id = str(candidate.get("id") or "").strip()
+            if not candidate_id:
+                continue
+            candidate_name = str(candidate.get("name") or "").strip()
+            if candidate_name.casefold() == normalized_query:
+                selected = candidate
+                break
+            if selected is None:
+                selected = candidate
+
+        if not selected:
+            return None
+        selected_id = str(selected.get("id") or "").strip()
+        if not selected_id:
+            return None
+        return {
+            "id": selected_id,
+            "name": str(selected.get("name") or query).strip(),
+        }
 
     @staticmethod
     def _extract_custom_audiences_from_targeting(targeting: Any) -> list[str]:
