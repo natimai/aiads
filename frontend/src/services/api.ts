@@ -1,6 +1,8 @@
 import { auth } from "./firebase";
 import type {
   MetaAccount,
+  MetaPageOption,
+  PageAccessStatus,
   Campaign,
   InsightData,
   Alert,
@@ -29,13 +31,17 @@ import { normalizeCurrencyCode } from "../utils/format";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
-class ApiError extends Error {
+export class ApiError extends Error {
   status: number;
+  code?: string;
+  diagnostics?: Record<string, unknown>;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code?: string, diagnostics?: Record<string, unknown>) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.code = code;
+    this.diagnostics = diagnostics;
   }
 }
 
@@ -59,6 +65,8 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
   if (!response.ok) {
     const raw = await response.text().catch(() => "");
     let message = `HTTP ${response.status}`;
+    let errorCode = "";
+    let diagnostics: Record<string, unknown> | undefined;
     const looksLikeHtml = /^\s*<!doctype html|^\s*<html/i.test(raw);
 
     if (looksLikeHtml && [502, 503, 504].includes(response.status)) {
@@ -69,17 +77,23 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 
     if (raw) {
       try {
-        const parsed = JSON.parse(raw) as { error?: string };
+        const parsed = JSON.parse(raw) as {
+          error?: string;
+          code?: string;
+          diagnostics?: Record<string, unknown>;
+        };
         if (parsed?.error) {
           message = parsed.error;
         } else {
           message = raw.slice(0, 280);
         }
+        errorCode = String(parsed?.code || "");
+        diagnostics = parsed?.diagnostics;
       } catch {
         message = looksLikeHtml ? `Gateway error (HTTP ${response.status})` : raw.slice(0, 280);
       }
     }
-    throw new ApiError(message || "Request failed", response.status);
+    throw new ApiError(message || "Request failed", response.status, errorCode || undefined, diagnostics);
   }
 
   return response.json();
@@ -110,6 +124,23 @@ export async function connectAccount(redirectUri?: string): Promise<{ authUrl: s
   return apiFetch("/api/accounts/connect", {
     method: "POST",
     body: JSON.stringify({ redirectUri }),
+  });
+}
+
+export async function getAccountPages(
+  accountId: string
+): Promise<{ pages: MetaPageOption[]; pageAccessStatus: PageAccessStatus }> {
+  return apiFetch(`/api/accounts/${accountId}/pages`);
+}
+
+export async function setAccountDefaultPage(
+  accountId: string,
+  pageId: string,
+  pageName?: string
+): Promise<{ success: boolean; defaultPageId: string; defaultPageName?: string }> {
+  return apiFetch(`/api/accounts/${accountId}/defaults/page`, {
+    method: "POST",
+    body: JSON.stringify({ pageId, pageName }),
   });
 }
 

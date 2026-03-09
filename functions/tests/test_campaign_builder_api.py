@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from api.campaign_builder import handle_campaign_builder
-from services.campaign_builder_service import ValidationError
+from services.campaign_builder_service import PublishResolutionError, ValidationError
 
 
 class FakeRequest:
@@ -151,6 +151,29 @@ class CampaignBuilderApiTest(unittest.TestCase):
         kwargs = service.publish_draft.call_args.kwargs
         self.assertEqual(kwargs["page_id_override"], "pg-123")
         self.assertEqual(kwargs["destination_url_override"], "https://example.com/landing")
+
+    @patch("api.campaign_builder.verify_auth", return_value="user-1")
+    @patch("api.campaign_builder.get_db")
+    @patch("api.campaign_builder.CampaignBuilderService")
+    def test_publish_returns_diagnostic_code_when_page_resolution_fails(self, mock_service_cls, _mock_db, _mock_auth):
+        service = MagicMock()
+        service.publish_draft.side_effect = PublishResolutionError(
+            "Could not resolve Meta Page for publish.",
+            diagnostics={"pageAccessStatus": "missing_permissions"},
+        )
+        mock_service_cls.return_value = service
+
+        req = FakeRequest(
+            "POST",
+            "/api/ai/campaign-builder/drafts/draft-1/publish",
+            payload={"accountId": "acc-1"},
+        )
+        body, status, _ = handle_campaign_builder(req)
+        payload = json.loads(body)
+
+        self.assertEqual(status, 422)
+        self.assertEqual(payload["code"], "PAGE_ID_RESOLUTION_FAILED")
+        self.assertEqual(payload["diagnostics"]["pageAccessStatus"], "missing_permissions")
 
     @patch("api.campaign_builder.verify_auth", return_value="user-1")
     @patch("api.campaign_builder.get_db")

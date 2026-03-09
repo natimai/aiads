@@ -10,6 +10,7 @@ from utils.firestore_helpers import get_db
 logger = logging.getLogger(__name__)
 
 GRAPH_API_BASE = "https://graph.facebook.com/v22.0"
+PAGE_ACCESS_STATUSES = {"ok", "missing_permissions", "no_pages", "token_error"}
 
 
 def get_fernet():
@@ -44,7 +45,7 @@ def decode_state(state: str) -> str:
 
 def get_oauth_url(redirect_uri: str, state: str) -> str:
     app_id = os.environ.get("META_APP_ID")
-    scopes = "ads_management,ads_read,business_management"
+    scopes = "ads_management,ads_read,business_management,pages_show_list,pages_read_engagement"
     return (
         f"https://www.facebook.com/v21.0/dialog/oauth"
         f"?client_id={app_id}"
@@ -129,6 +130,31 @@ def fetch_ad_accounts(access_token: str) -> list[dict]:
 
 def fetch_pages(access_token: str) -> list[dict]:
     """Fetch all Facebook Pages the user manages (needed for ad publishing)."""
+    pages, _status = fetch_pages_with_status(access_token)
+    return pages
+
+
+def _is_missing_pages_permissions(error_payload: dict) -> bool:
+    code = str(error_payload.get("code") or "").strip()
+    subcode = str(error_payload.get("error_subcode") or "").strip()
+    message = str(error_payload.get("message") or "").lower()
+    permissions_keywords = (
+        "pages_show_list",
+        "pages_read_engagement",
+        "permissions",
+        "permission",
+        "manage_pages",
+        "requires",
+    )
+    if code in {"10", "200"}:
+        return True
+    if subcode in {"2108006", "2108008"}:
+        return True
+    return any(keyword in message for keyword in permissions_keywords)
+
+
+def fetch_pages_with_status(access_token: str) -> tuple[list[dict], str]:
+    """Fetch Facebook Pages with explicit access status."""
     try:
         resp = requests.get(
             f"{GRAPH_API_BASE}/me/accounts",
@@ -138,19 +164,26 @@ def fetch_pages(access_token: str) -> list[dict]:
                 "limit": 100,
             },
         )
-        resp.raise_for_status()
-        pages = resp.json().get("data", [])
-        return [
+        payload = resp.json()
+        if resp.status_code >= 400:
+            error_payload = payload.get("error", {}) if isinstance(payload, dict) else {}
+            if isinstance(error_payload, dict) and _is_missing_pages_permissions(error_payload):
+                return [], "missing_permissions"
+            return [], "token_error"
+
+        pages_raw = payload.get("data", []) if isinstance(payload, dict) else []
+        pages = [
             {
                 "pageId": page.get("id"),
                 "pageName": page.get("name"),
             }
-            for page in pages
+            for page in pages_raw
             if page.get("id")
         ]
+        return pages, ("ok" if pages else "no_pages")
     except Exception as e:
         logger.warning("Failed to fetch Facebook Pages: %s", e)
-        return []
+        return [], "token_error"
 
 
 def store_account_with_token(
@@ -161,6 +194,7 @@ def store_account_with_token(
     *,
     default_page_id: str = "",
     default_page_name: str = "",
+    page_access_status: str = "",
 ):
     """Store a connected Meta account with encrypted token in Firestore."""
     db = get_db()
@@ -181,6 +215,8 @@ def store_account_with_token(
     if default_page_id:
         doc_data["defaultPageId"] = default_page_id
         doc_data["defaultPageName"] = default_page_name
+    if page_access_status in PAGE_ACCESS_STATUSES:
+        doc_data["pageAccessStatus"] = page_access_status
 
     doc_ref = db.collection("users").document(user_id).collection("metaAccounts").document(account_id)
     doc_ref.set(doc_data, merge=True)

@@ -104,6 +104,7 @@ export default function AccountSettings() {
   });
 
   const managedCount = accounts.filter((account) => account.isManagedByPlatform).length;
+  const reconnectRequired = accounts.some((account) => account.pageAccessStatus === "missing_permissions");
 
   return (
     <div className="space-y-6 max-w-4xl reveal-up">
@@ -177,6 +178,25 @@ export default function AccountSettings() {
             </div>
           </div>
         )}
+
+        {reconnectRequired && (
+          <div className="mt-4 rounded-xl border border-amber-400/35 bg-amber-500/12 p-4 text-sm text-amber-100">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-semibold">נדרשת התחברות מחדש לחשבון כדי לאפשר שליפת דפים לפרסום.</p>
+                <p className="text-xs text-amber-200/90">לאחר reconnect המערכת תשמור עמוד ברירת מחדל אוטומטית.</p>
+              </div>
+              <button
+                onClick={() => connect.mutate()}
+                disabled={connect.isPending}
+                className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-lg border border-amber-300/40 bg-amber-500/20 px-3 text-xs font-semibold text-amber-50 disabled:opacity-50"
+              >
+                {connect.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                Reconnect לחשבון
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {accounts.length > 0 ? (
@@ -201,6 +221,21 @@ export default function AccountSettings() {
                   <span className="ltr">ID: {account.id}</span>
                   <span className="ltr">{account.currency}</span>
                   {account.businessName && <span>{account.businessName}</span>}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-secondary)]">
+                  <span className="rounded-full border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-0.5">
+                    עמוד ברירת מחדל: {account.defaultPageId ? `${account.defaultPageName || "Page"} (${account.defaultPageId})` : "לא הוגדר"}
+                  </span>
+                  {account.pageAccessStatus === "missing_permissions" && (
+                    <span className="rounded-full border border-amber-400/40 bg-amber-500/12 px-2 py-0.5 text-amber-200">
+                      חסרות הרשאות דפים
+                    </span>
+                  )}
+                  {account.pageAccessStatus === "token_error" && (
+                    <span className="rounded-full border border-rose-400/40 bg-rose-500/12 px-2 py-0.5 text-rose-200">
+                      בעיית טוקן גישה
+                    </span>
+                  )}
                 </div>
                 {account.tokenExpiry && (
                   <div className="mt-1 flex items-center gap-1 text-[11px]">

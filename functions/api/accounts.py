@@ -3,11 +3,13 @@ import json
 import logging
 import os
 import re
+from datetime import datetime, timezone
 from utils.firestore_helpers import get_db
 
 logger = logging.getLogger(__name__)
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+PAGE_ACCESS_STATUSES = {"ok", "missing_permissions", "no_pages", "token_error"}
 
 
 def _normalize_currency_code(raw_currency) -> str:
@@ -69,6 +71,12 @@ def handle_accounts(request):
             return _get_accounts(user_id)
         elif path == "/api/accounts/connect" and request.method == "POST":
             return _initiate_connect(request, user_id)
+        elif path.startswith("/api/accounts/") and path.endswith("/pages") and request.method == "GET":
+            account_id = path.split("/api/accounts/")[1].split("/pages")[0]
+            return _get_account_pages(user_id, account_id)
+        elif path.startswith("/api/accounts/") and path.endswith("/defaults/page") and request.method == "POST":
+            account_id = path.split("/api/accounts/")[1].split("/defaults/page")[0]
+            return _set_default_page(request, user_id, account_id)
         elif path.endswith("/managed") and request.method == "POST":
             account_id = path.split("/api/accounts/")[1].split("/managed")[0]
             return _toggle_managed(request, user_id, account_id)
@@ -112,9 +120,115 @@ def _get_accounts(user_id: str):
             "kpiUpdatedAt": data.get("kpiUpdatedAt").isoformat() if data.get("kpiUpdatedAt") else None,
             "defaultPageId": data.get("defaultPageId"),
             "defaultPageName": data.get("defaultPageName"),
+            "pageAccessStatus": data.get("pageAccessStatus"),
         })
 
     return _cors_response(json.dumps({"accounts": accounts}))
+
+
+def _account_ref(user_id: str, account_id: str):
+    db = get_db()
+    return db.collection("users").document(user_id).collection("metaAccounts").document(account_id)
+
+
+def _get_account_pages(user_id: str, account_id: str):
+    doc_ref = _account_ref(user_id, account_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        return _cors_response(json.dumps({"error": "Account not found"}), 404)
+
+    from services.meta_auth import fetch_pages_with_status, get_decrypted_token
+
+    try:
+        token, _ = get_decrypted_token(user_id, account_id)
+        pages, page_access_status = fetch_pages_with_status(token)
+    except Exception as exc:
+        logger.warning("Failed to resolve pages for account %s/%s: %s", user_id, account_id, exc)
+        pages = []
+        page_access_status = "token_error"
+
+    now = datetime.now(timezone.utc)
+    update_payload = {
+        "pageAccessStatus": page_access_status,
+        "pageAccessCheckedAt": now,
+        "updatedAt": now,
+    }
+    if page_access_status == "ok" and pages:
+        stored = doc.to_dict() or {}
+        if not str(stored.get("defaultPageId") or "").strip():
+            update_payload["defaultPageId"] = pages[0].get("pageId")
+            update_payload["defaultPageName"] = pages[0].get("pageName")
+    doc_ref.set(update_payload, merge=True)
+
+    logger.info(
+        "Fetched account pages user=%s account=%s status=%s count=%s",
+        user_id,
+        account_id,
+        page_access_status,
+        len(pages),
+    )
+    return _cors_response(
+        json.dumps(
+            {
+                "pages": pages,
+                "pageAccessStatus": page_access_status,
+            }
+        )
+    )
+
+
+def _set_default_page(request, user_id: str, account_id: str):
+    payload = request.get_json(silent=True) or {}
+    page_id = str(payload.get("pageId") or "").strip()
+    page_name = str(payload.get("pageName") or "").strip()
+    if not page_id:
+        return _cors_response(json.dumps({"error": "pageId required"}), 400)
+
+    doc_ref = _account_ref(user_id, account_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        return _cors_response(json.dumps({"error": "Account not found"}), 404)
+
+    if not page_name:
+        # Best effort lookup to display friendly defaultPageName.
+        try:
+            from services.meta_auth import fetch_pages_with_status, get_decrypted_token
+
+            token, _ = get_decrypted_token(user_id, account_id)
+            pages, page_access_status = fetch_pages_with_status(token)
+            if page_access_status in PAGE_ACCESS_STATUSES:
+                doc_ref.set(
+                    {
+                        "pageAccessStatus": page_access_status,
+                        "pageAccessCheckedAt": datetime.now(timezone.utc),
+                    },
+                    merge=True,
+                )
+            match = next((p for p in pages if str(p.get("pageId") or "") == page_id), None)
+            if match:
+                page_name = str(match.get("pageName") or "").strip()
+        except Exception as exc:
+            logger.warning("Failed to lookup page name for default page %s/%s: %s", account_id, page_id, exc)
+
+    now = datetime.now(timezone.utc)
+    doc_ref.set(
+        {
+            "defaultPageId": page_id,
+            "defaultPageName": page_name,
+            "updatedAt": now,
+        },
+        merge=True,
+    )
+    logger.info("Default page set user=%s account=%s page=%s", user_id, account_id, page_id)
+    return _cors_response(
+        json.dumps(
+            {
+                "success": True,
+                "defaultPageId": page_id,
+                "defaultPageName": page_name,
+            }
+        )
+    )
 
 
 def _get_callback_uri(_request) -> str:
@@ -154,7 +268,12 @@ def _handle_callback(request):
         return "", 302, {"Location": f"{FRONTEND_URL}/settings/accounts?error=invalid_state"}
 
     try:
-        from services.meta_auth import exchange_code_for_token, fetch_ad_accounts, fetch_pages, store_account_with_token
+        from services.meta_auth import (
+            exchange_code_for_token,
+            fetch_ad_accounts,
+            fetch_pages_with_status,
+            store_account_with_token,
+        )
         redirect_uri = _get_callback_uri(request)
         token_data = exchange_code_for_token(code, redirect_uri)
         access_token = token_data["access_token"]
@@ -163,11 +282,13 @@ def _handle_callback(request):
         ad_accounts = fetch_ad_accounts(access_token)
 
         # Auto-fetch Facebook Pages so we can store defaultPageId
-        pages = fetch_pages(access_token)
+        pages, page_access_status = fetch_pages_with_status(access_token)
         first_page_id = pages[0]["pageId"] if pages else ""
         first_page_name = pages[0]["pageName"] if pages else ""
         if pages:
             logger.info(f"Found {len(pages)} Facebook Pages, using '{first_page_name}' ({first_page_id}) as default")
+        else:
+            logger.info("No Facebook pages found during connect: status=%s", page_access_status)
 
         connected = []
         for account in ad_accounts:
@@ -178,6 +299,7 @@ def _handle_callback(request):
                 token_expiry,
                 default_page_id=first_page_id,
                 default_page_name=first_page_name,
+                page_access_status=page_access_status,
             )
             connected.append(account_id)
 

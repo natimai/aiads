@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ArrowRight,
@@ -27,7 +28,8 @@ import {
   useUpdateCampaignBlock,
 } from "../hooks/useCampaignBuilder";
 import { useAccounts } from "../contexts/AccountContext";
-import type { DraftBlockType } from "../types";
+import { ApiError, getAccountPages, setAccountDefaultPage } from "../services/api";
+import type { DraftBlockType, MetaPageOption, PageAccessStatus } from "../types";
 
 type Step = 1 | 2 | 3;
 
@@ -83,7 +85,8 @@ function objectiveLabel(value: string): string {
 
 export default function CampaignBuilder() {
   const navigate = useNavigate();
-  const { setSelectedAccountId } = useAccounts();
+  const queryClient = useQueryClient();
+  const { setSelectedAccountId, selectedAccountId, accounts } = useAccounts();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const draftIdFromQuery = searchParams.get("draftId") ?? undefined;
@@ -112,6 +115,7 @@ export default function CampaignBuilder() {
     creative: "",
   });
   const [regeneratingBlock, setRegeneratingBlock] = useState<DraftBlockType | null>(null);
+  const [pageSelectDirty, setPageSelectDirty] = useState(false);
 
   const [strategyForm, setStrategyForm] = useState<StrategyForm>({
     name: "",
@@ -140,6 +144,31 @@ export default function CampaignBuilder() {
 
   const draftQuery = useCampaignDraft(activeDraftId, accountIdFromQuery);
   const draft = draftQuery.data;
+  const resolvedAccountId = accountIdFromQuery ?? selectedAccountId ?? accounts[0]?.id;
+  const selectedAccount = useMemo(
+    () => accounts.find((account) => account.id === resolvedAccountId),
+    [accounts, resolvedAccountId]
+  );
+
+  const pagesQuery = useQuery({
+    queryKey: ["accountPages", resolvedAccountId],
+    queryFn: () => getAccountPages(resolvedAccountId!),
+    enabled: Boolean(resolvedAccountId),
+    staleTime: 60_000,
+  });
+
+  const saveDefaultPageMutation = useMutation({
+    mutationFn: async (payload: { pageId: string; pageName?: string }) => {
+      if (!resolvedAccountId) throw new Error("No account selected");
+      return setAccountDefaultPage(resolvedAccountId, payload.pageId, payload.pageName);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      if (resolvedAccountId) {
+        queryClient.invalidateQueries({ queryKey: ["accountPages", resolvedAccountId] });
+      }
+    },
+  });
 
   useEffect(() => {
     if (accountIdFromQuery) {
@@ -152,6 +181,10 @@ export default function CampaignBuilder() {
     setActiveDraftId(draftIdFromQuery);
     setStep(2);
   }, [draftIdFromQuery]);
+
+  useEffect(() => {
+    setPageSelectDirty(false);
+  }, [activeDraftId, resolvedAccountId]);
 
   useEffect(() => {
     if (!draft) return;
@@ -204,6 +237,33 @@ export default function CampaignBuilder() {
     }
   }, [draft, briefHydratedDraftId]);
 
+  const pageOptions: MetaPageOption[] = useMemo(
+    () => (Array.isArray(pagesQuery.data?.pages) ? pagesQuery.data?.pages : []),
+    [pagesQuery.data?.pages]
+  );
+  const pageAccessStatus: PageAccessStatus | undefined = pagesQuery.data?.pageAccessStatus ?? selectedAccount?.pageAccessStatus;
+  const resolvedPageId = useMemo(() => {
+    const candidate =
+      brief.pageId.trim() ||
+      String(draft?.inputs?.pageId ?? "").trim() ||
+      String(selectedAccount?.defaultPageId ?? "").trim() ||
+      String(pageOptions[0]?.pageId ?? "").trim();
+    return candidate;
+  }, [brief.pageId, draft?.inputs?.pageId, selectedAccount?.defaultPageId, pageOptions]);
+  const resolvedPageLabel = useMemo(() => {
+    if (!resolvedPageId) return "-";
+    const option = pageOptions.find((page) => page.pageId === resolvedPageId);
+    if (option) return `${option.pageName} (${option.pageId})`;
+    return resolvedPageId;
+  }, [pageOptions, resolvedPageId]);
+
+  useEffect(() => {
+    if (pageSelectDirty) return;
+    if (brief.pageId.trim()) return;
+    if (!resolvedPageId) return;
+    setBrief((prev) => ({ ...prev, pageId: resolvedPageId }));
+  }, [brief.pageId, pageSelectDirty, resolvedPageId]);
+
   const publishValidation = useMemo(() => {
     const errors: string[] = [];
     if (!draft) return { valid: false, errors: ["צריך לייצר טיוטה לפני פרסום."] };
@@ -221,9 +281,12 @@ export default function CampaignBuilder() {
     if (!headlines.length || headlines.every((text) => !String(text).trim())) {
       errors.push("חובה לפחות כותרת אחת.");
     }
+    if (!resolvedPageId) {
+      errors.push("יש לבחור עמוד Meta לפרסום לפני המשך.");
+    }
 
     return { valid: errors.length === 0, errors };
-  }, [draft]);
+  }, [draft, resolvedPageId]);
 
   const busy =
     createMutation.isPending ||
@@ -232,6 +295,24 @@ export default function CampaignBuilder() {
     updateBlockMutation.isPending ||
     publishMutation.isPending ||
     draftQuery.isLoading;
+
+  const handlePageSelection = (value: string) => {
+    const selectedPageId = value.trim();
+    setPageSelectDirty(true);
+    setBrief((prev) => ({ ...prev, pageId: selectedPageId }));
+    if (!selectedPageId || !resolvedAccountId) return;
+
+    const pageName = pageOptions.find((page) => page.pageId === selectedPageId)?.pageName || "";
+    saveDefaultPageMutation.mutate(
+      { pageId: selectedPageId, pageName: pageName || undefined },
+      {
+        onError: (err: unknown) => {
+          const message = err instanceof Error ? err.message : "שמירת ברירת מחדל לעמוד נכשלה.";
+          setErrorMessage(message);
+        },
+      }
+    );
+  };
 
   const handleGenerateDraft = async () => {
     setErrorMessage("");
@@ -409,7 +490,7 @@ export default function CampaignBuilder() {
     setPublishSuccess("");
 
     try {
-      const publishPageId = brief.pageId.trim() || String(draft?.inputs?.pageId ?? "").trim();
+      const publishPageId = resolvedPageId.trim();
       const publishDestinationUrl =
         brief.destinationUrl.trim() || String(draft?.inputs?.destinationUrl ?? "").trim();
 
@@ -432,6 +513,8 @@ export default function CampaignBuilder() {
       const message = err instanceof Error ? err.message : "הפרסום נכשל.";
       if (message.includes("Budget exceeds safety limits")) {
         setErrorMessage("התקציב חורג ממגבלות הבטיחות. עדכן את בלוק התקציב לפני פרסום.");
+      } else if (err instanceof ApiError && err.code === "PAGE_ID_RESOLUTION_FAILED") {
+        setErrorMessage("חסרה הרשאת דפים לחשבון. בצע חיבור מחדש או בחר pageId ידנית.");
       } else {
         setErrorMessage(message);
       }
@@ -547,10 +630,47 @@ export default function CampaignBuilder() {
               שדות מתקדמים לפרסום
             </summary>
             <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="md:col-span-2 space-y-2">
+                <IconSelectField
+                  label="עמוד פייסבוק לפרסום"
+                  value={brief.pageId}
+                  onChange={handlePageSelection}
+                  icon={FileText}
+                  helperText="הבחירה נשמרת כברירת מחדל לחשבון הנוכחי."
+                >
+                  <option value="">בחר עמוד</option>
+                  {pageOptions.map((page) => (
+                    <option key={page.pageId} value={page.pageId}>
+                      {page.pageName} ({page.pageId})
+                    </option>
+                  ))}
+                </IconSelectField>
+                {pagesQuery.isLoading && (
+                  <p className="text-[11px] text-slate-500">טוען עמודים מהחשבון...</p>
+                )}
+                {pageAccessStatus === "missing_permissions" && (
+                  <p className="rounded-xl border border-amber-400/35 bg-amber-500/12 p-2 text-xs text-amber-100">
+                    חסרות הרשאות דפים לחשבון. יש לבצע reconnect במסך חשבונות.
+                  </p>
+                )}
+                {pageAccessStatus === "token_error" && (
+                  <p className="rounded-xl border border-rose-400/35 bg-rose-500/12 p-2 text-xs text-rose-100">
+                    לא ניתן למשוך עמודים מהחשבון כרגע. נסה reconnect או הזן pageId ידנית.
+                  </p>
+                )}
+                {pageAccessStatus === "no_pages" && (
+                  <p className="rounded-xl border border-slate-400/35 bg-slate-500/10 p-2 text-xs text-slate-300">
+                    לא נמצאו עמודים זמינים בחשבון זה.
+                  </p>
+                )}
+              </div>
               <IconInputField
-                label="מזהה עמוד Meta"
+                label="מזהה עמוד Meta (ידני)"
                 value={brief.pageId}
-                onChange={(value) => setBrief((prev) => ({ ...prev, pageId: value }))}
+                onChange={(value) => {
+                  setPageSelectDirty(true);
+                  setBrief((prev) => ({ ...prev, pageId: value }));
+                }}
                 icon={FileText}
                 dir="ltr"
               />
@@ -873,6 +993,7 @@ export default function CampaignBuilder() {
                 label="מדינות יעד"
                 value={(draft.blocks.audiencePlan.geo?.countries ?? []).join(", ") || "-"}
               />
+              <ReadOnlyField label="עמוד פרסום" value={resolvedPageLabel} />
               <ReadOnlyField
                 label="כמות וריאציות טקסט"
                 value={String((draft.blocks.creativePlan.primaryTexts ?? []).length)}

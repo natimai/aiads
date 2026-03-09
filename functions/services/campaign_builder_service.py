@@ -62,6 +62,15 @@ class ValidationError(ValueError):
     """User-facing validation errors that should block publish."""
 
 
+class PublishResolutionError(ValidationError):
+    """Raised when required publish entities (page/destination) cannot be resolved safely."""
+
+    def __init__(self, message: str, *, code: str = "PAGE_ID_RESOLUTION_FAILED", diagnostics: dict[str, Any] | None = None):
+        super().__init__(message)
+        self.code = code
+        self.diagnostics = diagnostics or {}
+
+
 class CampaignBuilderService:
     def __init__(self, db):
         self.db = db
@@ -343,20 +352,38 @@ class CampaignBuilderService:
         )
         account_doc = account_ref.get()
         account_data = account_doc.to_dict() if account_doc.exists else {}
+        account_data = account_data if isinstance(account_data, dict) else {}
         proposed_budget = float(campaign_plan.get("dailyBudget", 0) or 0)
         self._enforce_publish_budget_guardrail(
             user_id=user_id,
             account_id=account_id,
-            account_data=account_data if isinstance(account_data, dict) else {},
+            account_data=account_data,
             proposed_daily_budget=proposed_budget,
         )
 
         override_page_id = str(page_id_override or "").strip()
         override_destination_url = str(destination_url_override or "").strip()
-        page_id = override_page_id or self._resolve_page_id(inputs, account_data if isinstance(account_data, dict) else {})
+        page_id = ""
+        page_resolution_source = "none"
+        page_access_status = str(account_data.get("pageAccessStatus") or "").strip().lower()
+        if override_page_id:
+            page_id = override_page_id
+            page_resolution_source = "override"
+            page_access_status = "ok"
+        elif str(inputs.get("pageId") or inputs.get("pageID") or "").strip():
+            page_id = str(inputs.get("pageId") or inputs.get("pageID") or "").strip()
+            page_resolution_source = "draft_inputs"
+            page_access_status = "ok"
+        else:
+            account_default_page_id = self._resolve_page_id_from_account_defaults(account_data)
+            if account_default_page_id:
+                page_id = account_default_page_id
+                page_resolution_source = "account_defaults"
+                page_access_status = "ok"
+
         destination_url = (
             override_destination_url
-            or self._resolve_destination_url(inputs, account_data if isinstance(account_data, dict) else {})
+            or self._resolve_destination_url(inputs, account_data)
         )
 
         if override_page_id or override_destination_url:
@@ -370,6 +397,7 @@ class CampaignBuilderService:
             account_update: dict[str, Any] = {"updatedAt": datetime.now(timezone.utc)}
             if override_page_id:
                 account_update["defaultPageId"] = override_page_id
+                account_update["pageAccessStatus"] = "ok"
             if override_destination_url:
                 account_update["defaultDestinationUrl"] = override_destination_url
             account_ref.set(account_update, merge=True)
@@ -377,28 +405,74 @@ class CampaignBuilderService:
         token: str = ""
         if not page_id:
             try:
-                from services.meta_auth import fetch_pages, get_decrypted_token
+                from services.meta_auth import fetch_pages_with_status, get_decrypted_token
 
                 token, _ = get_decrypted_token(user_id, account_id)
-                pages = fetch_pages(token)
+                pages, page_access_status = fetch_pages_with_status(token)
+                account_ref.set(
+                    {
+                        "pageAccessStatus": page_access_status,
+                        "pageAccessCheckedAt": datetime.now(timezone.utc),
+                        "updatedAt": datetime.now(timezone.utc),
+                    },
+                    merge=True,
+                )
                 if pages:
                     page_id = str(pages[0].get("pageId") or "").strip()
                     if page_id:
+                        page_resolution_source = "fetched_pages"
+                        page_access_status = "ok"
                         account_ref.set(
                             {
                                 "defaultPageId": page_id,
                                 "defaultPageName": str(pages[0].get("pageName") or ""),
+                                "pageAccessStatus": "ok",
                                 "updatedAt": datetime.now(timezone.utc),
                             },
                             merge=True,
                         )
             except Exception as exc:  # pragma: no cover - external token/page fetch
                 logger.warning("Failed to auto-resolve pageId for %s/%s: %s", user_id, account_id, exc)
+                page_access_status = "token_error"
+                account_ref.set(
+                    {
+                        "pageAccessStatus": page_access_status,
+                        "pageAccessCheckedAt": datetime.now(timezone.utc),
+                        "updatedAt": datetime.now(timezone.utc),
+                    },
+                    merge=True,
+                )
 
         if not page_id:
-            raise ValueError("pageId is required for publish (set it in Step 1 advanced fields or account defaults)")
+            diagnostics = {
+                "pageResolutionSource": page_resolution_source,
+                "pageAccessStatus": page_access_status or "token_error",
+                "publishDraftId": draft_id,
+                "accountId": account_id,
+            }
+            logger.warning(
+                "Publish page resolution failed user=%s account=%s draft=%s source=%s pageAccessStatus=%s",
+                user_id,
+                account_id,
+                draft_id,
+                page_resolution_source,
+                page_access_status or "token_error",
+            )
+            raise PublishResolutionError(
+                "Could not resolve Meta Page for publish. Reconnect account permissions or select a pageId manually.",
+                diagnostics=diagnostics,
+            )
         if not destination_url:
             raise ValueError("destinationUrl is required for publish")
+
+        logger.info(
+            "Publish page resolution success user=%s account=%s draft=%s source=%s pageAccessStatus=%s",
+            user_id,
+            account_id,
+            draft_id,
+            page_resolution_source,
+            page_access_status or "ok",
+        )
 
         from services.meta_api import MetaAPIService
         from services.meta_auth import get_decrypted_token
@@ -1714,6 +1788,29 @@ class CampaignBuilderService:
         candidates = [
             inputs.get("pageId"),
             inputs.get("pageID"),
+            account_data.get("defaultPageId"),
+            account_data.get("defaultPageID"),
+            account_data.get("pageId"),
+            account_data.get("pageID"),
+            account_data.get("metaPageId"),
+            account_data.get("facebookPageId"),
+            account_data.get("fbPageId"),
+            defaults.get("pageId"),
+            defaults.get("defaultPageId"),
+            settings.get("pageId"),
+            settings.get("defaultPageId"),
+        ]
+        for candidate in candidates:
+            value = str(candidate or "").strip()
+            if value:
+                return value
+        return ""
+
+    @staticmethod
+    def _resolve_page_id_from_account_defaults(account_data: dict[str, Any]) -> str:
+        defaults = account_data.get("defaults", {}) if isinstance(account_data.get("defaults"), dict) else {}
+        settings = account_data.get("settings", {}) if isinstance(account_data.get("settings"), dict) else {}
+        candidates = [
             account_data.get("defaultPageId"),
             account_data.get("defaultPageID"),
             account_data.get("pageId"),

@@ -8,6 +8,7 @@ from api.accounts import _cors_response, verify_auth
 from services.campaign_builder_service import (
     CampaignBuilderService,
     DEFAULT_OBJECTIVE,
+    PublishResolutionError,
     ValidationError,
 )
 from utils.firestore_helpers import get_db
@@ -56,6 +57,17 @@ def handle_campaign_builder(request):
 
     except PermissionError as exc:
         return _cors_response(json.dumps({"error": str(exc)}), 401)
+    except PublishResolutionError as exc:
+        return _cors_response(
+            json.dumps(
+                {
+                    "error": str(exc),
+                    "code": getattr(exc, "code", "PAGE_ID_RESOLUTION_FAILED"),
+                    "diagnostics": getattr(exc, "diagnostics", {}),
+                }
+            ),
+            422,
+        )
     except ValidationError as exc:
         return _cors_response(json.dumps({"error": str(exc), "code": "VALIDATION_ERROR"}), 422)
     except ValueError as exc:

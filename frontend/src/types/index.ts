@@ -10,6 +10,16 @@ export interface MetaAccount {
   tokenExpiry?: string;
   kpiSummary?: KPISummary;
   kpiUpdatedAt?: string;
+  defaultPageId?: string;
+  defaultPageName?: string;
+  pageAccessStatus?: PageAccessStatus;
+}
+
+export type PageAccessStatus = "ok" | "missing_permissions" | "no_pages" | "token_error";
+
+export interface MetaPageOption {
+  pageId: string;
+  pageName: string;
 }
 
 export type AccountVertical = "LEAD_GEN" | "ECOMMERCE" | "APP_INSTALLS";
