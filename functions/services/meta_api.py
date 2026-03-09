@@ -233,12 +233,20 @@ class MetaAPIService:
         return True
 
     @with_retry
-    def create_campaign(self, *, name: str, objective: str, status: str = "PAUSED") -> str:
+    def create_campaign(
+        self,
+        *,
+        name: str,
+        objective: str,
+        status: str = "PAUSED",
+        is_adset_budget_sharing_enabled: bool = False,
+    ) -> str:
         params = {
             "name": name,
             "objective": objective,
             "status": status,
             "special_ad_categories": [],
+            "is_adset_budget_sharing_enabled": bool(is_adset_budget_sharing_enabled),
         }
         created = self.account.create_campaign(params=params)
         return str(created.get("id"))
