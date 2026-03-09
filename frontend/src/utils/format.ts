@@ -1,11 +1,29 @@
+export function normalizeCurrencyCode(currency?: string | null): string {
+  const raw = String(currency ?? "").trim();
+  if (!raw) return "USD";
+
+  const upper = raw.toUpperCase();
+  if (upper === "NIS" || upper === "₪" || upper.includes("SHEKEL") || raw.includes("₪")) {
+    return "ILS";
+  }
+
+  const codeMatch = upper.match(/\b[A-Z]{3}\b/);
+  return codeMatch?.[0] ?? "USD";
+}
+
 export function formatCurrency(value: number, currency = "USD"): string {
   const safeValue = Number.isFinite(value) ? value : 0;
-  return new Intl.NumberFormat("he-IL", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(safeValue);
+  const normalizedCurrency = normalizeCurrencyCode(currency);
+  try {
+    return new Intl.NumberFormat("he-IL", {
+      style: "currency",
+      currency: normalizedCurrency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(safeValue);
+  } catch {
+    return `${safeValue.toFixed(2)} ${normalizedCurrency}`;
+  }
 }
 
 export function formatNumber(value: number): string {

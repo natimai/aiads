@@ -2,11 +2,41 @@
 import json
 import logging
 import os
+import re
 from utils.firestore_helpers import get_db
 
 logger = logging.getLogger(__name__)
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+
+
+def _normalize_currency_code(raw_currency) -> str:
+    raw = str(raw_currency or "").strip()
+    if not raw:
+        return "USD"
+
+    aliases = {
+        "NIS": "ILS",
+        "SHEKEL": "ILS",
+        "SHEKELS": "ILS",
+        "ISRAELI SHEKEL": "ILS",
+        "ISRAELI SHEKELS": "ILS",
+        "NEW ISRAELI SHEKEL": "ILS",
+        "NEW ISRAELI SHEKELS": "ILS",
+        "₪": "ILS",
+    }
+    upper = raw.upper()
+    if upper in aliases:
+        return aliases[upper]
+    if "₪" in raw:
+        return "ILS"
+
+    code_match = re.search(r"\b[A-Z]{3}\b", upper)
+    if code_match:
+        code = code_match.group(0)
+        return "ILS" if code == "NIS" else code
+
+    return "USD"
 
 
 def verify_auth(request) -> str:
@@ -63,10 +93,17 @@ def _get_accounts(user_id: str):
     accounts = []
     for doc in docs:
         data = doc.to_dict()
+        currency = _normalize_currency_code(
+            data.get("currency")
+            or data.get("currencyCode")
+            or data.get("accountCurrency")
+            or data.get("account_currency")
+            or data.get("currencySymbol")
+        )
         accounts.append({
             "id": doc.id,
             "accountName": data.get("accountName"),
-            "currency": data.get("currency"),
+            "currency": currency,
             "businessName": data.get("businessName"),
             "isActive": data.get("isActive", False),
             "isManagedByPlatform": data.get("isManagedByPlatform", False),

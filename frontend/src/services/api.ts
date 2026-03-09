@@ -23,6 +23,7 @@ import type {
   DraftSafety,
   PublishDraftResult,
 } from "../types";
+import { normalizeCurrencyCode } from "../utils/format";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -86,7 +87,21 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 
 export async function getAccounts(): Promise<MetaAccount[]> {
   const data = await apiFetch<{ accounts: MetaAccount[] }>("/api/accounts");
-  return data.accounts;
+  return data.accounts.map((account) => {
+    const accountWithFallback = account as MetaAccount & Record<string, unknown>;
+    return {
+      ...account,
+      currency: normalizeCurrencyCode(
+        String(
+          accountWithFallback.currency ??
+          accountWithFallback.currencyCode ??
+          accountWithFallback.accountCurrency ??
+          accountWithFallback.account_currency ??
+          "USD"
+        )
+      ),
+    };
+  });
 }
 
 export async function connectAccount(redirectUri?: string): Promise<{ authUrl: string }> {

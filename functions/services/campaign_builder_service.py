@@ -81,6 +81,11 @@ class CampaignBuilderService:
         inputs = self._normalize_inputs(inputs)
         context = self._build_context(user_id=user_id, account_id=account_id, inputs=inputs)
         blocks = self._generate_full_draft_via_agents(context=context)
+        blocks = self._repair_initial_full_draft_blocks_with_llm(
+            context=context,
+            blocks=blocks,
+            inputs=inputs,
+        )
         blocks = self._normalize_blocks(blocks, inputs)
         if self._should_generate_images_on_create():
             blocks = self._run_art_director(blocks=blocks, context=context)
@@ -979,6 +984,11 @@ class CampaignBuilderService:
             creative_plan["headlines"] = self._default_headlines(offer_for_copy, is_hebrew)
         if not creative_plan.get("angles") or all(not str(a).strip() for a in creative_plan["angles"]):
             creative_plan["angles"] = self._default_angles(is_hebrew)
+        elif is_hebrew:
+            angle_texts = [str(a or "").strip() for a in creative_plan.get("angles", []) if str(a or "").strip()]
+            if angle_texts and self._creative_has_language_mismatch(angle_texts):
+                # Hooks must stay in the requested language.
+                creative_plan["angles"] = self._default_angles(is_hebrew)
 
         # Do not overwrite model output with generic templates when there is mixed language.
         # We keep the generated copy for specificity and let explicit regenerate refine it.
@@ -1438,10 +1448,22 @@ class CampaignBuilderService:
                 timeout=120,
             )
             retry_response.raise_for_status()
-            return self._extract_image_bytes_from_gemini_response(retry_response.json())
+            image_bytes_retry, mime_type_retry = self._extract_image_bytes_from_gemini_response(retry_response.json())
+            if image_bytes_retry:
+                return image_bytes_retry, mime_type_retry
         except Exception as exc:
             logger.warning("Nano Banana Pro retry failed: %s", exc)
-            return None, "image/jpeg"
+
+        # Fallback: try Imagen endpoint that is already used by the Art Director pipeline.
+        try:
+            imagen_bytes = self.art_director._call_imagen_api(prompt_text, aspect_ratio=aspect_ratio)
+            if imagen_bytes:
+                logger.info("Nano Banana Pro fallback succeeded via Imagen endpoint")
+                return imagen_bytes, "image/jpeg"
+        except Exception as exc:
+            logger.warning("Imagen fallback failed: %s", exc)
+
+        return None, "image/jpeg"
 
     @staticmethod
     def _extract_image_bytes_from_gemini_response(payload: dict[str, Any]) -> tuple[bytes | None, str]:
@@ -1733,13 +1755,19 @@ class CampaignBuilderService:
             return True
         primary_texts = creative_plan.get("primaryTexts")
         headlines = creative_plan.get("headlines")
+        angles = creative_plan.get("angles")
         if not isinstance(primary_texts, list) or not primary_texts:
             return True
         if not isinstance(headlines, list) or not headlines:
             return True
+        if not isinstance(angles, list) or not angles:
+            return True
 
         texts = [str(x or "") for x in [*primary_texts, *headlines] if str(x or "").strip()]
+        angle_texts = [str(x or "") for x in angles if str(x or "").strip()]
         if not texts:
+            return True
+        if not angle_texts:
             return True
 
         normalized_offer = str(offer or "").strip()
@@ -1749,6 +1777,8 @@ class CampaignBuilderService:
 
         if is_hebrew:
             if self._creative_has_language_mismatch(texts):
+                return True
+            if self._creative_has_language_mismatch(angle_texts):
                 return True
             if any(("looking for" in text.lower()) for text in texts):
                 return True
