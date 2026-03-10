@@ -152,6 +152,24 @@ export async function clearAccountDefaultPage(
   });
 }
 
+export async function setAccountClientBackgroundBrief(
+  accountId: string,
+  clientBackgroundBrief: string
+): Promise<{ success: boolean; clientBackgroundBrief: string }> {
+  return apiFetch(`/api/accounts/${accountId}/defaults/client-brief`, {
+    method: "POST",
+    body: JSON.stringify({ clientBackgroundBrief }),
+  });
+}
+
+export async function clearAccountClientBackgroundBrief(
+  accountId: string
+): Promise<{ success: boolean; clientBackgroundBrief: string }> {
+  return apiFetch(`/api/accounts/${accountId}/defaults/client-brief`, {
+    method: "DELETE",
+  });
+}
+
 export async function disconnectAccount(accountId: string): Promise<void> {
   await apiFetch(`/api/accounts/${accountId}`, { method: "DELETE" });
 }
@@ -288,6 +306,7 @@ export async function createCampaignDraft(
     campaignName: request.campaignName,
     pageId: request.pageId,
     destinationUrl: request.destinationUrl,
+    clientBackgroundBrief: request.clientBackgroundBrief,
   };
 
   try {

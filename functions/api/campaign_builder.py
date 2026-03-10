@@ -263,6 +263,7 @@ def _coerce_generate_inputs(payload: dict) -> dict:
             "pageId": payload.get("pageId") or "",
             "destinationUrl": payload.get("destinationUrl") or "",
             "brandVoice": payload.get("brandVoice") or "",
+            "clientBackgroundBrief": payload.get("clientBackgroundBrief") or payload.get("clientBrief") or "",
         }
 
     try:
@@ -274,4 +275,5 @@ def _coerce_generate_inputs(payload: dict) -> dict:
     inputs["country"] = str(inputs.get("country") or "US")
     inputs["objective"] = str(inputs.get("objective") or DEFAULT_OBJECTIVE)
     inputs["campaignName"] = str(inputs.get("campaignName") or "AI Campaign Launch")
+    inputs["clientBackgroundBrief"] = str(inputs.get("clientBackgroundBrief") or "")
     return inputs

@@ -38,6 +38,7 @@ export function useCreateCampaignDraft(accountIdOverride?: string) {
       campaignName?: string;
       pageId?: string;
       destinationUrl?: string;
+      clientBackgroundBrief?: string;
     }) => {
       if (!accountId) throw new Error("No account selected");
       return createCampaignDraft({
@@ -50,6 +51,7 @@ export function useCreateCampaignDraft(accountIdOverride?: string) {
         campaignName: payload.campaignName,
         pageId: payload.pageId,
         destinationUrl: payload.destinationUrl,
+        clientBackgroundBrief: payload.clientBackgroundBrief,
       });
     },
     onSuccess: (data) => {

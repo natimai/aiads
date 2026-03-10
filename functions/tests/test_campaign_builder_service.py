@@ -491,16 +491,26 @@ class CampaignBuilderServiceTest(unittest.TestCase):
                 "objective": "OUTCOME_LEADS",
                 "language": "עברית",
                 "country": "IL",
+                "clientBackgroundBrief": "Personal insurance agency with concierge support",
             }
         )
         account_section = self.service._format_account_context_section(
-            {"peerBenchmark": {"accountsCompared": 3, "medianCTR": 1.2}}
+            {"peerBenchmark": {"accountsCompared": 3, "medianCTR": 1.2}},
+            client_background_brief="Personal insurance agency with concierge support",
         )
 
         self.assertIn("=== USER REQUEST (HIGHEST PRIORITY) ===", user_section)
         self.assertIn("Product/Offer: Car Insurance", user_section)
         self.assertIn("Language: עברית", user_section)
+        self.assertIn(
+            "Client Background (persistent context): Personal insurance agency with concierge support",
+            user_section,
+        )
         self.assertIn("=== ACCOUNT CONTEXT (SECONDARY - USE ONLY FOR TONE/METRICS) ===", account_section)
+        self.assertIn(
+            "Client Background (reference): Personal insurance agency with concierge support",
+            account_section,
+        )
         self.assertIn("Account Benchmarks:", account_section)
 
     def test_regenerate_normalizes_offer_from_legacy_inputs(self):
@@ -664,6 +674,46 @@ class CampaignBuilderServiceTest(unittest.TestCase):
         image_bytes, mime_type = self.service._extract_image_bytes_from_gemini_response(payload)
         self.assertEqual(image_bytes, b"hello")
         self.assertEqual(mime_type, "image/png")
+
+    def test_run_art_director_sets_image_concepts_on_exception(self):
+        self.service.ai.generate_image_concepts = MagicMock(side_effect=RuntimeError("API timeout"))
+        blocks = {
+            "creativePlan": {
+                "primaryTexts": ["Save 30% on insurance"],
+                "headlines": ["Best deal"],
+            },
+        }
+        context = {
+            "inputs": {"offer": "Car Insurance", "language": "en"},
+            "account": {"id": "acc-1"},
+        }
+        result = self.service._run_art_director(blocks=blocks, context=context)
+        self.assertIn("imageConcepts", result)
+        self.assertEqual(result["imageConcepts"]["imageUrls"], [])
+        self.assertEqual(result["imageConcepts"]["image_generation_prompts"], [])
+        self.assertIn("RuntimeError", result["imageConcepts"]["imageGenerationError"])
+
+    def test_run_art_director_sets_error_when_all_images_fail(self):
+        self.service.ai.generate_image_concepts = MagicMock(return_value={
+            "creative_concept_reasoning": "Pain point approach",
+            "image_generation_prompts": ["Prompt 1", "Prompt 2", "Prompt 3"],
+        })
+        self.service._generate_images_from_prompts = MagicMock(return_value=[])
+        blocks = {
+            "creativePlan": {
+                "primaryTexts": ["Save 30% on insurance"],
+                "headlines": ["Best deal"],
+            },
+        }
+        context = {
+            "inputs": {"offer": "Car Insurance", "language": "en"},
+            "account": {"id": "acc-1"},
+        }
+        result = self.service._run_art_director(blocks=blocks, context=context)
+        self.assertIn("imageConcepts", result)
+        self.assertEqual(len(result["imageConcepts"]["image_generation_prompts"]), 3)
+        self.assertEqual(result["imageConcepts"]["imageUrls"], [])
+        self.assertIn("imageGenerationError", result["imageConcepts"])
 
 
 if __name__ == "__main__":

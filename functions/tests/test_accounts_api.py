@@ -54,6 +54,7 @@ class AccountsApiTest(unittest.TestCase):
             "pageAccessStatus": "ok",
             "defaultPageId": "pg-1",
             "defaultPageName": "Main Page",
+            "clientBackgroundBrief": "Insurance agency with personal service",
         }
         accounts_ref.stream.return_value = [doc]
         db.collection.return_value = users_collection
@@ -68,6 +69,10 @@ class AccountsApiTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(payload["accounts"][0]["pageAccessStatus"], "ok")
         self.assertEqual(payload["accounts"][0]["defaultPageId"], "pg-1")
+        self.assertEqual(
+            payload["accounts"][0]["clientBackgroundBrief"],
+            "Insurance agency with personal service",
+        )
 
     @patch("api.accounts.verify_auth", return_value="user-1")
     @patch("api.accounts.get_db")
@@ -135,6 +140,46 @@ class AccountsApiTest(unittest.TestCase):
         saved = account_doc_ref.set.call_args.args[0]
         self.assertEqual(saved["defaultPageId"], "")
         self.assertEqual(saved["defaultPageName"], "")
+
+    @patch("api.accounts.verify_auth", return_value="user-1")
+    @patch("api.accounts.get_db")
+    def test_set_client_background_brief_endpoint(self, mock_get_db, _mock_auth):
+        db, account_doc_ref = _mock_db_for_account_doc("acc-1", {"clientBackgroundBrief": ""})
+        mock_get_db.return_value = db
+
+        req = FakeRequest(
+            "POST",
+            "/api/accounts/acc-1/defaults/client-brief",
+            payload={"clientBackgroundBrief": "Insurance agency background"},
+        )
+        body, status, _ = handle_accounts(req)
+        payload = json.loads(body)
+
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["success"])
+        saved = account_doc_ref.set.call_args.args[0]
+        self.assertEqual(saved["clientBackgroundBrief"], "Insurance agency background")
+
+    @patch("api.accounts.verify_auth", return_value="user-1")
+    @patch("api.accounts.get_db")
+    def test_clear_client_background_brief_endpoint(self, mock_get_db, _mock_auth):
+        db, account_doc_ref = _mock_db_for_account_doc(
+            "acc-1",
+            {"clientBackgroundBrief": "Insurance agency background"},
+        )
+        mock_get_db.return_value = db
+
+        req = FakeRequest(
+            "DELETE",
+            "/api/accounts/acc-1/defaults/client-brief",
+        )
+        body, status, _ = handle_accounts(req)
+        payload = json.loads(body)
+
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["success"])
+        saved = account_doc_ref.set.call_args.args[0]
+        self.assertEqual(saved["clientBackgroundBrief"], "")
 
     @patch("services.meta_auth.store_account_with_token")
     @patch("services.meta_auth.fetch_pages_with_status")

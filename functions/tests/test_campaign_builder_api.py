@@ -79,6 +79,7 @@ class CampaignBuilderApiTest(unittest.TestCase):
                 "targetGeo": "US",
                 "budget": 75,
                 "language": "en",
+                "clientBackgroundBrief": "Known brand in local insurance market",
             },
         )
         body, status, _ = handle_campaign_builder(req)
@@ -90,6 +91,7 @@ class CampaignBuilderApiTest(unittest.TestCase):
         inputs = service.create_draft.call_args.kwargs["inputs"]
         self.assertEqual(inputs["objective"], "OUTCOME_SALES")
         self.assertEqual(inputs["dailyBudget"], 75.0)
+        self.assertEqual(inputs["clientBackgroundBrief"], "Known brand in local insurance market")
 
     @patch("api.campaign_builder.verify_auth", return_value="user-1")
     def test_create_draft_requires_account_id(self, _mock_auth):

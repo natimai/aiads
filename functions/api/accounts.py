@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 PAGE_ACCESS_STATUSES = {"ok", "missing_permissions", "no_pages", "token_error"}
+MAX_CLIENT_BRIEF_CHARS = 4000
 
 
 def _normalize_currency_code(raw_currency) -> str:
@@ -80,6 +81,12 @@ def handle_accounts(request):
         elif path.startswith("/api/accounts/") and path.endswith("/defaults/page") and request.method == "DELETE":
             account_id = path.split("/api/accounts/")[1].split("/defaults/page")[0]
             return _clear_default_page(user_id, account_id)
+        elif path.startswith("/api/accounts/") and path.endswith("/defaults/client-brief") and request.method == "POST":
+            account_id = path.split("/api/accounts/")[1].split("/defaults/client-brief")[0]
+            return _set_client_background_brief(request, user_id, account_id)
+        elif path.startswith("/api/accounts/") and path.endswith("/defaults/client-brief") and request.method == "DELETE":
+            account_id = path.split("/api/accounts/")[1].split("/defaults/client-brief")[0]
+            return _clear_client_background_brief(user_id, account_id)
         elif path.endswith("/managed") and request.method == "POST":
             account_id = path.split("/api/accounts/")[1].split("/managed")[0]
             return _toggle_managed(request, user_id, account_id)
@@ -124,6 +131,7 @@ def _get_accounts(user_id: str):
             "defaultPageId": data.get("defaultPageId"),
             "defaultPageName": data.get("defaultPageName"),
             "pageAccessStatus": data.get("pageAccessStatus"),
+            "clientBackgroundBrief": data.get("clientBackgroundBrief"),
         })
 
     return _cors_response(json.dumps({"accounts": accounts}))
@@ -259,6 +267,65 @@ def _clear_default_page(user_id: str, account_id: str):
                 "success": True,
                 "defaultPageId": "",
                 "defaultPageName": "",
+            }
+        )
+    )
+
+
+def _set_client_background_brief(request, user_id: str, account_id: str):
+    payload = request.get_json(silent=True) or {}
+    raw_brief = str(payload.get("clientBackgroundBrief") or payload.get("brief") or "")
+    brief = raw_brief.strip()
+    if len(brief) > MAX_CLIENT_BRIEF_CHARS:
+        return _cors_response(
+            json.dumps({"error": f"clientBackgroundBrief exceeds {MAX_CLIENT_BRIEF_CHARS} characters"}),
+            400,
+        )
+
+    doc_ref = _account_ref(user_id, account_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        return _cors_response(json.dumps({"error": "Account not found"}), 404)
+
+    now = datetime.now(timezone.utc)
+    doc_ref.set(
+        {
+            "clientBackgroundBrief": brief,
+            "updatedAt": now,
+        },
+        merge=True,
+    )
+    logger.info("Client background brief saved user=%s account=%s length=%s", user_id, account_id, len(brief))
+    return _cors_response(
+        json.dumps(
+            {
+                "success": True,
+                "clientBackgroundBrief": brief,
+            }
+        )
+    )
+
+
+def _clear_client_background_brief(user_id: str, account_id: str):
+    doc_ref = _account_ref(user_id, account_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        return _cors_response(json.dumps({"error": "Account not found"}), 404)
+
+    now = datetime.now(timezone.utc)
+    doc_ref.set(
+        {
+            "clientBackgroundBrief": "",
+            "updatedAt": now,
+        },
+        merge=True,
+    )
+    logger.info("Client background brief cleared user=%s account=%s", user_id, account_id)
+    return _cors_response(
+        json.dumps(
+            {
+                "success": True,
+                "clientBackgroundBrief": "",
             }
         )
     )

@@ -904,6 +904,15 @@ class CampaignBuilderService:
         )
         account_doc = account_ref.get()
         account_data = account_doc.to_dict() if account_doc.exists else {}
+        account_data = account_data if isinstance(account_data, dict) else {}
+        account_client_brief = str(
+            account_data.get("clientBackgroundBrief")
+            or account_data.get("clientBrief")
+            or account_data.get("brandVoice")
+            or ""
+        ).strip()
+        if not str(normalized_inputs.get("clientBackgroundBrief") or "").strip() and account_client_brief:
+            normalized_inputs["clientBackgroundBrief"] = account_client_brief
 
         campaigns = []
         for camp_doc in account_ref.collection("campaigns").stream():
@@ -922,7 +931,10 @@ class CampaignBuilderService:
 
         benchmark_snapshot = self._build_benchmark_snapshot(user_id, account_id)
         user_request_text = self._format_user_request_section(normalized_inputs)
-        account_context_text = self._format_account_context_section(benchmark_snapshot)
+        account_context_text = self._format_account_context_section(
+            benchmark_snapshot,
+            client_background_brief=str(normalized_inputs.get("clientBackgroundBrief") or ""),
+        )
 
         return {
             "account": {
@@ -930,6 +942,7 @@ class CampaignBuilderService:
                 "name": account_data.get("accountName", ""),
                 "currency": account_data.get("currency", "USD"),
                 "kpiSummary": account_data.get("kpiSummary", {}),
+                "clientBackgroundBrief": str(normalized_inputs.get("clientBackgroundBrief") or ""),
             },
             "inputs": normalized_inputs,
             "campaigns": campaigns[:200],
@@ -1374,8 +1387,22 @@ class CampaignBuilderService:
                 "image_generation_prompts": prompts,
                 "imageUrls": image_urls,
             }
-        except Exception:
-            logger.warning("Art Director agent failed — skipping image concepts", exc_info=True)
+            if prompts and not image_urls:
+                blocks["imageConcepts"]["imageGenerationError"] = (
+                    "Image generation completed but all images failed to render."
+                )
+                logger.warning(
+                    "Art Director generated %d prompts but 0 images succeeded for account %s",
+                    len(prompts), account_id,
+                )
+        except Exception as exc:
+            logger.error("Art Director agent failed for account %s: %s", account_id, exc, exc_info=True)
+            blocks["imageConcepts"] = {
+                "creative_concept_reasoning": "",
+                "image_generation_prompts": [],
+                "imageUrls": [],
+                "imageGenerationError": f"Image generation failed: {type(exc).__name__}",
+            }
 
         return blocks
 
@@ -1855,6 +1882,11 @@ class CampaignBuilderService:
             "pageId": str(payload.get("pageId") or "").strip(),
             "destinationUrl": str(payload.get("destinationUrl") or "").strip(),
             "brandVoice": str(payload.get("brandVoice") or "").strip(),
+            "clientBackgroundBrief": str(
+                payload.get("clientBackgroundBrief")
+                or payload.get("clientBrief")
+                or ""
+            ).strip(),
         }
 
     @staticmethod
@@ -2070,19 +2102,35 @@ class CampaignBuilderService:
         return False
 
     def _format_user_request_section(self, inputs: dict[str, Any]) -> str:
+        client_background_brief = str(inputs.get("clientBackgroundBrief") or "").strip()
+        client_background_line = (
+            f"Client Background (persistent context): {client_background_brief}\n"
+            if client_background_brief
+            else ""
+        )
         return (
             "=== USER REQUEST (HIGHEST PRIORITY) ===\n"
             f"Product/Offer: {inputs.get('offer') or ''}\n"
             f"Objective: {inputs.get('objective') or DEFAULT_OBJECTIVE}\n"
             f"Language: {inputs.get('language') or 'en'}\n"
-            f"Target Geo: {inputs.get('country') or 'US'}"
+            f"Target Geo: {inputs.get('country') or 'US'}\n"
+            f"{client_background_line}"
+            "Instruction: Use the client background only as stable business context, "
+            "but tailor all output to the current Product/Offer."
         )
 
     @staticmethod
-    def _format_account_context_section(benchmark_snapshot: dict[str, Any]) -> str:
+    def _format_account_context_section(
+        benchmark_snapshot: dict[str, Any],
+        *,
+        client_background_brief: str = "",
+    ) -> str:
         benchmark_text = json.dumps(benchmark_snapshot or {}, ensure_ascii=False, default=str)
+        brief_text = str(client_background_brief or "").strip()
+        brief_line = f"Client Background (reference): {brief_text}\n" if brief_text else ""
         return (
             "=== ACCOUNT CONTEXT (SECONDARY - USE ONLY FOR TONE/METRICS) ===\n"
+            f"{brief_line}"
             f"Account Benchmarks: {benchmark_text}"
         )
 

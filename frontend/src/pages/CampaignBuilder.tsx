@@ -149,6 +149,10 @@ export default function CampaignBuilder() {
     () => accounts.find((account) => account.id === resolvedAccountId),
     [accounts, resolvedAccountId]
   );
+  const accountClientBrief = useMemo(
+    () => String(selectedAccount?.clientBackgroundBrief ?? "").trim(),
+    [selectedAccount?.clientBackgroundBrief]
+  );
 
   const pagesQuery = useQuery({
     queryKey: ["accountPages", resolvedAccountId],
@@ -337,6 +341,7 @@ export default function CampaignBuilder() {
         campaignName: brief.campaignName,
         pageId: brief.pageId,
         destinationUrl: brief.destinationUrl,
+        clientBackgroundBrief: accountClientBrief || undefined,
       });
 
       setActiveDraftId(result.draftId);
@@ -625,6 +630,12 @@ export default function CampaignBuilder() {
                 placeholder="לדוגמה: ביטוח רכב לנהגים צעירים, מוקד אנושי 24/7, הצעת מחיר תוך 3 דקות."
                 helperText="הוסף קהל יעד, כאב מרכזי והצעת ערך כדי לשפר את איכות הטיוטה."
               />
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 text-xs dark:border-slate-700 dark:bg-[#0b1226]">
+                <p className="font-semibold text-slate-700 dark:text-slate-200">רקע לקוח קבוע (מהחשבון)</p>
+                <p className="mt-1 whitespace-pre-wrap text-slate-600 dark:text-slate-300">
+                  {accountClientBrief || "לא הוגדר. אפשר להגדיר במסך הגדרות > ניהול חשבונות."}
+                </p>
+              </div>
 
               <IconInputField
                 label="שם קמפיין (אופציונלי)"
@@ -1247,6 +1258,7 @@ function ImageGallery({
     creative_concept_reasoning?: string;
     image_generation_prompts?: string[];
     imageUrls?: string[];
+    imageGenerationError?: string;
   };
   onRegenerate: (userInstructions?: string) => void;
   regenerating: boolean;
@@ -1321,10 +1333,10 @@ function ImageGallery({
               ))}
             </div>
 
-            <div className="hidden md:columns-3 md:gap-3">
+            <div className="hidden md:grid md:grid-cols-3 md:gap-3">
               {urls.map((url, index) => (
-                <div key={`${url}-${index}`} className="mb-3 break-inside-avoid overflow-hidden rounded-xl border border-slate-700">
-                  <img src={url} alt={`קונספט ${index + 1}`} className="w-full object-cover" loading="lazy" />
+                <div key={`${url}-${index}`} className="overflow-hidden rounded-xl border border-slate-700">
+                  <img src={url} alt={`קונספט ${index + 1}`} className="aspect-square w-full object-cover" loading="lazy" />
                   {prompts[index] && (
                     <p className="border-t border-slate-700 bg-[#0c1329] p-2 text-xs text-slate-300">{prompts[index]}</p>
                   )}
@@ -1342,9 +1354,23 @@ function ImageGallery({
             ))}
           </div>
         ) : (
-          <p className="rounded-xl border border-dashed border-slate-700 bg-[#0b1227] p-4 text-sm text-slate-400">
-            עדיין אין תמונות. לחץ על "צור תמונות מחדש" כדי לקבל סט קריאייטיב חדש.
-          </p>
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-700 bg-[#0b1227] p-6 text-center">
+            {imageConcepts?.imageGenerationError ? (
+              <p className="text-sm text-amber-400">{imageConcepts.imageGenerationError}</p>
+            ) : (
+              <p className="text-sm text-slate-400">
+                עדיין אין תמונות. לחץ על &quot;צור תמונות מחדש&quot; כדי לקבל סט קריאייטיב חדש.
+              </p>
+            )}
+            <button
+              onClick={() => onRegenerate()}
+              disabled={regenerating}
+              className="inline-flex min-h-10 items-center gap-1 rounded-xl bg-cyan-500 px-4 text-sm font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
+            >
+              {regenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              צור תמונות מחדש
+            </button>
+          </div>
         )}
 
         {regenerating && (
@@ -1353,8 +1379,8 @@ function ImageGallery({
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               יוצר סט תמונות חדש
             </div>
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-              {Array.from({ length: 6 }).map((_, index) => (
+            <div className="grid grid-cols-3 gap-3">
+              {Array.from({ length: 3 }).map((_, index) => (
                 <div key={index} className="aspect-square animate-pulse rounded-xl bg-slate-700/80" />
               ))}
             </div>

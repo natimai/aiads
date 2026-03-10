@@ -10,15 +10,18 @@ import {
   RefreshCw,
   Shield,
   Zap,
+  FileText,
 } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAccounts } from "../contexts/AccountContext";
 import {
+  clearAccountClientBackgroundBrief,
   clearAccountDefaultPage,
   connectAccount,
   disconnectAccount,
   getAccountPages,
+  setAccountClientBackgroundBrief,
   setAccountDefaultPage,
   syncAccount,
   syncAllAccounts,
@@ -35,6 +38,8 @@ export default function AccountSettings() {
   const [pageDraftByAccount, setPageDraftByAccount] = useState<Record<string, string>>({});
   const [pageOptionsByAccount, setPageOptionsByAccount] = useState<Record<string, MetaPageOption[]>>({});
   const [pageStatusByAccount, setPageStatusByAccount] = useState<Record<string, string>>({});
+  const [clientBriefEditorOpenByAccount, setClientBriefEditorOpenByAccount] = useState<Record<string, boolean>>({});
+  const [clientBriefDraftByAccount, setClientBriefDraftByAccount] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const success = searchParams.get("success");
@@ -159,6 +164,35 @@ export default function AccountSettings() {
     onError: (err: Error) => setToast({ type: "error", message: err.message }),
   });
 
+  const saveClientBrief = useMutation({
+    mutationFn: ({
+      accountId,
+      clientBackgroundBrief,
+    }: {
+      accountId: string;
+      clientBackgroundBrief: string;
+    }) => setAccountClientBackgroundBrief(accountId, clientBackgroundBrief),
+    onSuccess: (_, payload) => {
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      setToast({ type: "success", message: "בריף לקוח נשמר לחשבון" });
+      setClientBriefDraftByAccount((prev) => ({
+        ...prev,
+        [payload.accountId]: payload.clientBackgroundBrief,
+      }));
+    },
+    onError: (err: Error) => setToast({ type: "error", message: err.message }),
+  });
+
+  const clearClientBrief = useMutation({
+    mutationFn: (accountId: string) => clearAccountClientBackgroundBrief(accountId),
+    onSuccess: (_, accountId) => {
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      setToast({ type: "success", message: "בריף לקוח נוקה" });
+      setClientBriefDraftByAccount((prev) => ({ ...prev, [accountId]: "" }));
+    },
+    onError: (err: Error) => setToast({ type: "error", message: err.message }),
+  });
+
   const managedCount = accounts.filter((account) => account.isManagedByPlatform).length;
   const reconnectRequired = accounts.some((account) => account.pageAccessStatus === "missing_permissions");
 
@@ -174,6 +208,16 @@ export default function AccountSettings() {
     if (!pageOptionsByAccount[accountId]) {
       loadPagesForAccount.mutate(accountId);
     }
+  };
+
+  const toggleClientBriefEditor = (accountId: string, currentBrief: string) => {
+    const isOpening = !Boolean(clientBriefEditorOpenByAccount[accountId]);
+    setClientBriefEditorOpenByAccount((prev) => ({ ...prev, [accountId]: isOpening }));
+    if (!isOpening) return;
+    setClientBriefDraftByAccount((prev) => ({
+      ...prev,
+      [accountId]: String(prev[accountId] ?? currentBrief ?? ""),
+    }));
   };
 
   return (
@@ -283,11 +327,19 @@ export default function AccountSettings() {
             const accountPageOptions = pageOptionsByAccount[account.id] || [];
             const accountPageStatus = pageStatusByAccount[account.id] || account.pageAccessStatus || "";
             const pageDraft = String(pageDraftByAccount[account.id] ?? account.defaultPageId ?? "");
+            const isClientBriefEditorOpen = Boolean(clientBriefEditorOpenByAccount[account.id]);
+            const clientBriefDraft = String(
+              clientBriefDraftByAccount[account.id] ?? account.clientBackgroundBrief ?? ""
+            );
             const isLoadingPages = loadPagesForAccount.isPending && loadPagesForAccount.variables === account.id;
             const isSavingPage =
               saveDefaultPage.isPending && saveDefaultPage.variables?.accountId === account.id;
             const isClearingPage =
               clearDefaultPage.isPending && clearDefaultPage.variables === account.id;
+            const isSavingClientBrief =
+              saveClientBrief.isPending && saveClientBrief.variables?.accountId === account.id;
+            const isClearingClientBrief =
+              clearClientBrief.isPending && clearClientBrief.variables === account.id;
 
             return (
               <div
@@ -309,6 +361,9 @@ export default function AccountSettings() {
                       {account.defaultPageId
                         ? `${account.defaultPageName || "Page"} (${account.defaultPageId})`
                         : "לא הוגדר"}
+                    </span>
+                    <span className="rounded-full border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-0.5">
+                      בריף לקוח: {account.clientBackgroundBrief ? "מוגדר" : "לא הוגדר"}
                     </span>
                     {account.pageAccessStatus === "missing_permissions" && (
                       <span className="rounded-full border border-amber-400/40 bg-amber-500/12 px-2 py-0.5 text-amber-200">
@@ -337,6 +392,59 @@ export default function AccountSettings() {
                     <RefreshCw className="h-3 w-3" />
                     {isPageEditorOpen ? "סגירת עריכת עמוד" : "עריכת עמוד ברירת מחדל"}
                   </button>
+                  <button
+                    onClick={() =>
+                      toggleClientBriefEditor(account.id, String(account.clientBackgroundBrief || ""))
+                    }
+                    className="focus-ring mt-2 mr-2 inline-flex min-h-8 items-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)]"
+                  >
+                    <FileText className="h-3 w-3" />
+                    {isClientBriefEditorOpen ? "סגירת בריף לקוח" : "עריכת בריף לקוח קבוע"}
+                  </button>
+
+                  {isClientBriefEditorOpen && (
+                    <div className="mt-2 rounded-xl border border-[var(--line)] bg-[var(--bg-soft)] p-3">
+                      <p className="text-[11px] font-semibold text-[var(--text-primary)]">בריף לקוח קבוע לחשבון</p>
+                      <p className="text-[10px] text-[var(--text-secondary)]">
+                        רקע יציב על הלקוח (שפה, בידול, הצעת ערך, קהל, מגבלות). ישמש אוטומטית בכל יצירת טיוטת AI לחשבון הזה.
+                      </p>
+                      <textarea
+                        rows={4}
+                        value={clientBriefDraft}
+                        onChange={(event) =>
+                          setClientBriefDraftByAccount((prev) => ({
+                            ...prev,
+                            [account.id]: event.target.value,
+                          }))
+                        }
+                        placeholder="לדוגמה: סוכנות ביטוח משפחתית, השוואה בין החברות הגדולות, ליווי אישי וזמינות גבוהה."
+                        className="mt-2 w-full rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-2 py-2 text-xs text-[var(--text-primary)]"
+                      />
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <button
+                          onClick={() =>
+                            saveClientBrief.mutate({
+                              accountId: account.id,
+                              clientBackgroundBrief: clientBriefDraft.trim(),
+                            })
+                          }
+                          disabled={isSavingClientBrief}
+                          className="focus-ring inline-flex min-h-8 items-center gap-1 rounded-lg border border-emerald-400/35 bg-emerald-500/12 px-2 py-1 text-[10px] font-semibold text-emerald-200 disabled:opacity-50"
+                        >
+                          {isSavingClientBrief ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                          שמירה
+                        </button>
+                        <button
+                          onClick={() => clearClientBrief.mutate(account.id)}
+                          disabled={isClearingClientBrief}
+                          className="focus-ring inline-flex min-h-8 items-center gap-1 rounded-lg border border-rose-400/35 bg-rose-500/12 px-2 py-1 text-[10px] font-semibold text-rose-200 disabled:opacity-50"
+                        >
+                          {isClearingClientBrief ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                          ניקוי
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {isPageEditorOpen && (
                     <div className="mt-2 rounded-xl border border-[var(--line)] bg-[var(--bg-soft)] p-3">

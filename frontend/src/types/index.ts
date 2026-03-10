@@ -13,6 +13,7 @@ export interface MetaAccount {
   defaultPageId?: string;
   defaultPageName?: string;
   pageAccessStatus?: PageAccessStatus;
+  clientBackgroundBrief?: string;
 }
 
 export type PageAccessStatus = "ok" | "missing_permissions" | "no_pages" | "token_error";
@@ -350,6 +351,7 @@ export interface CampaignBuilderInputs {
   pageId?: string;
   destinationUrl?: string;
   brandVoice?: string;
+  clientBackgroundBrief?: string;
 }
 
 export type DraftBlockType =
@@ -372,6 +374,7 @@ export interface GenerateDraftRequest {
   campaignName?: string;
   pageId?: string;
   destinationUrl?: string;
+  clientBackgroundBrief?: string;
 }
 
 export interface CampaignPlanBlock {
@@ -402,6 +405,7 @@ export interface ImageConceptsBlock {
   creative_concept_reasoning: string;
   image_generation_prompts: string[];
   imageUrls: string[];
+  imageGenerationError?: string;
 }
 
 export interface CampaignDraftBlocks {
