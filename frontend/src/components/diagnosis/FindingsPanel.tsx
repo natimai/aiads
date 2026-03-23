@@ -66,7 +66,7 @@ export function FindingsPanel({ findings }: { findings: DiagnosisFinding[] }) {
 
 function FindingCard({ finding }: { finding: DiagnosisFinding }) {
   const risk = finding.riskLevel ? RISK_STYLES[finding.riskLevel] : null;
-  const framing = FRAMING_STYLES[finding.actionFraming] || FRAMING_STYLES.observation;
+  const framing = FRAMING_STYLES[finding.actionFraming] ?? FRAMING_STYLES["observation"]!;
   const confidencePct = Math.round(finding.confidence * 100);
 
   return (
