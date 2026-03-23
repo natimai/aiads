@@ -63,5 +63,14 @@ def run_fetch_breakdowns():
                             f"Error fetching {breakdown_type} breakdowns for {account_id}: {e}"
                         )
 
+                # Update freshness timestamp on account doc
+                account_ref = (
+                    db.collection("users")
+                    .document(user_id)
+                    .collection("metaAccounts")
+                    .document(account_id)
+                )
+                account_ref.update({"breakdownsSyncedAt": datetime.now(timezone.utc)})
+
             except Exception as e:
                 logger.error(f"Error with account {account_id}: {e}")

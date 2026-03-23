@@ -502,6 +502,95 @@ export interface RecommendationExecution {
   error?: string;
 }
 
+// --- Diagnosis Engine Types (Sprint 1) ---
+
+export type RootCause =
+  | "learning_instability"
+  | "auction_cost_pressure"
+  | "creative_fatigue"
+  | "audience_saturation"
+  | "pacing_constraint"
+  | "restrictive_bidding"
+  | "post_click_funnel_issue"
+  | "signal_quality_issue"
+  | "auction_overlap"
+  | "breakdown_effect_risk"
+  | "healthy"
+  | "unknown";
+
+export type EvaluationLevel = "campaign" | "adset";
+export type DiagnosisSource = "ai" | "deterministic" | "hybrid";
+export type ActionFraming = "hypothesis" | "observation";
+export type AlignmentAgrees = "yes" | "partially" | "no" | "unchecked";
+
+export interface FreshnessStatus {
+  insightsSyncedAt: string | null;
+  structuresSyncedAt: string | null;
+  breakdownsSyncedAt: string | null;
+  isStale: boolean;
+  isWarning: boolean;
+}
+
+export interface OfficialAlignment {
+  checked: boolean;
+  officialCount: number;
+  agrees: AlignmentAgrees;
+  rationale: string;
+  unavailableReason: string | null;
+}
+
+export type RiskLevel = "high" | "medium" | "low";
+
+export interface DiagnosisFinding {
+  title: string;
+  evidence: Record<string, number | string>;
+  interpretation: string;
+  rootCause: RootCause | null;
+  suggestedAction: string;
+  actionFraming: ActionFraming;
+  validationMetric: string;
+  confidence: number;
+  riskLevel?: RiskLevel;
+}
+
+export interface BreakdownHypothesis {
+  dimension: "age" | "gender" | "placement";
+  segment: string;
+  observation: string;
+  hypothesis: string;
+  testPlan: string;
+  confidence: number;
+}
+
+export interface ExplainabilityTrace {
+  inputsUsed: string[];
+  evaluationLevelReason: string;
+  rootCauseReason: string;
+  confidenceAdjustments: Array<{ reason: string; from: number; to: number }>;
+  guardrailsChecked: string[];
+  officialRecsChecked: boolean;
+  fallbackUsed: boolean;
+  fallbackReason: string | null;
+}
+
+export interface DiagnosisReport {
+  id: string;
+  accountId: string;
+  evaluationLevel: EvaluationLevel;
+  summary: string;
+  rootCause: RootCause;
+  findings: DiagnosisFinding[];
+  breakdownHypotheses: BreakdownHypothesis[];
+  officialAlignment: OfficialAlignment;
+  confidence: number;
+  dataFreshness: FreshnessStatus;
+  guardrailsTriggered: string[];
+  engineVersion: string;
+  generatedAt: string;
+  source: DiagnosisSource;
+  explainabilityTrace?: ExplainabilityTrace;
+}
+
 export interface RollbackPreview {
   canRollback: boolean;
   action: "rollback_budget" | "rollback_status";

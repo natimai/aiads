@@ -18,8 +18,18 @@ import {
   FileText,
   Settings2,
   Sparkles,
+  Stethoscope,
+  AlertTriangle,
 } from "lucide-react";
 import { useAccounts } from "../contexts/AccountContext";
+import { useDiagnosis, useTriggerDiagnosis } from "../hooks/useDiagnosis";
+import { isDiagnosisReport } from "../utils/validation";
+import type { DiagnosisReport } from "../types";
+import { DiagnosisSummaryCard } from "../components/diagnosis/DiagnosisSummaryCard";
+import { FindingsPanel } from "../components/diagnosis/FindingsPanel";
+import { RecommendationCards } from "../components/diagnosis/RecommendationCards";
+import { WhatNotToDoPanel } from "../components/diagnosis/WhatNotToDoPanel";
+import { AlignmentBadge } from "../components/diagnosis/AlignmentBadge";
 import {
   useGenerateRecommendations,
   useExecuteRecommendation,
@@ -74,7 +84,7 @@ const PRIORITY_STYLES = {
   low: "bg-[var(--bg-soft-2)] text-[var(--text-secondary)] border border-[var(--line)]",
 } as const;
 
-type TabId = "tasks" | "analysis" | "policy";
+type TabId = "tasks" | "analysis" | "diagnosis" | "policy";
 
 const STATUS_FILTER_LABELS: Record<RecommendationStatus | "all", string> = {
   all: "הכל",
@@ -146,6 +156,9 @@ export default function AIInsights() {
     rollbackPreviewId ?? undefined,
     rollbackPreviewId !== null
   );
+
+  const diagnosisQuery = useDiagnosis(accountId);
+  const triggerDiagnosisMutation = useTriggerDiagnosis();
 
   const policyBusy = policyQuery.saveMutation.isPending;
   const policyData = policyQuery.data;
@@ -245,6 +258,7 @@ export default function AIInsights() {
   const tabs: { id: TabId; label: string; icon: React.ElementType }[] = [
     { id: "tasks", label: "משימות", icon: Zap },
     { id: "analysis", label: "ניתוח", icon: Brain },
+    { id: "diagnosis", label: "אבחון", icon: Stethoscope },
     { id: "policy", label: "מדיניות", icon: Settings2 },
   ];
 
@@ -577,6 +591,17 @@ export default function AIInsights() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Diagnosis Tab */}
+      {activeTab === "diagnosis" && (
+        <DiagnosisTab
+          diagnosis={isDiagnosisReport(diagnosisQuery.data) ? diagnosisQuery.data : null}
+          isLoading={diagnosisQuery.isLoading}
+          isRunning={triggerDiagnosisMutation.isPending}
+          onRunDiagnosis={() => accountId && triggerDiagnosisMutation.mutate({ accountId })}
+          error={diagnosisQuery.error as Error | null}
+        />
       )}
 
       {/* Toast messages */}
@@ -1004,6 +1029,96 @@ function TaskCardFull({
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+function DiagnosisTab({
+  diagnosis,
+  isLoading,
+  isRunning,
+  onRunDiagnosis,
+  error,
+}: {
+  diagnosis: DiagnosisReport | null;
+  isLoading: boolean;
+  isRunning: boolean;
+  onRunDiagnosis: () => void;
+  error: Error | null;
+}) {
+  if (isLoading) {
+    return (
+      <div className="rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)] p-8 text-center text-sm text-[var(--text-muted)]">
+        טוען אבחון...
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Run button */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-[var(--text-primary)]">אבחון חשבון</h3>
+        <button
+          onClick={onRunDiagnosis}
+          disabled={isRunning}
+          className="btn-primary flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-50"
+        >
+          <RefreshCw className={`h-4 w-4 ${isRunning ? "animate-spin" : ""}`} />
+          {isRunning ? "מריץ אבחון..." : "הפעל אבחון"}
+        </button>
+      </div>
+
+      {error && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          {error.message || "שגיאה בטעינת האבחון"}
+        </div>
+      )}
+
+      {!diagnosis && !error && (
+        <div className="rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)] p-8 text-center text-sm text-[var(--text-muted)]">
+          לחץ "הפעל אבחון" כדי להפיק דו"ח אבחון מלא.
+        </div>
+      )}
+
+      {diagnosis && (
+        <>
+          {/* 1. Summary: root cause, confidence, freshness, alignment */}
+          <DiagnosisSummaryCard diagnosis={diagnosis} />
+
+          {/* 2. Evidence: structured findings with risk levels */}
+          <FindingsPanel findings={diagnosis.findings} />
+
+          {/* 3. Recommendations: actionable cards from findings + breakdown hypotheses */}
+          <RecommendationCards
+            findings={diagnosis.findings}
+            breakdownHypotheses={diagnosis.breakdownHypotheses}
+          />
+
+          {/* 4. What NOT to do: domain-aware warnings */}
+          <WhatNotToDoPanel diagnosis={diagnosis} />
+
+          {/* 5. Official alignment status */}
+          <AlignmentBadge alignment={diagnosis.officialAlignment} />
+
+          {/* Guardrails */}
+          {diagnosis.guardrailsTriggered.length > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <h4 className="mb-1 text-xs font-semibold text-amber-800">מגבלות שהופעלו</h4>
+              <div className="flex flex-wrap gap-1">
+                {diagnosis.guardrailsTriggered.map((g) => (
+                  <span key={g} className="rounded bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700">{g}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Footer info */}
+          <div className="text-[10px] text-[var(--text-muted)] text-left">
+            גרסת מנוע: {diagnosis.engineVersion} | נוצר: {new Date(diagnosis.generatedAt).toLocaleString("he-IL")}
+          </div>
+        </>
       )}
     </div>
   );

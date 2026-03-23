@@ -82,6 +82,7 @@ def run_fetch_insights():
                 account_ref.update({
                     "kpiSummary": kpi_summary,
                     "kpiUpdatedAt": datetime.now(timezone.utc),
+                    "insightsSyncedAt": datetime.now(timezone.utc),
                 })
 
                 logger.info(f"Synced {len(insights)} insights for account {account_id}")

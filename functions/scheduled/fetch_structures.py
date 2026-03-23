@@ -91,6 +91,8 @@ def run_fetch_structures():
                 if batch_count > 0:
                     batch.commit()
 
+                base_ref.update({"structuresSyncedAt": now})
+
                 logger.info(
                     f"Synced structures for account {account_id}: "
                     f"{len(campaigns)} campaigns, {len(adsets)} adsets, {len(ads)} ads"

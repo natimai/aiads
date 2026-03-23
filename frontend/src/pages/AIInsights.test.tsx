@@ -17,6 +17,14 @@ vi.mock("../contexts/AccountContext", () => ({
   }),
 }));
 
+vi.mock("../hooks/useDiagnosis", () => ({
+  useDiagnosis: () => ({ data: null, isLoading: false, error: null }),
+  useTriggerDiagnosis: () => ({
+    mutateAsync: vi.fn().mockResolvedValue(undefined),
+    isPending: false,
+  }),
+}));
+
 vi.mock("../hooks/useAIAnalysis", () => ({
   useAIInsights: () => ({ data: [], isLoading: false }),
   useTriggerAIAnalysis: () => ({ mutateAsync: vi.fn(), isPending: false }),

@@ -1,7 +1,7 @@
 import { useMemo, useState, type ElementType } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { BarChart3, Database, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { AlertTriangle, BarChart3, Clock, Database, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { PerformanceChart } from "../components/dashboard/PerformanceChart";
 import { SpendDistribution } from "../components/dashboard/SpendDistribution";
 import { HourlyHeatmap } from "../components/dashboard/HourlyHeatmap";
@@ -17,6 +17,8 @@ import { formatDateDisplay } from "../utils/dates";
 import { formatCurrency } from "../utils/format";
 import { inferAccountVertical } from "../utils/metricsConfig";
 import { syncAllAccounts } from "../services/api";
+import { useAccountFreshness } from "../hooks/useDiagnosis";
+import { isFreshnessStatus } from "../utils/validation";
 
 export default function Cockpit() {
   const queryClient = useQueryClient();
@@ -28,6 +30,7 @@ export default function Cockpit() {
 
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
+  const { data: freshnessRaw } = useAccountFreshness(selectedAccount?.id);
 
   const currency = selectedAccount?.currency ?? "USD";
   const vertical = inferAccountVertical(selectedAccount, campaigns ?? []);
@@ -96,10 +99,13 @@ export default function Cockpit() {
           <div>
             <p className="section-kicker">קוקפיט אנליטיקה</p>
             <h1 className="brand-display mt-2 text-3xl text-[var(--text-primary)]">קוקפיט ביצועים</h1>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">
-              טווח: {dateRange.label} · {formatDateDisplay(dateRange.from)}
-              {dateRange.from !== dateRange.to ? ` – ${formatDateDisplay(dateRange.to)}` : ""}
-            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-3">
+              <p className="text-sm text-[var(--text-secondary)]">
+                טווח: {dateRange.label} · {formatDateDisplay(dateRange.from)}
+                {dateRange.from !== dateRange.to ? ` – ${formatDateDisplay(dateRange.to)}` : ""}
+              </p>
+              <FreshnessBadge freshness={isFreshnessStatus(freshnessRaw) ? freshnessRaw : null} />
+            </div>
           </div>
 
           <button
@@ -126,6 +132,16 @@ export default function Cockpit() {
         </div>
       </section>
 
+      {/* Breakdown Effect Banner */}
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-right">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <p className="text-xs text-amber-800 leading-relaxed">
+            טבלה זו מיועדת לתצפית. אל תפחית תקציב רק בגלל עלות ממוצעת גבוהה יותר — מטא מקצה על בסיס יעילות שולית.
+          </p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-5">
         <PerformanceChart data={insights ?? []} loading={insightsLoading} />
       </div>
@@ -148,6 +164,31 @@ export default function Cockpit() {
         vertical={vertical}
       />
     </div>
+  );
+}
+
+function FreshnessBadge({ freshness }: { freshness: { insightsSyncedAt: string | null; isStale: boolean; isWarning: boolean } | null }) {
+  if (!freshness) return null;
+
+  const { insightsSyncedAt, isStale, isWarning } = freshness;
+  let label: string;
+  let colorClass: string;
+
+  if (!insightsSyncedAt) {
+    label = "לא סונכרן";
+    colorClass = "text-rose-600";
+  } else {
+    const age = Date.now() - new Date(insightsSyncedAt).getTime();
+    const minutes = Math.round(age / 60000);
+    label = minutes < 60 ? `עודכן לפני ${minutes} דקות` : `עודכן לפני ${Math.round(minutes / 60)} שעות`;
+    colorClass = isStale ? "text-rose-600" : isWarning ? "text-amber-600" : "text-emerald-600";
+  }
+
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${colorClass}`}>
+      <Clock className="h-3 w-3" />
+      {label}
+    </span>
   );
 }
 

@@ -47,6 +47,11 @@ def api(req: https_fn.Request) -> https_fn.Response:
         body, status, headers = handle_alerts(req)
         return https_fn.Response(body, status=status, headers=headers)
 
+    if path.startswith("/api/diagnosis"):
+        from api.diagnosis import handle_diagnosis
+        body, status, headers = handle_diagnosis(req)
+        return https_fn.Response(body, status=status, headers=headers)
+
     if path.startswith("/api/ai"):
         from api.ai_insights import handle_ai_insights
         body, status, headers = handle_ai_insights(req)

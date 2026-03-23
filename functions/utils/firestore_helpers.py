@@ -77,6 +77,41 @@ def get_insights_for_date_range(
     return [{"id": doc.id, **doc.to_dict()} for doc in docs]
 
 
+def load_official_recommendations(db, user_id: str, account_id: str) -> list[dict]:
+    """Load pending/approved recommendations as official baseline for alignment."""
+    rec_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("metaAccounts")
+        .document(account_id)
+        .collection("recommendations")
+    )
+    docs = rec_ref.stream()
+
+    results: list[dict] = []
+    for doc in docs:
+        payload = doc.to_dict() or {}
+        status = str(payload.get("status") or "").lower()
+        if status not in {"pending", "approved"}:
+            continue
+        results.append(
+            {
+                "id": doc.id,
+                "type": payload.get("type"),
+                "title": payload.get("title"),
+                "reasoning": payload.get("reasoning"),
+                "entityId": payload.get("entityId"),
+                "status": status,
+                "createdAt": payload.get("createdAt"),
+                "executionPlan": payload.get("executionPlan")
+                if isinstance(payload.get("executionPlan"), dict)
+                else {},
+            }
+        )
+    results.sort(key=lambda item: str(item.get("createdAt") or ""), reverse=True)
+    return results[:60]
+
+
 def update_account_kpi_summary(db, user_id: str, account_id: str, summary: dict):
     """Update denormalized KPI summary on the account document."""
     account_ref = (

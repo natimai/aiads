@@ -8,6 +8,7 @@ from typing import Any
 
 from services.meta_ads_policy_enforcer import MetaAdsPolicyEnforcer
 from services.meta_ads_skill_pack import get_skill_bundle
+from utils.evaluation_level import resolve_evaluation_level
 
 
 class MetaAdsAnalyzerV2:
@@ -126,17 +127,8 @@ class MetaAdsAnalyzerV2:
 
     @staticmethod
     def _determine_evaluation_level(campaigns: list[dict[str, Any]]) -> str:
-        # If any campaign signals CBO/Advantage+ budget, enforce campaign-level evaluation.
-        for campaign in campaigns:
-            if not isinstance(campaign, dict):
-                continue
-            if campaign.get("isCampaignBudgetOptimized"):
-                return "campaign"
-            if str(campaign.get("budgetOptimization") or "").lower() in {"cbo", "advantage+"}:
-                return "campaign"
-            if str(campaign.get("buyingType") or "").upper() == "ADVANTAGE_PLUS":
-                return "campaign"
-        return "adset"
+        """Thin wrapper delegating to shared evaluation level resolver."""
+        return resolve_evaluation_level(campaigns)
 
     @staticmethod
     def _read_insights(campaign: dict[str, Any]) -> dict[str, Any]:

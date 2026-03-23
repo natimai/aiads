@@ -9,6 +9,8 @@ from services.ai_analyzer import AIAnalyzer
 from services.feature_builder import FeatureBuilder
 from services.meta_ads_policy_enforcer import MetaAdsPolicyEnforcer
 from services.performance_scoring import PerformanceScoring
+from utils.feature_flags import is_enabled
+from utils.firestore_helpers import load_official_recommendations
 
 logger = logging.getLogger(__name__)
 
@@ -141,40 +143,7 @@ class RecommendationEngine:
 
     def _load_official_recommendations(self, user_id: str, account_id: str) -> list[dict[str, Any]]:
         """Load active recommendations to enforce strict alignment metadata."""
-        rec_ref = (
-            self.db.collection("users")
-            .document(user_id)
-            .collection("metaAccounts")
-            .document(account_id)
-            .collection("recommendations")
-        )
-        docs = rec_ref.stream()
-
-        results: list[dict[str, Any]] = []
-        for doc in docs:
-            payload = doc.to_dict() or {}
-            status = str(payload.get("status") or "").lower()
-            if status not in {"pending", "approved"}:
-                continue
-            results.append(
-                {
-                    "id": doc.id,
-                    "type": payload.get("type"),
-                    "title": payload.get("title"),
-                    "reasoning": payload.get("reasoning"),
-                    "entityId": payload.get("entityId"),
-                    "status": payload.get("status"),
-                    "createdAt": payload.get("createdAt"),
-                    "executionPlan": payload.get("executionPlan")
-                    if isinstance(payload.get("executionPlan"), dict)
-                    else {},
-                }
-            )
-        results.sort(
-            key=lambda item: str(item.get("createdAt") or ""),
-            reverse=True,
-        )
-        return results[:60]
+        return load_official_recommendations(self.db, user_id, account_id)
 
     def _validate_data_readiness(self, features: dict[str, Any]) -> str | None:
         campaigns = features.get("campaigns", [])
@@ -552,6 +521,60 @@ class RecommendationEngine:
                 continue
 
             share_pct = best_stats["share"] * 100
+
+            if is_enabled("ENABLE_BREAKDOWN_GUARDRAILS"):
+                return [
+                    {
+                        "type": "TARGETING_OPTIMIZATION",
+                        "entityLevel": "campaign",
+                        "entityId": top_campaign_id,
+                        "priority": "MEDIUM",
+                        "title": f"Validate Breakdown Hypothesis: {label} {best_segment}",
+                        "reasoning": (
+                            f"{label} segment '{best_segment}' shows {share_pct:.1f}% of results with lower average CPA "
+                            f"(${best_stats['cpa']:.2f} vs ${overall_cpa:.2f}). However, this may reflect Meta's marginal "
+                            f"efficiency allocation (the Breakdown Effect), not genuine segment superiority. "
+                            f"Recommend a controlled split test before making targeting changes."
+                        ),
+                        "metrics_snapshot": {
+                            "spend": total_spend,
+                            "cpa": round(best_stats["cpa"], 4),
+                            "frequency": 0,
+                            "ctr": 0,
+                            "cpm": 0,
+                            "roas": 0,
+                        },
+                        "proposed_action": {
+                            "action": "MANUAL_REVIEW",
+                            "entity_id": top_campaign_id,
+                            "entity_name": f"{label} {best_segment}",
+                            "value": "Run controlled split test to validate segment performance",
+                        },
+                        "suggestedContent": {
+                            "audienceSuggestions": [
+                                f"Run a controlled test: duplicate the ad set and restrict one copy to {label.lower()} "
+                                f"'{best_segment}' only. Compare overall campaign CPA after 7+ days."
+                            ]
+                        },
+                        "ui_display_text": (
+                            f"Run a controlled test to validate whether focusing on {label.lower()} "
+                            f"'{best_segment}' improves overall performance?"
+                        ),
+                        "confidence": 0.55,
+                        "actionFraming": "hypothesis",
+                        "expectedImpact": {
+                            "metric": "cpa",
+                            "direction": "unknown",
+                            "magnitudePct": 0.0,
+                            "summary": (
+                                f"This segment shows strong average CPA, but isolating it may increase overall costs "
+                                f"due to the Breakdown Effect. A controlled test is needed to validate."
+                            ),
+                        },
+                    }
+                ]
+
+            # Legacy behavior when guardrail flag is off
             return [
                 {
                     "type": "TARGETING_OPTIMIZATION",

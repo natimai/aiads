@@ -26,6 +26,8 @@ import type {
   CampaignDraft,
   DraftSafety,
   PublishDraftResult,
+  DiagnosisReport,
+  FreshnessStatus,
 } from "../types";
 import { normalizeCurrencyCode } from "../utils/format";
 
@@ -593,4 +595,25 @@ export async function syncAllAccounts(): Promise<{
   count: number;
 }> {
   return apiFetch("/api/sync/all", { method: "POST" });
+}
+
+// ---------- Diagnosis ----------
+
+export async function runDiagnosis(
+  accountId: string,
+  dateFrom?: string,
+  dateTo?: string,
+): Promise<DiagnosisReport> {
+  return apiFetch("/api/diagnosis/run", {
+    method: "POST",
+    body: JSON.stringify({ accountId, dateFrom, dateTo }),
+  });
+}
+
+export async function getDiagnosis(accountId: string): Promise<DiagnosisReport> {
+  return apiFetch(`/api/diagnosis/${accountId}`);
+}
+
+export async function getAccountFreshness(accountId: string): Promise<FreshnessStatus> {
+  return apiFetch(`/api/accounts/${accountId}/freshness`);
 }

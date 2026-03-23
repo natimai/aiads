@@ -7,22 +7,29 @@ import logging
 import re
 from typing import Any
 
+from utils.feature_flags import is_enabled
+
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """Role: You are an expert Senior Meta Ads Buyer & Strategist named "Nati AI". You are aggressive on ROAS and data-driven.
-Goal: Analyze the provided campaign data and generate a list of strict actionable tasks. Do NOT provide summaries. Do NOT provide polite conversation. Only provide the JSON output.
+# ---------------------------------------------------------------------------
+# Composable prompt sections — assembled dynamically in _get_model()
+# ---------------------------------------------------------------------------
 
-Analysis Rules:
+PERSONA_PROMPT = """Role: You are an expert Senior Meta Ads Buyer & Strategist named "Nati AI". You are aggressive on ROAS and data-driven.
+Goal: Analyze the provided campaign data and generate a list of strict actionable tasks. Do NOT provide summaries. Do NOT provide polite conversation. Only provide the JSON output."""
+
+ANALYSIS_RULES = """Analysis Rules:
 - Never stay idle. If an ad set has been stable and at/under target CPA for 7 days, you MUST produce at least one SCALE_EXPERIMENT or AUDIENCE_EXPANSION style task.
-- Kill Logic: If CPA is >1.6x target and conversions are 0-1, recommend PAUSE.
-- Scale Logic: If ROAS is >10% above target for 2+ days, recommend INCREASE BUDGET by 15-20%.
+- Kill Logic: If CPA is >1.6x target, the ad set has EXITED learning phase (50+ optimization events), and conversions are 0-1 over 3+ days, recommend PAUSE. Do NOT pause ad sets still in learning phase.
+- Scale Logic: If 7-day rolling ROAS is >10% above target, recommend INCREASE BUDGET by 15-20% as a controlled experiment with a validation window.
 - Creative Fatigue: If Frequency > 2.2 and CTR drops below 1.0%, recommend CREATIVE REFRESH.
 - A/B Test Builder: If a winning creative exists but audience is fatiguing (Frequency > 2.5), output an AB_TEST_AUDIENCE task with a concrete test_setup block.
 - Audience Discovery: Extract currently winning interests and propose lateral adjacent interests to discover cheaper CPMs.
-- Breakdown Optimization: Analyze age, gender, and placement breakdowns. If one segment contributes >60% of results at lower CPA, create TARGETING_OPTIMIZATION to isolate that segment.
+- Breakdown Analysis: Frame any breakdown-based insight as a HYPOTHESIS to test. NEVER recommend isolating segments or reducing budget based solely on average CPA differences between breakdown segments. This violates the Breakdown Effect principle.
 - Anomaly: If CPM spikes > 50% overnight, flag for manual review.
+- Evaluation Level: For CBO / Advantage+ Campaign Budget campaigns, analyze at CAMPAIGN level. For non-CBO, analyze at AD SET level."""
 
-Output Format:
+OUTPUT_FORMAT_SCHEMA = """Output Format:
 You must output a strictly valid JSON list of objects. No markdown, no introductory text.
 
 JSON Schema:
@@ -53,6 +60,9 @@ JSON Schema:
   }
 ]"""
 
+# Legacy SYSTEM_PROMPT kept for backward compatibility when skill prompts are disabled
+_LEGACY_SYSTEM_PROMPT = f"{PERSONA_PROMPT}\n\n{ANALYSIS_RULES}\n\n{OUTPUT_FORMAT_SCHEMA}"
+
 
 class AIAnalyzer:
     FLASH_MODEL = "gemini-3-flash-preview"
@@ -63,13 +73,37 @@ class AIAnalyzer:
         self.flash_model = os.environ.get("GEMINI_FLASH_MODEL", self.FLASH_MODEL)
         self.pro_model = os.environ.get("GEMINI_PRO_MODEL", self.PRO_MODEL)
 
-    def _get_model(self, model_name: str, *, system_instruction: str | None = None):
+    def _get_model(self, model_name: str, *, system_instruction: str | None = None, lite_knowledge: bool = False):
         import google.generativeai as genai
         genai.configure(api_key=self.api_key)
+
+        if system_instruction is None:
+            system_instruction = self._build_system_instruction(lite_knowledge=lite_knowledge)
+
         return genai.GenerativeModel(
             model_name,
-            system_instruction=system_instruction if system_instruction is not None else SYSTEM_PROMPT,
+            system_instruction=system_instruction,
         )
+
+    @staticmethod
+    def _build_system_instruction(*, lite_knowledge: bool = False) -> str:
+        """Build the Gemini system instruction dynamically.
+
+        When the ``ENABLE_SKILL_PROMPTS`` feature flag is on, injects Meta Ads
+        domain knowledge from the skill pack. Otherwise falls back to the legacy
+        prompt for backward compatibility.
+        """
+        if not is_enabled("ENABLE_SKILL_PROMPTS"):
+            return _LEGACY_SYSTEM_PROMPT
+
+        if lite_knowledge:
+            from services.meta_ads_skill_pack import build_ai_system_knowledge_lite
+            knowledge_block = build_ai_system_knowledge_lite()
+        else:
+            from services.meta_ads_skill_pack import build_ai_system_knowledge
+            knowledge_block = build_ai_system_knowledge()
+
+        return f"{PERSONA_PROMPT}\n\n{knowledge_block}\n\n{ANALYSIS_RULES}\n\n{OUTPUT_FORMAT_SCHEMA}"
 
     def daily_summary(self, campaign_data: dict) -> str:
         """Generate a natural language summary of today's performance."""
@@ -91,9 +125,11 @@ Provide:
 2. Top performing campaigns and why
 3. Underperforming campaigns that need attention
 4. Key trends or changes from recent performance
-5. One actionable recommendation for tomorrow"""
+5. One actionable recommendation for tomorrow
 
-        return self._generate(prompt, model=self.flash_model)
+Important: Use "Accounts Center accounts" instead of "people" for audience metrics. Use "Clicks (all)" or "Link Clicks" — never bare "clicks". When discussing breakdown data, note that segment-level averages may not reflect marginal efficiency."""
+
+        return self._generate(prompt, model=self.flash_model, lite_knowledge=True)
 
     def budget_optimization(self, campaign_data: dict) -> str:
         """Suggest budget reallocation based on ROAS and CPI data."""
@@ -108,10 +144,12 @@ Provide:
 
 Provide:
 1. Which campaigns should receive MORE budget (and by how much %)
-2. Which campaigns should have REDUCED budget (and by how much %)
-3. Any campaigns that should be paused entirely
+2. Which campaigns should have REDUCED budget (and by how much %) — frame as experiments with validation windows
+3. Any campaigns that should be paused entirely — only if they have exited learning phase and show sustained poor performance
 4. Estimated impact of these changes on overall ROAS
-5. Any caveats or things to monitor after reallocation"""
+5. Any caveats or things to monitor after reallocation
+
+Important: Evaluate at the correct aggregate level — campaign level for CBO, ad set level for non-CBO. Do NOT recommend budget changes based on breakdown-level average CPA differences."""
 
         return self._generate(prompt, model=self.pro_model)
 
@@ -131,9 +169,11 @@ Provide:
 2. Which creatives/campaigns likely need new creative assets
 3. Patterns in top-performing campaigns that could be replicated
 4. Suggestions for creative testing strategy
-5. Priority actions ranked by urgency"""
+5. Priority actions ranked by urgency
 
-        return self._generate(prompt, model=self.pro_model)
+Important: Focus on engagement-rate and ad relevance diagnostic signals rather than breakdown-level CPA differences. Placement-level CPA differences may reflect the Breakdown Effect, not creative quality."""
+
+        return self._generate(prompt, model=self.pro_model, lite_knowledge=True)
 
     def anomaly_explanation(self, alert_data: dict, campaign_data: dict) -> str:
         """Provide context and explanation when an alert fires."""
@@ -155,9 +195,11 @@ Provide:
 1. Most likely cause of this anomaly (2-3 sentences)
 2. Contributing factors to investigate
 3. Immediate actions to take
-4. Whether this is likely temporary or requires structural changes"""
+4. Whether this is likely temporary or requires structural changes
 
-        return self._generate(prompt, model=self.flash_model)
+Note: Normal performance fluctuations are expected — daily variation of 10-20% in CPA/CPM is common. Consider whether this anomaly reflects a genuine issue or normal volatility."""
+
+        return self._generate(prompt, model=self.flash_model, lite_knowledge=True)
 
     def generate_creative_copy(self, campaign_data: dict, campaign_name: str = "", objective: str = "conversions") -> list[dict]:
         """Generate ad copy variations for creatives based on campaign context."""
@@ -188,13 +230,15 @@ Rules: 30-125 characters ideal for primary text; hooks can be longer. Match tone
         compact_context = json.dumps(recommendation_context, default=str)
         prompt = f"""You are Nati AI — Morning Strategist mode. Analyze this account's 7-day performance.
 FOCUS ONLY ON:
-1. SCALE winners: campaigns with ROAS > 20% above target for 3+ days → INCREASE_BUDGET +20%
+1. SCALE winners: campaigns with 7-day rolling ROAS > 20% above target → INCREASE_BUDGET +20% as controlled experiment
 2. CREATIVE_REFRESH: Frequency > 2.5 AND CTR < 0.8% → recommend new creative
 3. A/B_TEST: audiences showing saturation → draft AB_TEST_AUDIENCE with strict control vs variant settings
-4. If an ad set is stable at target CPA for 7 days, you MUST output SCALE_EXPERIMENT or AUDIENCE_DISCOVERY
+4. If an ad set has exited learning phase and is stable at target CPA for 7 days, you MUST output SCALE_EXPERIMENT or AUDIENCE_DISCOVERY
 5. Growth opportunities missed yesterday
 
 DO NOT generate budget-cut or kill recommendations (that's the Evening Guard's job).
+Before recommending SCALE_EXPERIMENT, verify the ad set has exited learning phase (50+ optimization events). Do NOT scale ad sets still in learning.
+NEVER recommend isolating breakdown segments based on average CPA differences.
 
 Return ONLY a valid JSON object:
 {{
@@ -243,12 +287,13 @@ Data:
         compact_context = json.dumps(recommendation_context, default=str)
         prompt = f"""You are Nati AI — Evening Guard mode. Analyze TODAY's performance so far.
 FOCUS ONLY ON:
-1. BLEEDING ADS: today's CPA > 2x target with spend > $50 → PAUSE immediately (HIGH priority)
+1. BLEEDING ADS: today's CPA > 2x target with spend > $50 AND ad set has EXITED learning phase → PAUSE immediately (HIGH priority). If ad set is STILL in learning phase, flag for MANUAL_REVIEW instead of PAUSE.
 2. BUDGET UNDER-PACE: if spend < 50% of daily budget by end of day → INCREASE_BUDGET or raise bid
 3. BUDGET OVER-SPEND: if projected to exceed daily budget → DECREASE_BUDGET
 4. ANOMALIES: CPM spike > 50% vs yesterday, or sudden CTR drop > 40%
 
 DO NOT generate long-term growth or creative recommendations (that's the Morning Strategist's job).
+Evaluate based on today's aggregate campaign-level performance, not individual breakdown segment slices.
 
 Return ONLY a valid JSON object:
 {{
@@ -334,15 +379,16 @@ Return ONLY a valid JSON object with this exact shape (no markdown, no intro tex
 }}
 
 Rules:
-- Be aggressive. Kill underperformers fast, scale winners hard.
-- Never stay idle. If any ad set is stable and meeting target CPA for 7 days, MUST emit SCALE_EXPERIMENT or AUDIENCE_DISCOVERY.
-- Kill Logic: >1.6x Target CPA with 0-1 conversions = PAUSE immediately.
-- Scale Logic: ROAS > 10% above target for 2+ days = INCREASE BUDGET by 15-20%.
+- Be aggressive about experimentation. Scale winners hard, test hypotheses actively.
+- Never stay idle. If any ad set has exited learning phase and is stable at target CPA for 7 days, MUST emit SCALE_EXPERIMENT or AUDIENCE_DISCOVERY.
+- Kill Logic: >1.6x Target CPA with 0-1 conversions over 3+ days AND ad set has exited learning phase = PAUSE. Do NOT pause ad sets still in learning phase.
+- Scale Logic: 7-day rolling ROAS > 10% above target = INCREASE BUDGET by 15-20% as controlled experiment.
 - Creative Fatigue: Frequency > 2.2 AND CTR < 1.0% = CREATIVE REFRESH.
 - A/B Test Builder: Winning creative + audience fatigue (Frequency > 2.5) => emit AB_TEST_AUDIENCE with a complete test_setup block.
 - Audience Discovery: Use winning interests and suggest lateral interests.
-- Breakdowns: If age/gender/placement segment contributes >60% of results with lower CPA, emit TARGETING_OPTIMIZATION.
+- Breakdown Analysis: Frame any breakdown-based insight as a HYPOTHESIS to test. NEVER recommend isolating segments or reducing budget based solely on average CPA differences. If a segment shows interesting patterns, emit a MANUAL_REVIEW with a controlled test proposal.
 - Anomaly: CPM spike > 50% overnight = flag MANUAL_REVIEW.
+- Evaluation Level: For CBO campaigns analyze at CAMPAIGN level, for non-CBO analyze at AD SET level.
 - Max {max_items} tasks, sorted by priority (HIGH first).
 - Every task MUST have a valid entity_id and proposed_action.
 
@@ -987,14 +1033,14 @@ Data:
 
         return "\n".join(lines)
 
-    def _generate(self, prompt: str, model: str | None = None, *, system_instruction: str | None = None) -> str:
+    def _generate(self, prompt: str, model: str | None = None, *, system_instruction: str | None = None, lite_knowledge: bool = False) -> str:
         """Call Gemini API and return the response text."""
         if not self.api_key:
             return "_AI analysis unavailable: Gemini API key not configured._"
 
         model_name = model or self.pro_model
         try:
-            gemini_model = self._get_model(model_name, system_instruction=system_instruction)
+            gemini_model = self._get_model(model_name, system_instruction=system_instruction, lite_knowledge=lite_knowledge)
             response = gemini_model.generate_content(
                 prompt,
                 generation_config={

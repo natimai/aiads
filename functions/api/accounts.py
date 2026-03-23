@@ -90,6 +90,9 @@ def handle_accounts(request):
         elif path.endswith("/managed") and request.method == "POST":
             account_id = path.split("/api/accounts/")[1].split("/managed")[0]
             return _toggle_managed(request, user_id, account_id)
+        elif path.startswith("/api/accounts/") and path.endswith("/freshness") and request.method == "GET":
+            account_id = path.split("/api/accounts/")[1].split("/freshness")[0]
+            return _get_account_freshness(user_id, account_id)
         elif path.startswith("/api/accounts/") and request.method == "DELETE":
             account_id = path.split("/api/accounts/")[1]
             return _disconnect_account(user_id, account_id)
@@ -466,6 +469,24 @@ def _disconnect_account(user_id: str, account_id: str):
 
     doc_ref.update({"isActive": False})
     return _cors_response(json.dumps({"success": True}))
+
+
+def _get_account_freshness(user_id: str, account_id: str):
+    """GET /api/accounts/{accountId}/freshness — return data freshness status."""
+    from utils.freshness import compute_freshness
+
+    db = get_db()
+    doc = (
+        db.collection("users")
+        .document(user_id)
+        .collection("metaAccounts")
+        .document(account_id)
+        .get()
+    )
+    if not doc.exists:
+        return _cors_response(json.dumps({"error": "Account not found"}), 404)
+    freshness = compute_freshness(doc.to_dict() or {})
+    return _cors_response(json.dumps(freshness, default=str))
 
 
 def _cors_response(body, status=200):
