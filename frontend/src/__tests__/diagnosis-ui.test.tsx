@@ -133,6 +133,59 @@ describe("DiagnosisSummaryCard", () => {
     const alignmentLabels = screen.getAllByText(/המלצות רשמיות נטענו/);
     expect(alignmentLabels.length).toBeGreaterThanOrEqual(1);
   });
+
+  it("renders vertical badge when vertical is set", () => {
+    const diag = makeDiagnosis({ vertical: "LEAD_GEN" });
+    render(<DiagnosisSummaryCard diagnosis={diag} />);
+
+    expect(screen.getByText("לידים")).toBeInTheDocument();
+  });
+
+  it("renders ECOMMERCE vertical badge", () => {
+    const diag = makeDiagnosis({ vertical: "ECOMMERCE" });
+    render(<DiagnosisSummaryCard diagnosis={diag} />);
+
+    expect(screen.getByText("מכירות")).toBeInTheDocument();
+  });
+
+  it("renders APP_INSTALLS vertical badge", () => {
+    const diag = makeDiagnosis({ vertical: "APP_INSTALLS" });
+    render(<DiagnosisSummaryCard diagnosis={diag} />);
+
+    expect(screen.getByText("התקנות")).toBeInTheDocument();
+  });
+
+  it("renders mixed-objective warning when mixedObjectives is true", () => {
+    const diag = makeDiagnosis({
+      vertical: "LEAD_GEN",
+      objectiveContext: {
+        vertical: "LEAD_GEN",
+        mixedObjectives: true,
+        primaryConversion: "leads",
+        primaryCostMetric: "cpl",
+        primaryEfficiencyMetric: "cpl",
+      },
+    });
+    render(<DiagnosisSummaryCard diagnosis={diag} />);
+
+    expect(screen.getByText("חשבון מעורב")).toBeInTheDocument();
+  });
+
+  it("does not show mixed warning when mixedObjectives is false", () => {
+    const diag = makeDiagnosis({
+      vertical: "ECOMMERCE",
+      objectiveContext: {
+        vertical: "ECOMMERCE",
+        mixedObjectives: false,
+        primaryConversion: "purchases",
+        primaryCostMetric: "cpa",
+        primaryEfficiencyMetric: "roas",
+      },
+    });
+    render(<DiagnosisSummaryCard diagnosis={diag} />);
+
+    expect(screen.queryByText("חשבון מעורב")).not.toBeInTheDocument();
+  });
 });
 
 // ─── FindingsPanel ───────────────────────────────────────────────────

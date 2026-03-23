@@ -15,7 +15,7 @@ import { useAccounts } from "../contexts/AccountContext";
 import { useDateRange } from "../contexts/DateRangeContext";
 import { formatDateDisplay } from "../utils/dates";
 import { formatCurrency } from "../utils/format";
-import { inferAccountVertical } from "../utils/metricsConfig";
+import { inferAccountVertical, getMetricsForVertical } from "../utils/metricsConfig";
 import { syncAllAccounts } from "../services/api";
 import { useAccountFreshness } from "../hooks/useDiagnosis";
 import { isFreshnessStatus } from "../utils/validation";
@@ -41,9 +41,16 @@ export default function Cockpit() {
     const clicks = data.reduce((sum, item) => sum + (item.clicks ?? 0), 0);
     const impressions = data.reduce((sum, item) => sum + (item.impressions ?? 0), 0);
     const purchaseValue = data.reduce((sum, item) => sum + (item.purchaseValue ?? 0), 0);
+    const leads = data.reduce((sum, item) => sum + (item.leads ?? 0), 0);
+    const purchases = data.reduce((sum, item) => sum + (item.purchases ?? 0), 0);
+    const installs = data.reduce((sum, item) => sum + (item.installs ?? 0), 0);
     const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
+    const cpm = impressions > 0 ? (spend / impressions) * 1000 : 0;
     const roas = spend > 0 ? purchaseValue / spend : 0;
-    return { spend, ctr, roas };
+    const cpl = leads > 0 ? spend / leads : 0;
+    const cpa = purchases > 0 ? spend / purchases : 0;
+    const cpi = installs > 0 ? spend / installs : 0;
+    return { spend, ctr, cpm, roas, cpl, cpa, cpi, leads, purchases, installs };
   }, [insights]);
 
   const recommendationsByCampaign = useMemo(
@@ -125,9 +132,24 @@ export default function Cockpit() {
         )}
 
         <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <MetricCard title="הוצאה" value={formatCurrency(summary.spend, currency)} />
-          <MetricCard title="CTR" value={`${summary.ctr.toFixed(2)}%`} />
-          <MetricCard title="ROAS" value={`${summary.roas.toFixed(2)}x`} />
+          {getMetricsForVertical(vertical).slice(0, 3).map((metric) => {
+            const formatValue = (): string => {
+              switch (metric.key) {
+                case "spend": return formatCurrency(summary.spend, currency);
+                case "ctr": return `${summary.ctr.toFixed(2)}%`;
+                case "cpm": return formatCurrency(summary.cpm, currency);
+                case "roas": return `${summary.roas.toFixed(2)}x`;
+                case "cpl": return formatCurrency(summary.cpl, currency);
+                case "cpa": return formatCurrency(summary.cpa, currency);
+                case "cpi": return formatCurrency(summary.cpi, currency);
+                case "leads": return String(Math.round(summary.leads));
+                case "purchases": return String(Math.round(summary.purchases));
+                case "installs": return String(Math.round(summary.installs));
+                default: return "0";
+              }
+            };
+            return <MetricCard key={metric.key} title={metric.label} value={formatValue()} />;
+          })}
           <MetricCard title="פעולות פתוחות" value={String(tasksData?.total ?? 0)} icon={Sparkles} />
         </div>
       </section>

@@ -4,6 +4,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from utils.objective_context import get_objective_context
+
 
 class FeatureBuilder:
     """Build campaign/account feature payload used by recommendation engines."""
@@ -33,11 +35,17 @@ class FeatureBuilder:
             campaigns.append(campaign_data)
 
         breakdowns = self._load_breakdowns(base_ref, date_from)
+
+        # Resolve objective context from account + campaign data
+        objective_ctx = get_objective_context(account_data, campaigns)
+
         return {
             "userId": user_id,
             "accountId": account_id,
             "accountName": account_data.get("accountName", ""),
             "currency": account_data.get("currency", "USD"),
+            "vertical": objective_ctx["vertical"],
+            "objectiveContext": objective_ctx,
             "kpiSummary": account_data.get("kpiSummary", {}),
             "kpiUpdatedAt": self._serialize_ts(account_data.get("kpiUpdatedAt")),
             "dateRange": {"from": date_from, "to": date_to},

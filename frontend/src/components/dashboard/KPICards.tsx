@@ -1,16 +1,17 @@
-import { DollarSign, MousePointerClick, Eye, Target, TrendingUp, BarChart3, UserPlus, Link2 } from "lucide-react";
+import { DollarSign, MousePointerClick, Eye, Target, TrendingUp, BarChart3, UserPlus, Link2, Download, ShoppingCart } from "lucide-react";
 import { MetricCard } from "../common/MetricCard";
 import { formatCurrency, formatNumber, formatPercent, formatROAS, formatDelta } from "../../utils/format";
-import type { KPISummary } from "../../types";
+import type { AccountVertical, KPISummary } from "../../types";
 
 interface KPICardsProps {
   current?: KPISummary;
   previous?: KPISummary;
   currency?: string;
   loading?: boolean;
+  vertical?: AccountVertical;
 }
 
-export function KPICards({ current, previous, currency = "USD", loading }: KPICardsProps) {
+export function KPICards({ current, previous, currency = "USD", loading, vertical = "LEAD_GEN" }: KPICardsProps) {
   if (loading || !current) {
     return (
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8">
@@ -21,49 +22,11 @@ export function KPICards({ current, previous, currency = "USD", loading }: KPICa
     );
   }
 
-  const hasLeads = (current.totalLeads ?? 0) > 0;
-  const hasInstalls = (current.totalInstalls ?? 0) > 0;
-  const hasRoas = (current.roas ?? 0) > 0;
+  // Objective-specific primary metrics
+  const primaryMetrics = buildPrimaryMetrics(vertical, current, previous, currency);
 
-  const metrics = [
-    {
-      title: "Spend",
-      value: formatCurrency(current.totalSpend, currency),
-      delta: previous ? formatDelta(current.totalSpend, previous.totalSpend) : undefined,
-      invertDelta: true,
-      icon: <DollarSign className="h-4 w-4" />,
-      tooltip: "Total advertising spend for the selected period",
-    },
-    ...(hasLeads ? [{
-      title: "Leads",
-      value: formatNumber(current.totalLeads ?? 0),
-      delta: previous?.totalLeads ? formatDelta(current.totalLeads ?? 0, previous.totalLeads) : undefined,
-      icon: <UserPlus className="h-4 w-4" />,
-      tooltip: "Total leads generated from ads",
-    }] : []),
-    ...(hasLeads ? [{
-      title: "CPL",
-      value: formatCurrency(current.avgCostPerLead ?? 0, currency),
-      delta: previous?.avgCostPerLead ? formatDelta(current.avgCostPerLead ?? 0, previous.avgCostPerLead) : undefined,
-      invertDelta: true,
-      icon: <Target className="h-4 w-4" />,
-      tooltip: "Cost Per Lead — average cost to acquire one lead",
-    }] : []),
-    ...(hasInstalls ? [{
-      title: "CPI",
-      value: formatCurrency(current.avgCPI, currency),
-      delta: previous ? formatDelta(current.avgCPI, previous.avgCPI) : undefined,
-      invertDelta: true,
-      icon: <Target className="h-4 w-4" />,
-      tooltip: "Cost Per Install — average cost to acquire one app install",
-    }] : []),
-    ...(hasRoas ? [{
-      title: "ROAS",
-      value: formatROAS(current.roas),
-      delta: previous ? formatDelta(current.roas, previous.roas) : undefined,
-      icon: <TrendingUp className="h-4 w-4" />,
-      tooltip: "Return On Ad Spend — revenue generated per dollar spent",
-    }] : []),
+  // Common metrics always shown
+  const commonMetrics = [
     {
       title: "CTR",
       value: formatPercent(current.avgCTR),
@@ -102,6 +65,8 @@ export function KPICards({ current, previous, currency = "USD", loading }: KPICa
     },
   ];
 
+  const metrics = [...primaryMetrics, ...commonMetrics];
+
   const count = metrics.length;
   const gridCols =
     count <= 4 ? "grid-cols-2 sm:grid-cols-4" :
@@ -116,4 +81,88 @@ export function KPICards({ current, previous, currency = "USD", loading }: KPICa
       ))}
     </div>
   );
+}
+
+function buildPrimaryMetrics(
+  vertical: AccountVertical,
+  current: KPISummary,
+  previous: KPISummary | undefined,
+  currency: string,
+) {
+  const spend = {
+    title: "Spend",
+    value: formatCurrency(current.totalSpend, currency),
+    delta: previous ? formatDelta(current.totalSpend, previous.totalSpend) : undefined,
+    invertDelta: true,
+    icon: <DollarSign className="h-4 w-4" />,
+    tooltip: "Total advertising spend for the selected period",
+  };
+
+  if (vertical === "ECOMMERCE") {
+    return [
+      spend,
+      {
+        title: "רכישות",
+        value: formatNumber(current.totalPurchases),
+        delta: previous ? formatDelta(current.totalPurchases, previous.totalPurchases) : undefined,
+        icon: <ShoppingCart className="h-4 w-4" />,
+        tooltip: "Total purchases from ads",
+      },
+      {
+        title: "CPA",
+        value: formatCurrency(current.totalSpend > 0 && current.totalPurchases > 0 ? current.totalSpend / current.totalPurchases : 0, currency),
+        invertDelta: true,
+        icon: <Target className="h-4 w-4" />,
+        tooltip: "Cost Per Acquisition — average cost to acquire one purchase",
+      },
+      {
+        title: "ROAS",
+        value: formatROAS(current.roas),
+        delta: previous ? formatDelta(current.roas, previous.roas) : undefined,
+        icon: <TrendingUp className="h-4 w-4" />,
+        tooltip: "Return On Ad Spend — revenue generated per dollar spent",
+      },
+    ];
+  }
+
+  if (vertical === "APP_INSTALLS") {
+    return [
+      spend,
+      {
+        title: "התקנות",
+        value: formatNumber(current.totalInstalls),
+        delta: previous ? formatDelta(current.totalInstalls, previous.totalInstalls) : undefined,
+        icon: <Download className="h-4 w-4" />,
+        tooltip: "Total app installs from ads",
+      },
+      {
+        title: "CPI",
+        value: formatCurrency(current.avgCPI, currency),
+        delta: previous ? formatDelta(current.avgCPI, previous.avgCPI) : undefined,
+        invertDelta: true,
+        icon: <Target className="h-4 w-4" />,
+        tooltip: "Cost Per Install — average cost to acquire one app install",
+      },
+    ];
+  }
+
+  // LEAD_GEN (default)
+  return [
+    spend,
+    {
+      title: "לידים",
+      value: formatNumber(current.totalLeads ?? 0),
+      delta: previous?.totalLeads ? formatDelta(current.totalLeads ?? 0, previous.totalLeads) : undefined,
+      icon: <UserPlus className="h-4 w-4" />,
+      tooltip: "Total leads generated from ads",
+    },
+    {
+      title: "CPL",
+      value: formatCurrency(current.avgCostPerLead ?? 0, currency),
+      delta: previous?.avgCostPerLead ? formatDelta(current.avgCostPerLead ?? 0, previous.avgCostPerLead) : undefined,
+      invertDelta: true,
+      icon: <Target className="h-4 w-4" />,
+      tooltip: "Cost Per Lead — average cost to acquire one lead",
+    },
+  ];
 }

@@ -25,6 +25,7 @@ VALID_SOURCES = {"ai", "deterministic", "hybrid"}
 VALID_ALIGNMENT_AGREES = {"yes", "partially", "no", "unchecked"}
 VALID_BREAKDOWN_DIMENSIONS = {"age", "gender", "placement"}
 VALID_RISK_LEVELS = {"high", "medium", "low"}
+VALID_VERTICALS = {"LEAD_GEN", "ECOMMERCE", "APP_INSTALLS"}
 
 
 def validate_diagnosis_report(report: dict[str, Any]) -> tuple[bool, list[str]]:
@@ -91,6 +92,11 @@ def validate_diagnosis_report(report: dict[str, Any]) -> tuple[bool, list[str]]:
     freshness = report.get("dataFreshness")
     if freshness is not None and not isinstance(freshness, dict):
         errors.append("dataFreshness must be a dict")
+
+    # Vertical (optional — valid when present)
+    vertical = report.get("vertical")
+    if vertical is not None and vertical not in VALID_VERTICALS:
+        errors.append(f"Invalid vertical: {vertical}")
 
     # Explainability trace (optional — valid when present)
     trace = report.get("explainabilityTrace")

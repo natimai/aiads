@@ -1,5 +1,17 @@
-import { AlertTriangle, CheckCircle2, Clock, HelpCircle } from "lucide-react";
-import type { DiagnosisReport, RootCause } from "../../types";
+import { AlertTriangle, CheckCircle2, Clock, HelpCircle, Info } from "lucide-react";
+import type { AccountVertical, DiagnosisReport, RootCause } from "../../types";
+
+const VERTICAL_LABELS: Record<AccountVertical, string> = {
+  LEAD_GEN: "לידים",
+  ECOMMERCE: "מכירות",
+  APP_INSTALLS: "התקנות",
+};
+
+const VERTICAL_STYLES: Record<AccountVertical, string> = {
+  LEAD_GEN: "bg-blue-50 text-blue-700 border-blue-200",
+  ECOMMERCE: "bg-violet-50 text-violet-700 border-violet-200",
+  APP_INSTALLS: "bg-teal-50 text-teal-700 border-teal-200",
+};
 
 const ROOT_CAUSE_LABELS: Record<RootCause, string> = {
   learning_instability: "חוסר יציבות בשלב למידה",
@@ -45,6 +57,17 @@ export function DiagnosisSummaryCard({ diagnosis }: { diagnosis: DiagnosisReport
           <span className="rounded-full border border-[var(--line)] bg-[var(--bg-soft)] px-2.5 py-0.5 text-[10px] text-[var(--text-muted)]">
             {diagnosis.evaluationLevel === "campaign" ? "רמת קמפיין" : "רמת אדסט"}
           </span>
+          {diagnosis.vertical && (
+            <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-medium ${VERTICAL_STYLES[diagnosis.vertical] || "bg-gray-50 text-gray-700 border-gray-200"}`}>
+              {VERTICAL_LABELS[diagnosis.vertical] || diagnosis.vertical}
+            </span>
+          )}
+          {diagnosis.objectiveContext?.mixedObjectives && (
+            <span className="flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-medium text-amber-700">
+              <Info className="h-3 w-3" />
+              חשבון מעורב
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-4 text-xs text-[var(--text-muted)]">

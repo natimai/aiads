@@ -108,11 +108,16 @@ class AIAnalyzer:
     def daily_summary(self, campaign_data: dict) -> str:
         """Generate a natural language summary of today's performance."""
         summary = self._build_context_summary(campaign_data)
+        vertical = campaign_data.get("vertical", "LEAD_GEN")
+        objective_guidance = self._build_objective_guidance(vertical)
+
         prompt = f"""Analyze today's advertising performance and provide a concise daily summary.
 
 **Account:** {campaign_data.get('accountName', 'N/A')}
 **Date:** {campaign_data.get('date', 'N/A')}
 **Currency:** {campaign_data.get('currency', 'USD')}
+
+{objective_guidance}
 
 **Overall KPIs:**
 {json.dumps(campaign_data.get('kpiSummary', {}), indent=2, default=str)}
@@ -1005,12 +1010,34 @@ Data:
                     return {}
         return {}
 
+    @staticmethod
+    def _build_objective_guidance(vertical: str) -> str:
+        """Return objective-specific guidance for AI prompts."""
+        if vertical == "ECOMMERCE":
+            return (
+                "**Account Objective:** ECOMMERCE — Primary metrics: Purchases, ROAS, CPA.\n"
+                "Focus your analysis on return on ad spend, purchase volume, and cost per acquisition.\n"
+                "Do NOT emphasize CPI or install metrics for this account."
+            )
+        if vertical == "APP_INSTALLS":
+            return (
+                "**Account Objective:** APP_INSTALLS — Primary metrics: Installs, CPI.\n"
+                "Focus your analysis on cost per install, install volume, and install quality signals.\n"
+                "Do NOT emphasize ROAS or purchase metrics for this account."
+            )
+        return (
+            "**Account Objective:** LEAD_GEN — Primary metrics: Leads, CPL.\n"
+            "Focus your analysis on lead volume, cost per lead, and lead quality signals.\n"
+            "Do NOT emphasize ROAS or purchase metrics for this account."
+        )
+
     def _build_context_summary(self, campaign_data: dict) -> str:
         """Build a condensed summary of campaign data for the AI context."""
         campaigns = campaign_data.get("campaigns", [])
         if not campaigns:
             return "No campaign data available."
 
+        vertical = campaign_data.get("vertical", "LEAD_GEN")
         lines = []
         for c in campaigns[:20]:  # Cap at 20 campaigns to control token usage
             insights = c.get("todayInsights", {})
@@ -1018,18 +1045,36 @@ Data:
                 lines.append(f"- {c.get('name', 'N/A')}: Status={c.get('status', 'N/A')}, No data today")
                 continue
 
-            lines.append(
+            # Base metrics always shown
+            base = (
                 f"- {c.get('name', 'N/A')}: "
                 f"Status={c.get('status', 'N/A')}, "
                 f"Spend=${insights.get('spend', 0):.2f}, "
-                f"CPI=${insights.get('cpi', 0):.2f}, "
-                f"ROAS={insights.get('roas', 0):.2f}x, "
                 f"CTR={insights.get('ctr', 0):.2f}%, "
                 f"CPM=${insights.get('cpm', 0):.2f}, "
                 f"Impressions={insights.get('impressions', 0)}, "
-                f"Installs={insights.get('installs', 0)}, "
                 f"Frequency={insights.get('frequency', 0):.1f}"
             )
+
+            # Objective-specific metrics
+            if vertical == "ECOMMERCE":
+                base += (
+                    f", ROAS={insights.get('roas', 0):.2f}x"
+                    f", CPA=${insights.get('cpa', 0):.2f}"
+                    f", Purchases={insights.get('purchases', 0)}"
+                )
+            elif vertical == "APP_INSTALLS":
+                base += (
+                    f", CPI=${insights.get('cpi', 0):.2f}"
+                    f", Installs={insights.get('installs', 0)}"
+                )
+            else:  # LEAD_GEN
+                base += (
+                    f", CPL=${insights.get('costPerLead', 0) or insights.get('cpa', 0):.2f}"
+                    f", Leads={insights.get('leads', 0)}"
+                )
+
+            lines.append(base)
 
         return "\n".join(lines)
 

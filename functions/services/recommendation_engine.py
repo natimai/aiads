@@ -90,7 +90,8 @@ class RecommendationEngine:
             return {"recommendations": [], "meta": {"guardrailBlocked": True, "reason": guardrail_error}}
 
         official_recommendations = self._load_official_recommendations(user_id, account_id)
-        scored_campaigns = self.scoring.score_campaigns(features.get("campaigns", []))
+        vertical = features.get("vertical", "LEAD_GEN")
+        scored_campaigns = self.scoring.score_campaigns(features.get("campaigns", []), vertical=vertical)
         context = {
             "account": {
                 "id": features.get("accountId"),

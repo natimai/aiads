@@ -220,5 +220,168 @@ class TestDiagnosisEngine(unittest.TestCase):
             self.assertTrue(len(finding["validationMetric"]) > 0)
 
 
+    @patch.dict(os.environ, {"FEATURE_FLAG_ENABLE_DIAGNOSIS_ENGINE": "true"})
+    def test_report_contains_vertical_from_objective_context(self):
+        from services.diagnosis_engine import DiagnosisEngine
+
+        engine = DiagnosisEngine(_mock_db())
+        engine.feature_builder.build = MagicMock(return_value={
+            "campaigns": [{"id": "c1", "status": "ACTIVE", "insights": [], "adsets": [], "objective": "OUTCOME_SALES"}],
+            "kpiSummary": {},
+            "vertical": "ECOMMERCE",
+            "objectiveContext": {
+                "vertical": "ECOMMERCE",
+                "mixedObjectives": False,
+                "primaryConversion": "purchases",
+                "primaryCostMetric": "cpa",
+                "primaryEfficiencyMetric": "roas",
+                "validationMetric": "roas_7d",
+            },
+        })
+        engine.analyzer_v2.analyze = MagicMock(return_value={
+            "aggregateFindings": [],
+            "breakdownHypotheses": [],
+        })
+        engine.ai_analyzer = None
+
+        report = engine.diagnose("u1", "a1", "2025-01-01", "2025-01-07")
+        self.assertEqual(report.get("vertical"), "ECOMMERCE")
+        self.assertEqual(report.get("objectiveContext", {}).get("vertical"), "ECOMMERCE")
+
+    @patch.dict(os.environ, {"FEATURE_FLAG_ENABLE_DIAGNOSIS_ENGINE": "true"})
+    def test_ecommerce_healthy_uses_roas_validation_metric(self):
+        from services.diagnosis_engine import DiagnosisEngine
+
+        engine = DiagnosisEngine(_mock_db())
+        engine.feature_builder.build = MagicMock(return_value={
+            "campaigns": [{"id": "c1", "status": "ACTIVE", "insights": [], "adsets": []}],
+            "kpiSummary": {},
+            "vertical": "ECOMMERCE",
+            "objectiveContext": {
+                "vertical": "ECOMMERCE",
+                "mixedObjectives": False,
+                "primaryConversion": "purchases",
+                "primaryCostMetric": "cpa",
+                "primaryEfficiencyMetric": "roas",
+                "validationMetric": "roas_7d",
+            },
+        })
+        engine.analyzer_v2.analyze = MagicMock(return_value={
+            "aggregateFindings": [
+                {"statement": "Performance stable", "evidence": {"roas": 3.5}, "impact": "Good"}
+            ],
+            "breakdownHypotheses": [],
+        })
+        engine.ai_analyzer = None
+
+        report = engine.diagnose("u1", "a1", "2025-01-01", "2025-01-07")
+        # Root cause is healthy or unknown (no negative signals)
+        # Validation metric should be roas_7d for ECOMMERCE
+        for finding in report["findings"]:
+            if report["rootCause"] in ("healthy", "unknown"):
+                self.assertIn(finding["validationMetric"], ("roas_7d", "overall_performance", "roas"))
+
+    @patch.dict(os.environ, {"FEATURE_FLAG_ENABLE_DIAGNOSIS_ENGINE": "true"})
+    def test_lead_gen_healthy_uses_cpl_validation_metric(self):
+        from services.diagnosis_engine import DiagnosisEngine
+
+        engine = DiagnosisEngine(_mock_db())
+        engine.feature_builder.build = MagicMock(return_value={
+            "campaigns": [{"id": "c1", "status": "ACTIVE", "insights": [], "adsets": []}],
+            "kpiSummary": {},
+            "vertical": "LEAD_GEN",
+            "objectiveContext": {
+                "vertical": "LEAD_GEN",
+                "mixedObjectives": False,
+                "primaryConversion": "leads",
+                "primaryCostMetric": "cpl",
+                "primaryEfficiencyMetric": "cpl",
+                "validationMetric": "cpl_7d_trend",
+            },
+        })
+        engine.analyzer_v2.analyze = MagicMock(return_value={
+            "aggregateFindings": [
+                {"statement": "Lead flow stable", "evidence": {"cpl": 25.0}, "impact": "Healthy"}
+            ],
+            "breakdownHypotheses": [],
+        })
+        engine.ai_analyzer = None
+
+        report = engine.diagnose("u1", "a1", "2025-01-01", "2025-01-07")
+        for finding in report["findings"]:
+            if report["rootCause"] in ("healthy", "unknown"):
+                self.assertIn(finding["validationMetric"], ("cpl_7d_trend", "overall_performance", "cpl"))
+
+    @patch.dict(os.environ, {"FEATURE_FLAG_ENABLE_DIAGNOSIS_ENGINE": "true"})
+    def test_mixed_objectives_flagged_in_report(self):
+        from services.diagnosis_engine import DiagnosisEngine
+
+        engine = DiagnosisEngine(_mock_db())
+        engine.feature_builder.build = MagicMock(return_value={
+            "campaigns": [
+                {"id": "c1", "status": "ACTIVE", "insights": [], "adsets": [], "objective": "OUTCOME_LEADS"},
+                {"id": "c2", "status": "ACTIVE", "insights": [], "adsets": [], "objective": "OUTCOME_SALES"},
+            ],
+            "kpiSummary": {},
+            "vertical": "LEAD_GEN",
+            "objectiveContext": {
+                "vertical": "LEAD_GEN",
+                "mixedObjectives": True,
+                "primaryConversion": "leads",
+                "primaryCostMetric": "cpl",
+                "primaryEfficiencyMetric": "cpl",
+                "validationMetric": "cpl_7d_trend",
+            },
+        })
+        engine.analyzer_v2.analyze = MagicMock(return_value={
+            "aggregateFindings": [],
+            "breakdownHypotheses": [],
+        })
+        engine.ai_analyzer = None
+
+        report = engine.diagnose("u1", "a1", "2025-01-01", "2025-01-07")
+        self.assertTrue(report.get("objectiveContext", {}).get("mixedObjectives"))
+
+    @patch.dict(os.environ, {"FEATURE_FLAG_ENABLE_DIAGNOSIS_ENGINE": "true"})
+    def test_empty_report_has_vertical_field(self):
+        from services.diagnosis_engine import DiagnosisEngine
+
+        engine = DiagnosisEngine(_mock_db())
+        engine.feature_builder.build = MagicMock(return_value={"campaigns": []})
+
+        report = engine.diagnose("u1", "a1", "2025-01-01", "2025-01-07")
+        self.assertIn("vertical", report)
+        self.assertIn("objectiveContext", report)
+
+    @patch.dict(os.environ, {"FEATURE_FLAG_ENABLE_DIAGNOSIS_ENGINE": "true"})
+    def test_report_with_vertical_passes_schema_validation(self):
+        from services.diagnosis_engine import DiagnosisEngine
+
+        engine = DiagnosisEngine(_mock_db())
+        engine.feature_builder.build = MagicMock(return_value={
+            "campaigns": [{"id": "c1", "status": "ACTIVE", "insights": [], "adsets": []}],
+            "kpiSummary": {},
+            "vertical": "APP_INSTALLS",
+            "objectiveContext": {
+                "vertical": "APP_INSTALLS",
+                "mixedObjectives": False,
+                "primaryConversion": "installs",
+                "primaryCostMetric": "cpi",
+                "primaryEfficiencyMetric": "cpi",
+                "validationMetric": "cpi_7d_trend",
+            },
+        })
+        engine.analyzer_v2.analyze = MagicMock(return_value={
+            "aggregateFindings": [],
+            "breakdownHypotheses": [],
+        })
+        engine.ai_analyzer = None
+
+        report = engine.diagnose("u1", "a1", "2025-01-01", "2025-01-07")
+        is_valid, errors = validate_diagnosis_report(report)
+        self.assertTrue(is_valid, f"Schema validation failed: {errors}")
+        self.assertEqual(report["vertical"], "APP_INSTALLS")
+
+
 if __name__ == "__main__":
     unittest.main()

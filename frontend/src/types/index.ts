@@ -573,10 +573,21 @@ export interface ExplainabilityTrace {
   fallbackReason: string | null;
 }
 
+export interface ObjectiveContext {
+  vertical: AccountVertical;
+  mixedObjectives: boolean;
+  primaryConversion: string;
+  primaryCostMetric: string;
+  primaryEfficiencyMetric: string;
+  validationMetric?: string;
+}
+
 export interface DiagnosisReport {
   id: string;
   accountId: string;
   evaluationLevel: EvaluationLevel;
+  vertical?: AccountVertical;
+  objectiveContext?: ObjectiveContext;
   summary: string;
   rootCause: RootCause;
   findings: DiagnosisFinding[];

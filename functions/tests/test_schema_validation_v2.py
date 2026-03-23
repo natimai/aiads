@@ -105,5 +105,30 @@ class TestSchemaValidationV2(unittest.TestCase):
         self.assertTrue(is_valid, f"Unexpected errors: {errors}")
 
 
+    # Sprint 3: vertical field validation
+    def test_report_with_valid_vertical(self):
+        report = _valid_report(vertical="LEAD_GEN")
+        is_valid, errors = validate_diagnosis_report(report)
+        self.assertTrue(is_valid, f"Unexpected errors: {errors}")
+
+    def test_report_with_invalid_vertical_fails(self):
+        report = _valid_report(vertical="UNKNOWN_TYPE")
+        is_valid, errors = validate_diagnosis_report(report)
+        self.assertFalse(is_valid)
+        self.assertTrue(any("vertical" in e for e in errors))
+
+    def test_report_without_vertical_still_valid(self):
+        report = _valid_report()
+        self.assertNotIn("vertical", report)
+        is_valid, errors = validate_diagnosis_report(report)
+        self.assertTrue(is_valid, f"Unexpected errors: {errors}")
+
+    def test_all_valid_verticals_accepted(self):
+        for v in ("LEAD_GEN", "ECOMMERCE", "APP_INSTALLS"):
+            report = _valid_report(vertical=v)
+            is_valid, errors = validate_diagnosis_report(report)
+            self.assertTrue(is_valid, f"Vertical {v} should be valid: {errors}")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -38,6 +38,11 @@ def get_metric_display_name(raw_metric: str) -> str:
         "video_thruplay_watched_actions": "ThruPlays",
         "clicks": "Clicks (all)",
         "purchase_roas": "Purchase ROAS (return on ad spend)",
+        "cost_per_lead": "Cost per Lead (CPL)",
+        "cost_per_install": "Cost per Install (CPI)",
+        "cost_per_action_type": "Cost per Action",
+        "leads": "Leads",
+        "installs": "Installs",
     }
     return normalized.get(str(raw_metric or "").strip(), str(raw_metric or "").strip())
 
@@ -54,6 +59,10 @@ def get_skill_bundle() -> dict[str, Any]:
             "video_thruplay_watched_actions": "ThruPlays",
             "clicks": "Clicks (all)",
             "purchase_roas": "Purchase ROAS (return on ad spend)",
+            "cost_per_lead": "Cost per Lead (CPL)",
+            "cost_per_install": "Cost per Install (CPI)",
+            "leads": "Leads",
+            "installs": "Installs",
         },
     }
 

@@ -29,10 +29,11 @@ class MetaAdsAnalyzerV2:
         campaigns = campaign_data.get("campaigns", []) if isinstance(campaign_data.get("campaigns"), list) else []
         kpi_summary = campaign_data.get("kpiSummary", {}) if isinstance(campaign_data.get("kpiSummary"), dict) else {}
         breakdowns = campaign_data.get("breakdowns", []) if isinstance(campaign_data.get("breakdowns"), list) else []
+        vertical = campaign_data.get("vertical", "LEAD_GEN")
 
         evaluation_level = self._determine_evaluation_level(campaigns)
-        aggregate_findings = self._build_aggregate_findings(campaigns, kpi_summary)
-        breakdown_hypotheses = self._build_breakdown_hypotheses(breakdowns)
+        aggregate_findings = self._build_aggregate_findings(campaigns, kpi_summary, vertical)
+        breakdown_hypotheses = self._build_breakdown_hypotheses(breakdowns, vertical)
         recommendation_experiments = self._build_recommendation_experiments(campaigns, breakdown_hypotheses)
 
         report = {
@@ -146,53 +147,72 @@ class MetaAdsAnalyzerV2:
         }
 
     def _build_aggregate_findings(
-        self, campaigns: list[dict[str, Any]], kpi_summary: dict[str, Any]
+        self, campaigns: list[dict[str, Any]], kpi_summary: dict[str, Any], vertical: str = "LEAD_GEN"
     ) -> list[dict[str, Any]]:
         findings: list[dict[str, Any]] = []
 
         spend = float(kpi_summary.get("totalSpend", 0) or 0)
-        roas = float(kpi_summary.get("roas", 0) or 0)
         ctr = float(kpi_summary.get("avgCTR", 0) or 0)
         cpm = float(kpi_summary.get("avgCPM", 0) or 0)
+
+        # Objective-aware baseline evidence
+        if vertical == "ECOMMERCE":
+            roas = float(kpi_summary.get("roas", 0) or 0)
+            baseline_evidence = f"Total spend {spend:.2f}, ROAS {roas:.2f}, CTR {ctr:.2f}%, CPM {cpm:.2f}."
+        elif vertical == "APP_INSTALLS":
+            cpi = float(kpi_summary.get("avgCPI", 0) or 0)
+            baseline_evidence = f"Total spend {spend:.2f}, CPI {cpi:.2f}, CTR {ctr:.2f}%, CPM {cpm:.2f}."
+        else:
+            cpl = float(kpi_summary.get("avgCostPerLead", 0) or 0)
+            leads = float(kpi_summary.get("totalLeads", 0) or 0)
+            baseline_evidence = f"Total spend {spend:.2f}, CPL {cpl:.2f}, Leads {leads:.0f}, CTR {ctr:.2f}%, CPM {cpm:.2f}."
 
         findings.append(
             {
                 "statement": "Start from aggregate account-level performance before slices.",
-                "evidence": (
-                    f"Total spend {spend:.2f}, Purchase ROAS (return on ad spend) {roas:.2f}, "
-                    f"CTR {ctr:.2f}%, CPM {cpm:.2f}."
-                ),
+                "evidence": baseline_evidence,
                 "impact": "Sets baseline for evaluating whether breakdown changes are additive or harmful.",
             }
         )
 
         if campaigns:
-            roas_values: list[float] = []
-            cpa_values: list[float] = []
+            efficiency_values: list[float] = []
+            cost_values: list[float] = []
             for campaign in campaigns:
                 if not isinstance(campaign, dict):
                     continue
                 insights = self._read_insights(campaign)
-                if insights["roas"] > 0:
-                    roas_values.append(insights["roas"])
-                if insights["cpa"] > 0:
-                    cpa_values.append(insights["cpa"])
+                if vertical == "ECOMMERCE":
+                    if insights["roas"] > 0:
+                        efficiency_values.append(insights["roas"])
+                    if insights["cpa"] > 0:
+                        cost_values.append(insights["cpa"])
+                elif vertical == "APP_INSTALLS":
+                    cpi_val = float(insights.get("cpi", 0) or 0)
+                    if cpi_val > 0:
+                        cost_values.append(cpi_val)
+                else:
+                    cpl_val = float(insights.get("costPerLead", 0) or insights.get("cpa", 0) or 0)
+                    if cpl_val > 0:
+                        cost_values.append(cpl_val)
+                    lead_val = float(insights.get("leads", 0) or 0)
+                    if lead_val > 0:
+                        efficiency_values.append(lead_val)
 
-            if roas_values:
+            if vertical == "ECOMMERCE" and efficiency_values:
                 findings.append(
                     {
                         "statement": "ROAS spread indicates selective scaling opportunities.",
-                        "evidence": (
-                            f"Median Purchase ROAS (return on ad spend) across active campaigns is {median(roas_values):.2f}."
-                        ),
+                        "evidence": f"Median ROAS across active campaigns is {median(efficiency_values):.2f}.",
                         "impact": "Use controlled budget experiments on winners, avoid blanket shifts.",
                     }
                 )
-            if cpa_values:
+            if cost_values:
+                cost_label = {"ECOMMERCE": "CPA", "APP_INSTALLS": "CPI"}.get(vertical, "CPL")
                 findings.append(
                     {
-                        "statement": "CPA dispersion suggests marginal-efficiency differences.",
-                        "evidence": f"Median CPA across active campaigns is {median(cpa_values):.2f}.",
+                        "statement": f"{cost_label} dispersion suggests marginal-efficiency differences.",
+                        "evidence": f"Median {cost_label} across active campaigns is {median(cost_values):.2f}.",
                         "impact": "Requires trend-based validation before pausing segments.",
                     }
                 )
@@ -200,10 +220,15 @@ class MetaAdsAnalyzerV2:
         return findings
 
     @staticmethod
-    def _results_from_breakdown_row(row: dict[str, Any]) -> float:
-        return float(row.get("purchases", 0) or row.get("leads", 0) or row.get("installs", 0) or 0)
+    def _results_from_breakdown_row(row: dict[str, Any], vertical: str = "LEAD_GEN") -> float:
+        if vertical == "ECOMMERCE":
+            return float(row.get("purchases", 0) or 0)
+        if vertical == "APP_INSTALLS":
+            return float(row.get("installs", 0) or 0)
+        # LEAD_GEN — prefer leads, fallback to purchases
+        return float(row.get("leads", 0) or row.get("purchases", 0) or 0)
 
-    def _build_breakdown_hypotheses(self, breakdowns: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _build_breakdown_hypotheses(self, breakdowns: list[dict[str, Any]], vertical: str = "LEAD_GEN") -> list[dict[str, Any]]:
         hypotheses: list[dict[str, Any]] = []
 
         for doc in breakdowns[:6]:
@@ -234,7 +259,7 @@ class MetaAdsAnalyzerV2:
                 if not key:
                     continue
                 spend = float(row.get("spend", 0) or 0)
-                results = self._results_from_breakdown_row(row)
+                results = self._results_from_breakdown_row(row, vertical)
                 if spend <= 0 or results <= 0:
                     continue
 

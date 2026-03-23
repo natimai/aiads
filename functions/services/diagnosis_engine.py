@@ -76,6 +76,10 @@ class DiagnosisEngine:
         if not campaigns:
             return self._empty_report(diagnosis_id, account_id, now_iso, "No campaign data available.")
 
+        # Extract objective context (added by FeatureBuilder)
+        objective_ctx = features.get("objectiveContext", {})
+        vertical = objective_ctx.get("vertical", "LEAD_GEN")
+
         # Record which inputs are available
         if trace:
             available_inputs = ["campaigns"]
@@ -161,10 +165,10 @@ class DiagnosisEngine:
             )
 
         # 10b. Enrich findings with riskLevel, suggestedAction, validationMetric
-        self._enrich_findings(findings, root_cause)
+        self._enrich_findings(findings, root_cause, objective_ctx)
 
         # 11. Build summary
-        summary = ai_summary or self._deterministic_summary(v2_report, root_cause)
+        summary = ai_summary or self._deterministic_summary(v2_report, root_cause, vertical)
 
         # 12. Apply policy enforcement
         policy_report = {
@@ -190,6 +194,8 @@ class DiagnosisEngine:
             "id": diagnosis_id,
             "accountId": account_id,
             "evaluationLevel": evaluation_level,
+            "vertical": vertical,
+            "objectiveContext": objective_ctx,
             "summary": summary,
             "rootCause": root_cause,
             "findings": findings,
@@ -246,10 +252,21 @@ class DiagnosisEngine:
         root_cause = self._classify_root_cause(findings, campaigns)
         summary = self._deterministic_summary(v2_report, root_cause)
 
+        # Resolve objective context in legacy path
+        from utils.objective_context import get_objective_context
+        account_data = {}
+        try:
+            account_data = self._load_account_doc(user_id, account_id)
+        except Exception:
+            pass
+        legacy_ctx = get_objective_context(account_data, campaigns)
+
         return {
             "id": diagnosis_id,
             "accountId": account_id,
             "evaluationLevel": evaluation_level,
+            "vertical": legacy_ctx.get("vertical", "LEAD_GEN"),
+            "objectiveContext": legacy_ctx,
             "summary": summary,
             "rootCause": root_cause,
             "findings": findings,
@@ -286,6 +303,8 @@ class DiagnosisEngine:
             "id": diagnosis_id,
             "accountId": account_id,
             "evaluationLevel": "adset",
+            "vertical": "LEAD_GEN",
+            "objectiveContext": {"vertical": "LEAD_GEN", "mixedObjectives": False},
             "summary": reason,
             "rootCause": "unknown",
             "findings": [],
@@ -517,6 +536,7 @@ class DiagnosisEngine:
     def _enrich_findings(
         findings: list[dict[str, Any]],
         root_cause: str,
+        objective_ctx: dict[str, Any] | None = None,
     ) -> None:
         """Enrich findings in-place with riskLevel, suggestedAction, validationMetric."""
         for finding in findings:
@@ -532,13 +552,13 @@ class DiagnosisEngine:
             # suggestedAction: derive from title/interpretation if not set
             if not finding.get("suggestedAction"):
                 finding["suggestedAction"] = _infer_suggested_action(
-                    finding.get("title", ""), root_cause
+                    finding.get("title", ""), root_cause, objective_ctx
                 )
 
             # validationMetric: derive from evidence keys or root cause
             if not finding.get("validationMetric"):
                 finding["validationMetric"] = _infer_validation_metric(
-                    finding.get("evidence", {}), root_cause
+                    finding.get("evidence", {}), root_cause, objective_ctx
                 )
 
     @staticmethod
@@ -579,6 +599,7 @@ class DiagnosisEngine:
     def _deterministic_summary(
         v2_report: dict[str, Any],
         root_cause: str,
+        vertical: str = "LEAD_GEN",
     ) -> str:
         parts: list[str] = []
         agg_findings = v2_report.get("aggregateFindings", [])
@@ -586,6 +607,13 @@ class DiagnosisEngine:
             statements = [str(f.get("statement", "")) for f in agg_findings[:3] if isinstance(f, dict)]
             if statements:
                 parts.append(". ".join(statements))
+
+        # Objective-aware healthy label
+        healthy_labels = {
+            "LEAD_GEN": "Overall lead generation performance appears healthy.",
+            "ECOMMERCE": "Overall ecommerce performance appears healthy.",
+            "APP_INSTALLS": "Overall app install performance appears healthy.",
+        }
 
         cause_labels = {
             "learning_instability": "Ad sets are in learning phase — performance is volatile.",
@@ -597,7 +625,7 @@ class DiagnosisEngine:
             "post_click_funnel_issue": "Post-click funnel issues are affecting conversion rates.",
             "auction_overlap": "Auction overlap between ad sets may be increasing costs.",
             "breakdown_effect_risk": "Breakdown-level metrics may be misleading due to the Breakdown Effect.",
-            "healthy": "Overall campaign performance appears healthy.",
+            "healthy": healthy_labels.get(vertical, "Overall campaign performance appears healthy."),
         }
         label = cause_labels.get(root_cause)
         if label:
@@ -610,9 +638,21 @@ class DiagnosisEngine:
 # Module-level helpers for finding enrichment
 # ------------------------------------------------------------------
 
-def _infer_suggested_action(title: str, root_cause: str) -> str:
+def _infer_suggested_action(
+    title: str,
+    root_cause: str,
+    objective_ctx: dict[str, Any] | None = None,
+) -> str:
     """Derive a suggested action from finding context."""
     title_lower = title.lower()
+    vertical = (objective_ctx or {}).get("vertical", "LEAD_GEN")
+
+    # Objective-aware healthy action
+    healthy_actions = {
+        "LEAD_GEN": "Maintain CPL below target and monitor lead volume trends",
+        "ECOMMERCE": "Maintain ROAS above target and monitor purchase volume trends",
+        "APP_INSTALLS": "Maintain CPI below target and monitor install volume trends",
+    }
 
     cause_actions = {
         "learning_instability": "Wait for learning phase to complete (50+ optimization events) before making changes",
@@ -624,6 +664,7 @@ def _infer_suggested_action(title: str, root_cause: str) -> str:
         "post_click_funnel_issue": "Audit landing page experience and conversion funnel",
         "auction_overlap": "Consolidate overlapping ad sets to reduce internal competition",
         "breakdown_effect_risk": "Do not act on breakdown averages — run a controlled split test instead",
+        "healthy": healthy_actions.get(vertical, "Monitor overall performance"),
     }
 
     if root_cause in cause_actions:
@@ -639,8 +680,21 @@ def _infer_suggested_action(title: str, root_cause: str) -> str:
     return "Review this finding and monitor for 3-7 days"
 
 
-def _infer_validation_metric(evidence: dict[str, Any], root_cause: str) -> str:
+def _infer_validation_metric(
+    evidence: dict[str, Any],
+    root_cause: str,
+    objective_ctx: dict[str, Any] | None = None,
+) -> str:
     """Derive the primary validation metric from evidence or root cause."""
+    vertical = (objective_ctx or {}).get("vertical", "LEAD_GEN")
+
+    # Objective-aware healthy validation metric
+    healthy_metrics = {
+        "LEAD_GEN": "cpl_7d_trend",
+        "ECOMMERCE": "roas_7d",
+        "APP_INSTALLS": "cpi_7d_trend",
+    }
+
     cause_metrics = {
         "learning_instability": "optimization_events_count",
         "auction_cost_pressure": "cpm_7d_trend",
@@ -651,7 +705,7 @@ def _infer_validation_metric(evidence: dict[str, Any], root_cause: str) -> str:
         "post_click_funnel_issue": "conversion_rate",
         "auction_overlap": "auction_overlap_pct",
         "breakdown_effect_risk": "marginal_vs_average_cpa",
-        "healthy": "roas_7d",
+        "healthy": healthy_metrics.get(vertical, "cpl_7d_trend"),
     }
     if root_cause in cause_metrics:
         return cause_metrics[root_cause]
